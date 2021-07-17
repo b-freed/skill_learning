@@ -36,7 +36,7 @@ class AbstractDynamics(nn.Module):
 
     See Encoder and Decoder for more description
     '''
-    def __init__(self,state_dim,z_dim):
+    def __init__(self,state_dim,z_dim,h_dim):
 
         self.layers = nn.Sequential(nn.Linear(state_dim+z_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
         self.mean_layer = nn.Linear(h_dim,state_dim)
@@ -181,7 +181,7 @@ class Decoder(nn.Module):
         self.abstract_dynamics = AbstractDynamics()# TODO
         self.ll_policy = LowLevelPolicy() # TODO
 
-    def forward(states,z):
+    def forward(self,states,z):
 
         '''
         INPUTS: 
