@@ -75,7 +75,7 @@ class LowLevelPolicy(nn.Module):
 
 
     '''
-    def __init__(self,state_dim,a_dim,z_dim):
+    def __init__(self,state_dim,a_dim,z_dim,h_dim):
 
         self.layers = nn.Sequential(nn.Linear(state_dim+z_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
         self.mean_layer = nn.Linear(h_dim,a_dim)
