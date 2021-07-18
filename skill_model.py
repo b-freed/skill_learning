@@ -172,15 +172,17 @@ class Decoder(nn.Module):
     -Pass into fully connected network to get "state T features"
 
     '''
-    def __init__(self,state_dim,a_dim,z_dim):#,h_dim):
+    def __init__(self,state_dim,a_dim,z_dim,h_dim):
 
         self.state_dim = state_dim
         self.a_dim = a_dim
         self.z_dim = z_dim
 
-        self.abstract_dynamics = AbstractDynamics()# TODO
-        self.ll_policy = LowLevelPolicy() # TODO
-
+        self.abstract_dynamics = AbstractDynamics(state_dim,z_dim,h_dim) # TODO
+        self.ll_policy = LowLevelPolicy(state_dim,a_dim,z_dim,h_dim) # TODO
+        self.emb_layer  = nn.Linear(state_dim+z_dim,h_dim)
+        self.fc = nn.Sequential(nn.Linear(state_dim+z_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
+        
     def forward(self,states,z):
 
         '''
@@ -195,9 +197,10 @@ class Decoder(nn.Module):
             a_mean: batch_size x T x a_dim tensor of action means for each t in {0.,,,.T}
             a_sig:  batch_size x T x a_dim tensor of action standard devs for each t in {0.,,,.T}
         '''
-
-        sT_mean,sT_sig = self.abstract_dynamics() # TODO
-        a_mean,a_sig   = self.ll_policy # TODO
+        embed = self.emb_layer(z)
+        sT_feats = self.fc(embed)
+        sT_mean,sT_sig = self.abstract_dynamics(sT_feats) # TODO
+        a_mean,a_sig   = self.ll_policy() # TODO
 
 
         return sT_mean,sT_sig,a_mean,a_sig
