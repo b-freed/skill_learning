@@ -247,7 +247,7 @@ class SkillModel(nn.Module):
         # STEP 1. Encode states and actions to get posterior over z
         z_post_means,z_post_sigs = self.encoder(states,actions)
         # STEP 2. sample z from posterior 
-        z_sampled = reparameterize(z_post_means,z_post_sigs)
+        z_sampled = self.reparameterize(z_post_means,z_post_sigs)
 
         # STEP 3. Pass z_sampled and states through decoder 
         s_T_mean, s_T_sig, a_means, a_sigs = self.decoder(states,z_sampled)
