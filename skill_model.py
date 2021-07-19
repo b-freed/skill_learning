@@ -239,8 +239,8 @@ class SkillModel(nn.Module):
             S_T_sig:      batch_size x 1 x state_dim tensor of standard devs of "decoder" distribution over terminal states
             a_means:      batch_size x T x a_dim tensor of means of "decoder" distribution over actions
             a_sig:        batch_size x T x a_dim tensor of stand devs
-            z_post_means: batch_size x 1 x z_dim tensor of means of z posterior distribution
-            z_post_sigs:  batch_size x 1 x z_dim tensor of stand devs of z posterior distribution 
+            z_post_mean:  batch_size x 1 x z_dim tensor of means of z posterior distribution
+            z_post_sig:   batch_size x 1 x z_dim tensor of stand devs of z posterior distribution 
 
         '''
 
@@ -254,7 +254,7 @@ class SkillModel(nn.Module):
 
 
 
-        return s_T_mean, s_T_sig, a_means, a_sigs, z_post_means, z_post_sigs
+        return s_T_mean, s_T_sig, a_means, a_sigs, z_post_mean, z_post_sig
 
         
 
