@@ -282,7 +282,7 @@ class SkillModel(nn.Module):
         s_T_loss = -torch.mean(torch.sum(s_T_dist.log_prob(s_T),dim=-1))/T # divide by T because all other losses we take mean over T dimension, effectively dividing by T
         a_loss   = -torch.mean(torch.sum(a_dist.log_probs(actions),dim=-1))
         # loss term correpsonding ot kl loss between posterior and prior
-        kl_loss = torch.mean(torch.sum(KL.kl_divergence(z_post_dist, z_prior_dist),dim=-1))
+        kl_loss = torch.mean(torch.sum(F.kl_div(z_post_dist, z_prior_dist),dim=-1))
 
         loss_tot = s_T_loss + a_loss + kl_loss
 
