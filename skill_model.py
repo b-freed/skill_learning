@@ -239,22 +239,22 @@ class SkillModel(nn.Module):
             S_T_sig:      batch_size x 1 x state_dim tensor of standard devs of "decoder" distribution over terminal states
             a_means:      batch_size x T x a_dim tensor of means of "decoder" distribution over actions
             a_sigs:       batch_size x T x a_dim tensor of stand devs
-            z_post_mean:  batch_size x 1 x z_dim tensor of means of z posterior distribution
-            z_post_sig:   batch_size x 1 x z_dim tensor of stand devs of z posterior distribution 
+            z_post_means: batch_size x 1 x z_dim tensor of means of z posterior distribution
+            z_post_sigs:  batch_size x 1 x z_dim tensor of stand devs of z posterior distribution 
 
         '''
 
         # STEP 1. Encode states and actions to get posterior over z
-        z_post_mean,z_post_sig = self.encoder(states,actions)
+        z_post_means,z_post_sigs = self.encoder(states,actions)
         # STEP 2. sample z from posterior 
-        z_sampled = reparameterize(z_post_mean,z_post_sig)
+        z_sampled = reparameterize(z_post_means,z_post_sigs)
 
         # STEP 3. Pass z_sampled and states through decoder 
         s_T_mean, s_T_sig, a_means, a_sigs = self.decoder(states,z_sampled)
 
 
 
-        return s_T_mean, s_T_sig, a_means, a_sigs, z_post_mean, z_post_sig
+        return s_T_mean, s_T_sig, a_means, a_sigs, z_post_means, z_post_sigs
 
         
 
