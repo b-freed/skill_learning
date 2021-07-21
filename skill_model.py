@@ -222,7 +222,7 @@ class SkillModel(nn.Module):
         # self.z_sig_layer = nn.Sequential(nn.Linear(),nn.Softplus())
 
         self.encoder = Encoder(state_dim,a_dim,z_dim,h_dim)
-        self.decoder = Decoder()  # TODO 
+        self.decoder = Decoder(state_dim,a_dim,z_dim,h_dim)  # TODO 
 
 
     def forward(self,states,actions):
