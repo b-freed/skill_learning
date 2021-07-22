@@ -94,7 +94,7 @@ class LowLevelPolicy(nn.Module):
         '''
 
         # tile z along time axis so dimension matches state
-        z_tiled = torch.tile(z,state.size()[1]) #not sure about this 
+        z_tiled = z.tile(z,[1,state.shape[1],1])#torch.tile(z,state.size()[1]) #not sure about this 
 
         # Concat state and z_tiled
         state_z = torch.cat([state,z_tiled],dim=-1)
@@ -197,10 +197,15 @@ class Decoder(nn.Module):
             a_mean: batch_size x T x a_dim tensor of action means for each t in {0.,,,.T}
             a_sig:  batch_size x T x a_dim tensor of action standard devs for each t in {0.,,,.T}
         '''
-        embed = self.emb_layer(z)
-        sT_feats = self.fc(embed)
-        sT_mean,sT_sig = self.abstract_dynamics(sT_feats) # TODO
-        a_mean,a_sig   = self.ll_policy() # TODO
+        
+        s_0 = states[:,0,:]
+    
+        sT_mean,sT_sig = self.abstract_dynamics(s_0,z)
+        # concatentate states and z
+        T = states.shape[1]
+        z_tiled = z.tile([1,T,1]) 
+        state_z = torch.cat([state,z_tiled],dim=-1)
+        a_mean,a_sig   = self.ll_policy(state_z)
 
 
         return sT_mean,sT_sig,a_mean,a_sig
@@ -270,7 +275,7 @@ class SkillModel(nn.Module):
 
         '''
 
-        s_T_mean, s_T_sig, a_means, a_sigs, z_post_means, z_post_sigs, z_prior_means, z_prior_sigs  = self.forward(states,actions)
+        s_T_mean, s_T_sig, a_means, a_sigs, z_post_means, z_post_sigs  = self.forward(states,actions)
 
         s_T_dist = Normal.Normal(s_T_mean, s_T_sig )
         a_dist = Normal.Normal(a_means, a_sigs)
@@ -279,6 +284,8 @@ class SkillModel(nn.Module):
 
         # loss terms corresponding to -logP(s_T|s_0,z) and -logP(a_t|s_t,z)
         T = states.shape[1]
+        s_T = states[:,-1,:]  # <-probably oging to be of size batch x state_dim.. We want batch x 1 x state_dim
+        s_T = s_T.unsqueeze(1) # adds extra dimension along time axis
         s_T_loss = -torch.mean(torch.sum(s_T_dist.log_prob(s_T),dim=-1))/T # divide by T because all other losses we take mean over T dimension, effectively dividing by T
         a_loss   = -torch.mean(torch.sum(a_dist.log_probs(actions),dim=-1))
         # loss term correpsonding ot kl loss between posterior and prior
