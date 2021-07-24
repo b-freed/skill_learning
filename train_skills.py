@@ -39,8 +39,8 @@ def train(model,model_optimizer):
 
 
 # First, instantiate a skill model
-model = 
-model_optimizer = 
+model = SkillModel()
+model_optimizer = torch.optim.Adam(model.parameters(), lr=0.0001) # default lr-0.0001
 
 # instantiating the environmnet, getting the dataset.
 # the data is in a big dictionary, containing long sequences of obs, rew, actions, goals
@@ -58,7 +58,7 @@ inputs = # array that is dataset_size x T x state_dim+action_dim
 # targets =  can be anyhing, maybe make this the goals but we probably won't use it
 train_data = TensorDataset(torch.tensor(inputs, dtype=torch.float32)) #,torch.tensor(targets,dtype=torch.float32))
 
-train_loader = torch.utils.data.DataLoader(
+train_loader = DataLoader(
 	train_data,
 	batch_size=self.batch_size,
 	num_workers=0)  # not really sure about num_workers...
