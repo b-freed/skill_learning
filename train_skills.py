@@ -33,7 +33,7 @@ def train(model,model_optimizer):
 		losses.append(loss_tot.item())
 		# TODO fill in rest
 
-	return np.mean(losses), np.mean(s_T_losses) # TODO 
+	return np.mean(losses), np.mean(s_T_losses), np.mean(a_losses), np.mean(kl_losses) 
 
 
 # First, instantiate a skill model
