@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from torch.utils.data import TensorDataset
 from torch.utils.data.dataloader import DataLoader
 import torch.distributions.normal as Normal
+from skill_model import SkillModel
 
 import d4rl
 
