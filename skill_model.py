@@ -204,7 +204,7 @@ class Decoder(nn.Module):
         # concatentate states and z
         T = states.shape[1]
         z_tiled = z.tile([1,T,1]) 
-        state_z = torch.cat([state,z_tiled],dim=-1)
+        state_z = torch.cat([states,z_tiled],dim=-1)
         a_mean,a_sig   = self.ll_policy(state_z)
 
 
@@ -280,7 +280,7 @@ class SkillModel(nn.Module):
         s_T_dist = Normal.Normal(s_T_mean, s_T_sig )
         a_dist = Normal.Normal(a_means, a_sigs)
         z_post_dist = Normal.Normal(z_post_means, z_post_sigs)
-        z_prior_dist = Normal.Normal(z_prior_means, z_prior_sigs)
+        z_prior_dist = Normal.Normal(z_prior_means, z_prior_sigs) # where do we get prior dists from?
 
         # loss terms corresponding to -logP(s_T|s_0,z) and -logP(a_t|s_t,z)
         T = states.shape[1]
