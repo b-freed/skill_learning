@@ -31,7 +31,9 @@ def train(model,model_optimizer):
 		# log losses
 
 		losses.append(loss_tot.item())
-		# TODO fill in rest
+		s_T_losses.append(s_T_loss.item())
+		a_losses.append(a_loss.item())
+		kl_losses.append(kl_loss.item())
 
 	return np.mean(losses), np.mean(s_T_losses), np.mean(a_losses), np.mean(kl_losses) 
 
