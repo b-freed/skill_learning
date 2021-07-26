@@ -280,6 +280,8 @@ class SkillModel(nn.Module):
         s_T_dist = Normal.Normal(s_T_mean, s_T_sig )
         a_dist = Normal.Normal(a_means, a_sigs)
         z_post_dist = Normal.Normal(z_post_means, z_post_sigs)
+        z_prior_means = torch.zeros_like(z_post_means)
+        z_sig_means = torch.ones_like(z_post_sigs)
         z_prior_dist = Normal.Normal(z_prior_means, z_prior_sigs) # where do we get prior dists from?
 
         # loss terms corresponding to -logP(s_T|s_0,z) and -logP(a_t|s_t,z)
