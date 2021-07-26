@@ -58,7 +58,7 @@ observations = data['observations']
 
 # add chunks of data to a pytorch dataloader
 inputs = # array that is dataset_size x T x state_dim+action_dim 
-targets = data['infos/goal']
+targets = data['infos/goal'] # can be anyhing, maybe make this the goals but we probably won't use it
 train_data = TensorDataset(torch.tensor(inputs, dtype=torch.float32), torch.tensor(targets,dtype=torch.float32))
 
 train_loader = DataLoader(
