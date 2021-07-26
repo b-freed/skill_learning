@@ -33,7 +33,7 @@ class EpisodeDataBuffer():
 		train_loader = torch.utils.data.DataLoader(
 			train_data,
 			batch_size=self.batch_size,
-			num_workers=1)
+			num_workers=0)
 
 		return train_loader
 
