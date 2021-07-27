@@ -49,13 +49,19 @@ env = 'maze2d-large-v1'  # maze whatever
 env = gym.make(env)
 data = env.get_dataset()  # dictionary, with 'observations', 'rewards', 'actions', 'infos/goal'
 
-observations = data['observations']
+states = data['observations']
+state_dim = states.shape[1]
+actions = data['actions']
+a_dim = actions.shape[1]
 # splitting up the dataset into subsequences in which we're going to a particular goal.  Every time the goal changes we make a new subsequence.
 # chunks might not all be same length, might have to split long chunks down into sub-chunks, discarding leftover chunks that are shorter than our chunck length.
 # so if I have a chunk that's 125 long, I can split into 6 x 20 sub chunks, discard last 5
+N = states.shape[0]
+paths = collections.defaultdict(list)
+initial_goal = data['infos/goal'][0]
 
 # add chunks of data to a pytorch dataloader
-inputs = # array that is dataset_size x T x state_dim+action_dim 
+inputs = np.concatenate([paths,actions],axis=-1) # array that is dataset_size x T x state_dim+action_dim 
 # targets = data['infos/goal'] can be anyhing, maybe make this the goals but we probably won't use it
 train_data = TensorDataset(torch.tensor(inputs, dtype=torch.float32)) # ,torch.tensor(targets,dtype=torch.float32))
 
