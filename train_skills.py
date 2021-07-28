@@ -59,6 +59,13 @@ a_dim = actions.shape[1]
 N = states.shape[0]
 paths = collections.defaultdict(list)
 initial_goal = data['infos/goal'][0]
+for i in range(N):
+	if initial_goal == data['infos/goal'][i]:
+		# We append first set of obs corresponding to first goal into the list as first subsequence
+	# Once the goal changes set initial_goal to next goal
+	else:
+		initial_goal = data['infos/goal'][i]
+		# Continue appending list for this set of obs corresponding to the current goal but indicate that this is new subsequence.
 
 # add chunks of data to a pytorch dataloader
 inputs = np.concatenate([paths,actions],axis=-1) # array that is dataset_size x T x state_dim+action_dim 
