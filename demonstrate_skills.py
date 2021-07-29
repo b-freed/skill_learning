@@ -8,6 +8,7 @@ from torch.utils.data.dataloader import DataLoader
 import torch.distributions.normal as Normal
 from skill_model import SkillModel
 import d4rl
+import gym
 
 
 
