@@ -6,6 +6,7 @@ from torch.utils.data import TensorDataset
 from torch.utils.data.dataloader import DataLoader
 import torch.distributions.normal as Normal
 from skill_model import SkillModel
+import collections
 
 import d4rl
 
@@ -58,13 +59,14 @@ a_dim = actions.shape[1]
 # so if I have a chunk that's 125 long, I can split into 6 x 20 sub chunks, discard last 5
 N = states.shape[0]
 paths = collections.defaultdict(list)
-initial_goal = data['infos/goal'][0]
+goals = data['infos/goal']
+initial_goal = goals[0]
 for i in range(N):
-	if initial_goal == data['infos/goal'][i]:
+	if initial_goal == goals[i]:
 		# We append first set of obs corresponding to first goal into the list as first subsequence
 	# Once the goal changes set initial_goal to next goal
 	else:
-		initial_goal = data['infos/goal'][i]
+		initial_goal = goals[i]
 		# Continue appending list for this set of obs corresponding to the current goal but indicate that this is new subsequence.
 
 # add chunks of data to a pytorch dataloader
