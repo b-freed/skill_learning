@@ -61,6 +61,7 @@ N = states.shape[0]
 paths = collections.defaultdict(list)
 goals = data['infos/goal']
 initial_goal = goals[0]
+'''
 for i in range(N):
 	if initial_goal == goals[i]:
 		# We append first set of obs corresponding to first goal into the list as first subsequence
@@ -68,6 +69,18 @@ for i in range(N):
 	else:
 		initial_goal = goals[i]
 		# Continue appending list for this set of obs corresponding to the current goal but indicate that this is new subsequence.
+'''
+def chunks(dict):
+	for i in range(N):
+		if goals[i] not in dict:
+			dict.update({goals[i]: states[i]})
+		elif goals[i] in dict:
+			if not isinstance(dict[goals[i]], list):
+				dict[goals[i]] = [dict[goals[i]]]
+			dict[goals[i]].append(states[i])
+
+chunks(paths)
+# make all values corresponding to goals (keys) same length
 
 # add chunks of data to a pytorch dataloader
 inputs = np.concatenate([paths,actions],axis=-1) # array that is dataset_size x T x state_dim+action_dim 
