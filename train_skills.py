@@ -72,12 +72,12 @@ for i in range(N):
 '''
 def chunks(dict):
 	for i in range(N):
-		if goals[i] not in dict:
-			dict.update({goals[i]: states[i]})
-		elif goals[i] in dict:
-			if not isinstance(dict[goals[i]], list):
-				dict[goals[i]] = [dict[goals[i]]]
-			dict[goals[i]].append(states[i])
+		if str(goals[i]) not in dict.keys():
+			dict[str(goals[i])] = states[i]
+		elif str(goals[i]) in dict.keys():
+			if not isinstance(dict[str(goals[i])], list):
+				dict[str(goals[i])] = [dict[str(goals[i])]]
+			dict[str(goals[i])].append(states[i])
 
 chunks(paths)
 # make all values corresponding to goals (keys) same length
