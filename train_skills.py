@@ -50,6 +50,8 @@ env = 'maze2d-large-v1'  # maze whatever
 env = gym.make(env)
 data = env.get_dataset()  # dictionary, with 'observations', 'rewards', 'actions', 'infos/goal'
 
+batch_size = 100
+
 states = data['observations']
 state_dim = states.shape[1]
 actions = data['actions']
@@ -78,6 +80,9 @@ def chunks(dict):
 			if not isinstance(dict[str(goals[i])], list):
 				dict[str(goals[i])] = [dict[str(goals[i])]]
 			dict[str(goals[i])].append(states[i])
+			
+		
+		
 
 chunks(paths)
 # make all values corresponding to goals (keys) same length
@@ -89,7 +94,7 @@ train_data = TensorDataset(torch.tensor(inputs, dtype=torch.float32)) # ,torch.t
 
 train_loader = DataLoader(
 	train_data,
-	batch_size=self.batch_size,
+	batch_size=batch_size,
 	num_workers=0)  # not really sure about num_workers...
 
 
