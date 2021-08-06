@@ -81,6 +81,33 @@ def chunks(dict):
 				dict[str(goals[i])] = [dict[str(goals[i])]]
 			dict[str(goals[i])].append(states[i])
 			
+def ben_chunk(obs,actions,goals,H,stride):
+	'''
+	obs is a N x 4 array
+	goals is a N x 2 array
+	H is length of chunck
+	stride is how far we move between chunks.  So if stride=H, chunks are non-overlapping.  If stride < H, they overlap
+	'''
+	
+	obs_chunks = []
+	action_chunks = []
+	for i in range(N//stride):
+		start_ind = i*stride
+		end_ind = start_ind + H
+		
+		start_goal = goals[start_ind,:]
+		end_goal = goals[end_ind,:]
+		
+		if start_goal = end_goal:
+		
+			obs_chunk = obs[start_ind:end_ind,:]
+			action_chunk = actions[start_ind:end_ind,:]
+			
+			obs_chunks.append(obs_chunk)
+			action_chunks.append(action_chunk)
+			
+	return np.stack(obs_chunks),np.stack(action_chunks)
+		
 		
 		
 
