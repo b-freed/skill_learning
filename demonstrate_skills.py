@@ -37,7 +37,7 @@ z_prior_sigs = torch.ones_like((1,H,z_dim))
 z_sampled = SkillModel.reparameterize(z_prior_means, z_prior_sigs)
 
 # simulate low-level policy in env
-state = env.reset()
+state = env.reset(). # TODO: consider trying to reset to the same initial state every time
 for i in range(H):
     env.render()  # for visualization
     state = torch.tensor(state).cuda() # probably need to put this on the GPU and reshape it
