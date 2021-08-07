@@ -116,6 +116,6 @@ train_loader = DataLoader(
 	batch_size=batch_size,
 	num_workers=0)  # not really sure about num_workers...
 
-
+n_epochs = 1000 # initial value
 for i in range(n_epochs):
 	train()
