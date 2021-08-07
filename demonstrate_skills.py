@@ -24,14 +24,9 @@ ll_policy = skill_model.decoder.ll_policy
 # create env
 env = 'maze2d-large-v1'  # maze whatever
 env = gym.make(env)
-# data = env.get_dataset()
-# states = data['observations'] # shape = (4000000,4)
-# actions = data['actions']
-# N = states.shape[0]
 
 
 # sample a skill vector from prior
-# _,_,_,_, z_post_means, z_post_sigs = SkillModel.forward(states, actions)
 z_prior_means = torch.zeros_like((1,H,z_dim))
 z_prior_sigs = torch.ones_like((1,H,z_dim))
 z_sampled = SkillModel.reparameterize(z_prior_means, z_prior_sigs)
