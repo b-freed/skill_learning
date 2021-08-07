@@ -90,7 +90,7 @@ def ben_chunk(obs,actions,goals,H,stride):
 		start_goal = goals[start_ind,:]
 		end_goal = goals[end_ind,:]
 		
-		if start_goal = end_goal:
+		if start_goal == end_goal:
 		
 			obs_chunk = obs[start_ind:end_ind,:]
 			action_chunk = actions[start_ind:end_ind,:]
