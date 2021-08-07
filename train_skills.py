@@ -63,15 +63,7 @@ N = states.shape[0]
 paths = collections.defaultdict(list)
 goals = data['infos/goal']
 initial_goal = goals[0]
-'''
-for i in range(N):
-	if initial_goal == goals[i]:
-		# We append first set of obs corresponding to first goal into the list as first subsequence
-	# Once the goal changes set initial_goal to next goal
-	else:
-		initial_goal = goals[i]
-		# Continue appending list for this set of obs corresponding to the current goal but indicate that this is new subsequence.
-'''
+
 def chunks(dict):
 	for i in range(N):
 		if str(goals[i]) not in dict.keys():
