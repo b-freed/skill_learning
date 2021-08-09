@@ -83,9 +83,13 @@ def ben_chunk(obs,actions,goals,H,stride):
 	
 	obs_chunks = []
 	action_chunks = []
-	for i in range(N//stride):
+	for i in range((N-1)//stride):
 		start_ind = i*stride
 		end_ind = start_ind + H
+		# If end_ind = 4000000, it goes out of bounds
+		# this way start_ind is from 0-3999980 and end_ind is from 20-3999999
+		if end_ind == N:
+			end_ind = N-1
 		
 		start_goal = goals[start_ind,:]
 		end_goal = goals[end_ind,:]
