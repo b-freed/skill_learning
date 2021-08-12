@@ -6,7 +6,8 @@ from torch.utils.data import TensorDataset
 from torch.utils.data.dataloader import DataLoader
 import torch.distributions.normal as Normal
 from skill_model import SkillModel
-
+import collections
+import gym
 import d4rl
 
 
@@ -49,6 +50,8 @@ env = 'maze2d-large-v1'  # maze whatever
 env = gym.make(env)
 data = env.get_dataset()  # dictionary, with 'observations', 'rewards', 'actions', 'infos/goal'
 
+batch_size = 100
+
 states = data['observations']
 state_dim = states.shape[1]
 actions = data['actions']
@@ -58,25 +61,72 @@ a_dim = actions.shape[1]
 # so if I have a chunk that's 125 long, I can split into 6 x 20 sub chunks, discard last 5
 N = states.shape[0]
 paths = collections.defaultdict(list)
-initial_goal = data['infos/goal'][0]
-for i in range(N):
-	if initial_goal == data['infos/goal'][i]:
-		# We append first set of obs corresponding to first goal into the list as first subsequence
-	# Once the goal changes set initial_goal to next goal
-	else:
-		initial_goal = data['infos/goal'][i]
-		# Continue appending list for this set of obs corresponding to the current goal but indicate that this is new subsequence.
+goals = data['infos/goal']
+initial_goal = goals[0]
+
+def chunks(dict):
+	for i in range(N):
+		if str(goals[i]) not in dict.keys():
+			dict[str(goals[i])] = states[i]
+		elif str(goals[i]) in dict.keys():
+			if not isinstance(dict[str(goals[i])], list):
+				dict[str(goals[i])] = [dict[str(goals[i])]]
+			dict[str(goals[i])].append(states[i])
+			
+def ben_chunk(obs,actions,goals,H,stride):
+	'''
+	obs is a N x 4 array
+	goals is a N x 2 array
+	H is length of chunck
+	stride is how far we move between chunks.  So if stride=H, chunks are non-overlapping.  If stride < H, they overlap
+	'''
+	
+	obs_chunks = []
+	action_chunks = []
+	for i in range((N-1)//stride):
+		start_ind = i*stride
+		end_ind = start_ind + H
+		# If end_ind = 4000000, it goes out of bounds
+		# this way start_ind is from 0-3999980 and end_ind is from 20-3999999
+		if end_ind == N:
+			end_ind = N-1
+		
+		start_goal = goals[start_ind,:]
+		end_goal = goals[end_ind,:]
+		
+		if start_goal[0] == end_goal[0] and start_goal[1] == end_goal[1]:
+		
+			obs_chunk = obs[start_ind:end_ind,:]
+			action_chunk = actions[start_ind:end_ind,:]
+			
+			obs_chunks.append(obs_chunk)
+			action_chunks.append(action_chunk)
+			
+	return np.stack(obs_chunks),np.stack(action_chunks)
+		
+		
+		
+
+chunks(paths) # anirudhs attempt
+# make all values corresponding to goals (keys) same length
+
+H = 20
+stride = 20
+obs_chunks, action_chunks = ben_chunk(states, actions, goals, H, stride)
 
 # add chunks of data to a pytorch dataloader
-inputs = np.concatenate([paths,actions],axis=-1) # array that is dataset_size x T x state_dim+action_dim 
+inputs = np.concatenate([obs_chunks, action_chunks],axis=-1) # array that is dataset_size x T x state_dim+action_dim 
 # targets = data['infos/goal'] can be anyhing, maybe make this the goals but we probably won't use it
 train_data = TensorDataset(torch.tensor(inputs, dtype=torch.float32)) # ,torch.tensor(targets,dtype=torch.float32))
 
 train_loader = DataLoader(
 	train_data,
-	batch_size=self.batch_size,
+	batch_size=batch_size,
 	num_workers=0)  # not really sure about num_workers...
 
-
+n_epochs = 1000 # initial value
 for i in range(n_epochs):
-	train()
+	train(model,model_optimizer)
+
+PATH = 
+torch.save(model.state_dict(), PATH)
