@@ -25,7 +25,7 @@ ll_policy = skill_model.decoder.ll_policy
 env = 'maze2d-large-v1'  # maze whatever
 env = gym.make(env)
 
-z_dim = z.shape[1] # call 'z' from state dict of trained skill model
+z_dim = 20
 
 # sample a skill vector from prior
 z_prior_means = torch.zeros_like((1,H,z_dim))
