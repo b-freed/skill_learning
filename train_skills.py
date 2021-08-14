@@ -129,4 +129,6 @@ for i in range(n_epochs):
 	train(model,model_optimizer)
 
 PATH = 
-torch.save(model.state_dict(), PATH)
+# torch.save(model.state_dict(), PATH)
+torch.save(model, PATH)
+torch.save(model_optimizer, PATH)
