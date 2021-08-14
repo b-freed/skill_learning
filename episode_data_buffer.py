@@ -1,3 +1,7 @@
+import numpy as np
+import torch
+from torch.utils.data import TensorDataset
+
 class EpisodeDataBuffer():
 	'''
 	Data buffer for when we're using entire episodes
