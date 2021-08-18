@@ -70,6 +70,7 @@ for i in range(10000):
     state = env.reset(start_state)
     states = [state]
     action = []
+    goal = []
     
     
     for t in range(100):
@@ -79,10 +80,11 @@ for i in range(10000):
         state = env.step(u)
         states.append(state)
         action.append(u)
+        goal.append(goal_loc)
 
     obs.append(states)
     actions.append(action)
-    goals.append(goal_loc)
+    goals.append(goal)
 
 obs = np.stack(obs)
 actions = np.stack(actions)
