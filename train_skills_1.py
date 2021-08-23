@@ -46,7 +46,7 @@ def get_data():
 	obs = []
 	goals = []
 	actions = []
-	for i in range(4000000):
+	for i in range(10000):
 		start_loc = 2*np.random.uniform(size=2) - 1
 		start_state = np.concatenate([start_loc,np.zeros(2)])
 		goal_loc = 2*np.random.uniform(size=2) - 1
@@ -119,7 +119,7 @@ stride = 20
 obs_chunks, action_chunks = ben_chunk(states, actions, goals, H, stride)
 
 # First, instantiate a skill model
-model = SkillModel(state_dim, a_dim, 20, 20)
+model = SkillModel(state_dim, a_dim, 20, h_dim)
 model_optimizer = torch.optim.Adam(model.parameters(), lr=0.002) # default lr-0.0001
 
 # add chunks of data to a pytorch dataloader
