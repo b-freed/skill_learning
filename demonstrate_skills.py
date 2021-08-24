@@ -14,7 +14,7 @@ import gym
 H = 20
 PATH = # path to trained skill model
 
-skill_model = SkillModel() # TODO
+skill_model = SkillModel(state_dim, a_dim, 20, h_dim) # TODO
 # Load trained skill model
 skill_model.load_state_dict(torch.load(PATH))
 
