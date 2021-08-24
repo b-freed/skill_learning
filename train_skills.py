@@ -40,10 +40,6 @@ def train(model,model_optimizer):
 	return np.mean(losses), np.mean(s_T_losses), np.mean(a_losses), np.mean(kl_losses) 
 
 
-# First, instantiate a skill model
-model = SkillModel()
-model_optimizer = torch.optim.Adam(model.parameters(), lr=0.002) # default lr-0.0001
-
 # instantiating the environmnet, getting the dataset.
 # the data is in a big dictionary, containing long sequences of obs, rew, actions, goals
 env = 'maze2d-large-v1'  # maze whatever
@@ -113,6 +109,10 @@ chunks(paths) # anirudhs attempt
 H = 20
 stride = 20
 obs_chunks, action_chunks = ben_chunk(states, actions, goals, H, stride)
+
+# First, instantiate a skill model
+model = SkillModel(state_dim, a_dim, 20, h_dim)
+model_optimizer = torch.optim.Adam(model.parameters(), lr=0.002) # default lr-0.0001
 
 # add chunks of data to a pytorch dataloader
 inputs = np.concatenate([obs_chunks, action_chunks],axis=-1) # array that is dataset_size x T x state_dim+action_dim 
