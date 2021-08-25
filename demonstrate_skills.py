@@ -14,6 +14,9 @@ from pointmass_env import PointmassEnv
 H = 20
 PATH = # path to trained skill model
 
+state_dim = 
+a_dim = 
+h_dim = 128
 skill_model = SkillModel(state_dim, a_dim, 20, h_dim) # TODO
 # Load trained skill model
 skill_model.load_state_dict(torch.load(PATH))
