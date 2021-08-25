@@ -7,8 +7,8 @@ from torch.utils.data import TensorDataset
 from torch.utils.data.dataloader import DataLoader
 import torch.distributions.normal as Normal
 from skill_model import SkillModel
-import d4rl
 import gym
+from pointmass_env import PointmassEnv
 
 
 H = 20
@@ -22,8 +22,7 @@ skill_model.load_state_dict(torch.load(PATH))
 ll_policy = skill_model.decoder.ll_policy
 
 # create env
-env = 'maze2d-large-v1'  # maze whatever
-env = gym.make(env)
+env = PointmassEnv()
 
 z_dim = 20
 
