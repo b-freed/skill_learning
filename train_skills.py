@@ -52,6 +52,7 @@ states = data['observations']
 state_dim = states.shape[1]
 actions = data['actions']
 a_dim = actions.shape[1]
+h_dim = 128
 # splitting up the dataset into subsequences in which we're going to a particular goal.  Every time the goal changes we make a new subsequence.
 # chunks might not all be same length, might have to split long chunks down into sub-chunks, discarding leftover chunks that are shorter than our chunck length.
 # so if I have a chunk that's 125 long, I can split into 6 x 20 sub chunks, discard last 5
@@ -59,15 +60,6 @@ N = states.shape[0]
 paths = collections.defaultdict(list)
 goals = data['infos/goal']
 initial_goal = goals[0]
-
-def chunks(dict):
-	for i in range(N):
-		if str(goals[i]) not in dict.keys():
-			dict[str(goals[i])] = states[i]
-		elif str(goals[i]) in dict.keys():
-			if not isinstance(dict[str(goals[i])], list):
-				dict[str(goals[i])] = [dict[str(goals[i])]]
-			dict[str(goals[i])].append(states[i])
 			
 def ben_chunk(obs,actions,goals,H,stride):
 	'''
@@ -99,12 +91,7 @@ def ben_chunk(obs,actions,goals,H,stride):
 			action_chunks.append(action_chunk)
 			
 	return np.stack(obs_chunks),np.stack(action_chunks)
-		
-		
-		
 
-chunks(paths) # anirudhs attempt
-# make all values corresponding to goals (keys) same length
 
 H = 20
 stride = 20
