@@ -72,7 +72,7 @@ def get_data():
 	actions = np.stack(actions)
 	goals = np.stack(goals)
 
-	return obs, actions, actions
+	return obs, actions, goals
 
 states, actions, goals = get_data()
 state_dim = states.shape[2]
