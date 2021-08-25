@@ -77,53 +77,16 @@ def get_data():
 states, actions, goals = get_data()
 state_dim = states.shape[2]
 a_dim = actions.shape[2]
-# splitting up the dataset into subsequences in which we're going to a particular goal.  Every time the goal changes we make a new subsequence.
-# chunks might not all be same length, might have to split long chunks down into sub-chunks, discarding leftover chunks that are shorter than our chunck length.
-# so if I have a chunk that's 125 long, I can split into 6 x 20 sub chunks, discard last 5
+h_dim = 128
 N = states.shape[0]
-			
-def ben_chunk(obs,actions,goals,H,stride):
-	'''
-	obs is a N x 4 array
-	goals is a N x 2 array
-	H is length of chunck
-	stride is how far we move between chunks.  So if stride=H, chunks are non-overlapping.  If stride < H, they overlap
-	'''
-	
-	obs_chunks = []
-	action_chunks = []
-	for i in range((N-1)//stride):
-		start_ind = i*stride
-		end_ind = start_ind + H
-		# If end_ind = 10000, it goes out of bounds
-		# this way start_ind is from 0-9980 and end_ind is from 20-9999
-		if end_ind == N:
-			end_ind = N-1
-		
-		start_goal = goals[start_ind,:]
-		end_goal = goals[end_ind,:]
-		
-		if start_goal[0] == end_goal[0] and start_goal[1] == end_goal[1]:
-		
-			obs_chunk = obs[start_ind:end_ind,:]
-			action_chunk = actions[start_ind:end_ind,:]
-			
-			obs_chunks.append(obs_chunk)
-			action_chunks.append(action_chunk)
-			
-	return np.stack(obs_chunks),np.stack(action_chunks)
 
-
-H = 20
-stride = 20
-obs_chunks, action_chunks = ben_chunk(states, actions, goals, H, stride)
 
 # First, instantiate a skill model
 model = SkillModel(state_dim, a_dim, 20, h_dim)
 model_optimizer = torch.optim.Adam(model.parameters(), lr=0.002) # default lr-0.0001
 
 # add chunks of data to a pytorch dataloader
-inputs = np.concatenate([obs_chunks, action_chunks],axis=-1) # array that is dataset_size x T x state_dim+action_dim 
+inputs = np.concatenate([states, actions],axis=-1) # array that is dataset_size x T x state_dim+action_dim 
 # targets = data['infos/goal'] can be anyhing, maybe make this the goals but we probably won't use it
 train_data = TensorDataset(torch.tensor(inputs, dtype=torch.float32)) # ,torch.tensor(targets,dtype=torch.float32))
 
