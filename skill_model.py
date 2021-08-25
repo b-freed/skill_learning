@@ -38,6 +38,8 @@ class AbstractDynamics(nn.Module):
     '''
     def __init__(self,state_dim,z_dim,h_dim):
 
+        super(AbstractDynamics,self).__init__()
+        
         self.layers = nn.Sequential(nn.Linear(state_dim+z_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
         self.mean_layer = nn.Linear(h_dim,state_dim)
         self.sig_layer  = nn.Sequential(nn.Linear(h_dim,state_dim),nn.Softplus())
@@ -77,6 +79,8 @@ class LowLevelPolicy(nn.Module):
     '''
     def __init__(self,state_dim,a_dim,z_dim,h_dim):
 
+        super(LowLevelPolicy,self).__init__()
+        
         self.layers = nn.Sequential(nn.Linear(state_dim+z_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
         self.mean_layer = nn.Linear(h_dim,a_dim)
         self.sig_layer  = nn.Sequential(nn.Linear(h_dim,a_dim),nn.Softplus())
@@ -174,6 +178,8 @@ class Decoder(nn.Module):
     '''
     def __init__(self,state_dim,a_dim,z_dim,h_dim):
 
+        super(Decoder,self).__init__()
+        
         self.state_dim = state_dim
         self.a_dim = a_dim
         self.z_dim = z_dim
