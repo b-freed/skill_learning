@@ -78,7 +78,8 @@ for i in range(10000):
         u = env.get_stabilizing_control(goal_loc)
         #print('u: ', u)
         state = env.step(u)
-        states.append(state)
+        if t != 99:
+            states.append(state)
         action.append(u)
         goal.append(goal_loc)
 
