@@ -22,7 +22,7 @@ def train(model,model_optimizer):
 		states = data[:,:,:model.state_dim]  # first state_dim elements are the state
 		actions = data[:,:,model.state_dim:]	 # rest are actions
 
-		loss_tot, s_T_loss, a_loss, kl_loss = model.get_losses()
+		loss_tot, s_T_loss, a_loss, kl_loss = model.get_losses(states, actions)
 
 		model_optimizer.zero_grad()
 		loss_tot.backward()
