@@ -88,8 +88,8 @@ model_optimizer = torch.optim.Adam(model.parameters(), lr=0.002) # default lr-0.
 
 # add chunks of data to a pytorch dataloader
 inputs = np.concatenate([states, actions],axis=-1) # array that is dataset_size x T x state_dim+action_dim 
-# targets = data['infos/goal'] can be anyhing, maybe make this the goals but we probably won't use it
-train_data = TensorDataset(torch.tensor(inputs, dtype=torch.float32)) # ,torch.tensor(targets,dtype=torch.float32))
+targets = goals
+train_data = TensorDataset(torch.tensor(inputs, dtype=torch.float32), torch.tensor(targets,dtype=torch.float32))
 
 train_loader = DataLoader(
 	train_data,
