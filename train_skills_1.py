@@ -18,7 +18,7 @@ def train(model,model_optimizer):
 	kl_losses = []
 
 	for batch_id, (data, target) in enumerate(train_loader):
-		data, target = data.cuda(), target.cuda()
+		#data, target = data.cuda(), target.cuda()
 		states = data[:,:,:model.state_dim]  # first state_dim elements are the state
 		actions = data[:,:,model.state_dim:]	 # rest are actions
 
