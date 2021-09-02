@@ -40,4 +40,4 @@ for i in range(H):
     env.render()  # for visualization
     state = torch.tensor(state).cuda() # probably need to put this on the GPU and reshape it
     action = ll_policy(state,z_sampled)
-    state,_,_,_ = env.step(action)
+    state = env.step(action)
