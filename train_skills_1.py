@@ -83,7 +83,7 @@ N = states.shape[0]
 
 
 # First, instantiate a skill model
-model = SkillModel(state_dim, a_dim, 20, h_dim)
+model = SkillModel(state_dim, a_dim, 20, h_dim).cuda()
 model_optimizer = torch.optim.Adam(model.parameters(), lr=0.002) # default lr-0.0001
 
 # add chunks of data to a pytorch dataloader
