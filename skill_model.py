@@ -98,7 +98,7 @@ class LowLevelPolicy(nn.Module):
         '''
 
         # tile z along time axis so dimension matches state
-        z_tiled = z.tile(z,[1,state.shape[1],1])#torch.tile(z,state.size()[1]) #not sure about this 
+        z_tiled = z.tile([1,state.shape[1],1])#torch.tile(z,state.size()[1]) #not sure about this 
 
         # Concat state and z_tiled
         state_z = torch.cat([state,z_tiled],dim=-1)
