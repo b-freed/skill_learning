@@ -57,6 +57,8 @@ class AbstractDynamics(nn.Module):
         '''
 
         # concatenate s0 and z
+        print(s0.size())
+        print(z.size())
         s0_z = torch.cat([s0,z],dim=-1)
 
         # pass s0_z through layers
