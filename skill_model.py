@@ -149,14 +149,11 @@ class Encoder(nn.Module):
 
         # concatenate states and actions
         s_a = torch.cat([states,actions],dim=-1)
-        print(s_a.size())
         # embedd states and actions
         embed = self.emb_layer(s_a)
-        print(embed.size())
         # through rnn
         feats,hn = self.rnn(embed)
         # get z_mean and z_sig by passing rnn output through mean_layer and sig_layer
-        print(feats.size())
         z_mean = self.mean_layer(feats)
         z_sig = self.sig_layer(feats)
         
