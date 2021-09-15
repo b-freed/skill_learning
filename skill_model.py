@@ -305,5 +305,5 @@ class SkillModel(nn.Module):
 
 
     def reparameterize(self, mean, std):
-        eps = torch.normal(torch.zeros(mean.size()), torch.ones(mean.size()))
+        eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
         return mean + std*eps
