@@ -129,8 +129,8 @@ class Encoder(nn.Module):
 
         self.emb_layer  = nn.Linear(state_dim+a_dim,h_dim)
         self.rnn        = nn.GRU(h_dim,h_dim,batch_first=True,bidirectional=True)
-        self.mean_layer = nn.Linear(h_dim,z_dim)
-        self.sig_layer  = nn.Sequential(nn.Linear(h_dim,z_dim),nn.Softplus())  # using softplus to ensure stand dev is positive
+        self.mean_layer = nn.Linear(h_dim*2,z_dim)
+        self.sig_layer  = nn.Sequential(nn.Linear(h_dim*2,z_dim),nn.Softplus())  # using softplus to ensure stand dev is positive
 
 
     def forward(self,states,actions):
