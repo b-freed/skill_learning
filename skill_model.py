@@ -100,7 +100,6 @@ class LowLevelPolicy(nn.Module):
         '''
 
         # tile z along time axis so dimension matches state
-        z = z[:,0:1,:]
         z_tiled = z.tile([1,state.shape[1],1])#torch.tile(z,state.size()[1]) #not sure about this 
 
         # Concat state and z_tiled
@@ -208,7 +207,6 @@ class Decoder(nn.Module):
         '''
         
         s_0 = states[:,0:1,:]
-        z = z[:,0:1,:]
         sT_mean,sT_sig = self.abstract_dynamics(s_0,z)
         # concatentate states and z
         T = states.shape[1]
