@@ -209,10 +209,10 @@ class Decoder(nn.Module):
         s_0 = states[:,0:1,:]
         sT_mean,sT_sig = self.abstract_dynamics(s_0,z)
         # concatentate states and z
-        T = states.shape[1]
-        z_tiled = z.tile([1,T,1]) 
-        state_z = torch.cat([states,z_tiled],dim=-1)
-        a_mean,a_sig   = self.ll_policy(state_z)
+        #T = states.shape[1]
+        #z_tiled = z.tile([1,T,1]) 
+        #state_z = torch.cat([states,z_tiled],dim=-1)
+        a_mean,a_sig   = self.ll_policy(states,z)
 
 
         return sT_mean,sT_sig,a_mean,a_sig
@@ -296,7 +296,7 @@ class SkillModel(nn.Module):
         s_T = states[:,-1:,:]  # <-probably oging to be of size batch x state_dim.. We want batch x 1 x state_dim
         s_T = s_T.unsqueeze(1) # adds extra dimension along time axis
         s_T_loss = -torch.mean(torch.sum(s_T_dist.log_prob(s_T),dim=-1))/T # divide by T because all other losses we take mean over T dimension, effectively dividing by T
-        a_loss   = -torch.mean(torch.sum(a_dist.log_probs(actions),dim=-1))
+        a_loss   = -torch.mean(torch.sum(a_dist.log_prob(actions),dim=-1))
         # loss term correpsonding ot kl loss between posterior and prior
         kl_loss = torch.mean(torch.sum(F.kl_div(z_post_dist, z_prior_dist),dim=-1))
 
