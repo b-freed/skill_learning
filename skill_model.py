@@ -156,12 +156,10 @@ class Encoder(nn.Module):
         # through rnn
         feats,hn = self.rnn(embed)
         # get z_mean and z_sig by passing rnn output through mean_layer and sig_layer
-        z_mean = self.mean_layer(feats)
-        z_sig = self.sig_layer(feats)
+        z_mean = self.mean_layer(feats[:,-1:,:])
+        z_sig = self.sig_layer(feats[:,-1:,:])
         
-        return z_mean[:,-1:,:], z_sig[:,-1:,:]
-
-
+        return z_mean, z_sig
 
 
 class Decoder(nn.Module):
