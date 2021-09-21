@@ -99,6 +99,7 @@ train_loader = DataLoader(
 n_epochs = 1000 # initial value
 for i in range(n_epochs):
 	train(model,model_optimizer)
+	print(i)
 
 '''
 PATH = 
