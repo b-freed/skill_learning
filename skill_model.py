@@ -98,7 +98,7 @@ class LowLevelPolicy(nn.Module):
         '''
 
         # tile z along time axis so dimension matches state
-        z_tiled = z.tile([1,state.shape[1],1])#torch.tile(z,state.size()[1]) #not sure about this 
+        z_tiled = z.tile([1,state.shape[1],1]) #not sure about this 
 
         # Concat state and z_tiled
         state_z = torch.cat([state,z_tiled],dim=-1)
@@ -223,11 +223,6 @@ class SkillModel(nn.Module):
 
         self.state_dim = state_dim # state dimension
         self.a_dim = a_dim # action dimension
-
-        # self.encoder_emb = nn.Linear(state_dim+a_dim,h_dim) # for embedding state actions in encoder
-        # self.encoder_rnn = nn.GRU(h_dim,h_dim,batch_first=True,bidirectional=True)
-        # self.z_mean_layer = nn.Linear
-        # self.z_sig_layer = nn.Sequential(nn.Linear(),nn.Softplus())
 
         self.encoder = Encoder(state_dim,a_dim,z_dim,h_dim)
         self.decoder = Decoder(state_dim,a_dim,z_dim,h_dim)  # TODO 
