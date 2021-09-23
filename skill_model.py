@@ -204,17 +204,10 @@ class Decoder(nn.Module):
         
         s_0 = states[:,0:1,:]
         sT_mean,sT_sig = self.abstract_dynamics(s_0,z)
-        # concatentate states and z
-        #T = states.shape[1]
-        #z_tiled = z.tile([1,T,1]) 
-        #state_z = torch.cat([states,z_tiled],dim=-1)
         a_mean,a_sig   = self.ll_policy(states,z)
 
 
         return sT_mean,sT_sig,a_mean,a_sig
-
-
-
 
 
 class SkillModel(nn.Module):
