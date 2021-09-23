@@ -75,6 +75,7 @@ def get_data():
 
 	return obs, actions, goals
 
+
 states, actions, goals = get_data()
 state_dim = states.shape[2]
 a_dim = actions.shape[2]
@@ -107,3 +108,11 @@ PATH =
 torch.save(model, PATH)
 torch.save(model_optimizer, PATH)
 '''
+filename = 
+checkpoint_path = 'checkpoints/'+filename
+torch.save({
+				'model_state_dict': model.state_dict(),
+				'model_optimizer_state_dict': model_optimizer.state_dict(),
+				}, checkpoint_path)
+
+
