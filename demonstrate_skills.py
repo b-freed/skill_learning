@@ -17,7 +17,7 @@ PATH = # path to trained skill model
 state_dim = 4
 a_dim = 2
 h_dim = 128
-skill_model = SkillModel(state_dim, a_dim, 20, h_dim) # TODO
+skill_model = SkillModel(state_dim, a_dim, 20, h_dim).cuda() # TODO
 # Load trained skill model
 skill_model.load_state_dict(torch.load(PATH))
 
