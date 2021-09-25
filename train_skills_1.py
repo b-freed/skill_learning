@@ -102,7 +102,7 @@ for i in range(n_epochs):
 	train(model,model_optimizer)
 	print(i)
 
-filename = 
+filename = 'log.txt'
 checkpoint_path = 'checkpoints/'+filename
 torch.save({
 				'model_state_dict': model.state_dict(),
