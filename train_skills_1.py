@@ -102,17 +102,9 @@ for i in range(n_epochs):
 	train(model,model_optimizer)
 	print(i)
 
-'''
-PATH = 
-# torch.save(model.state_dict(), PATH)
-torch.save(model, PATH)
-torch.save(model_optimizer, PATH)
-'''
 filename = 
 checkpoint_path = 'checkpoints/'+filename
 torch.save({
 				'model_state_dict': model.state_dict(),
 				'model_optimizer_state_dict': model_optimizer.state_dict(),
 				}, checkpoint_path)
-
-
