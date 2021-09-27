@@ -1,3 +1,11 @@
+from comet_ml import Experiment
+
+experiment = Experiment(
+    api_key="yQQo8E8TOCWYiVSruS7nxHaB5",
+    project_name="general",
+    workspace="anirudh-27",
+)
+
 import numpy as np
 import torch
 import torch.nn as nn
