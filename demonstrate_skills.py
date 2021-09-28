@@ -17,7 +17,7 @@ from skill_model import SkillModel
 import gym
 from pointmass_env import PointmassEnv
 
-filename = 'log.txt'
+filename = 'log.pth'
 H = 20
 PATH = 'checkpoints/'+filename
 
