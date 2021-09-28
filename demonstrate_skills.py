@@ -26,7 +26,8 @@ a_dim = 2
 h_dim = 128
 skill_model = SkillModel(state_dim, a_dim, 20, h_dim).cuda() # TODO
 # Load trained skill model
-skill_model.load_state_dict(torch.load(PATH))
+checkpoint = torch.load(PATH)
+skill_model.load_state_dict(checkpoint['model_state_dict'])
 
 # get low-level polic
 ll_policy = skill_model.decoder.ll_policy
