@@ -41,7 +41,7 @@ z_dim = 20
 input = torch.empty(1,H,z_dim)
 z_prior_means = torch.zeros_like(input).cuda()
 z_prior_sigs = torch.ones_like(input).cuda()
-z_sampled = SkillModel.reparameterize(z_prior_means, z_prior_sigs)
+z_sampled = skill_model.reparameterize(z_prior_means, z_prior_sigs)
 
 # simulate low-level policy in env
 state = env.reset() # TODO: consider trying to reset to the same initial state every time
