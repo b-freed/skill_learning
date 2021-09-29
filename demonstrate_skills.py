@@ -38,8 +38,9 @@ env = PointmassEnv()
 z_dim = 20
 
 # sample a skill vector from prior
-z_prior_means = torch.zeros_like((1,H,z_dim)).cuda()
-z_prior_sigs = torch.ones_like((1,H,z_dim)).cuda()
+input = torch.empty(1,H,z_dim)
+z_prior_means = torch.zeros_like(input).cuda()
+z_prior_sigs = torch.ones_like(input).cuda()
 z_sampled = SkillModel.reparameterize(z_prior_means, z_prior_sigs)
 
 # simulate low-level policy in env
