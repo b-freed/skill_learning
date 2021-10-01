@@ -40,22 +40,17 @@ env = PointmassEnv()
 z_dim = 20
 
 # sample a skill vector from prior
-# input = torch.empty(1,H,z_dim)
-# z_prior_means = torch.zeros_like(input).cuda()
-# z_prior_sigs = torch.ones_like(input).cuda()
-z_prior_means = torch.zeros((1,1,z_dim),device=torch.device('cuda:0'))
-z_prior_sigs   = torch.ones((1,1,z_dim),device=torch.device('cuda:0'))
+z_prior_means = torch.zeros((1,1,z_dim),device=device)
+z_prior_sigs   = torch.ones((1,1,z_dim),device=device)
 z_sampled = skill_model.reparameterize(z_prior_means, z_prior_sigs)
 
 # simulate low-level policy in env
 
 state = env.reset() # TODO: consider trying to reset to the same initial state every time
-# reshape state
 
 # states is going to be a growing sequence of individual states.  So it will be 1xtxstate_dim
 for i in range(H):
     #env.render()  # for visualization
-#     state = torch.tensor(state).cuda() # probably need to put this on the GPU and reshape it
     state = torch.reshape(torch.tensor(state,device=device),(1,1,-1))
     action = ll_policy(state,z_sampled)
     state = env.step(action)
