@@ -18,7 +18,7 @@ import gym
 from pointmass_env import PointmassEnv
 
 filename = 'log.pth'
-H = 20
+H = 100
 PATH = 'checkpoints/'+filename
 
 state_dim = 4
