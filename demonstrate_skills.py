@@ -53,5 +53,5 @@ state = env.reset() # TODO: consider trying to reset to the same initial state e
 for i in range(H):
     #env.render()  # for visualization
     state = torch.reshape(torch.tensor(state,device=device),(1,1,-1))
-    action = ll_policy(state,z_sampled)
+    action_mean, action_sig = ll_policy(state,z_sampled)
     state = env.step(action)
