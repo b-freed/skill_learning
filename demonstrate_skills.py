@@ -55,4 +55,5 @@ for i in range(H):
     state = torch.reshape(torch.tensor(state,device=device),(1,1,-1))
     action_mean, action_sig = ll_policy(state,z_sampled)
     action_sampled = skill_model.reparameterize(action_mean, action_sig)
+    action_sampled = action_sampled.cpu().detach().numpy()
     state = env.step(action_sampled)
