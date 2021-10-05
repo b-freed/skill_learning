@@ -28,7 +28,7 @@ from torch.utils.data import TensorDataset
 from torch.utils.data.dataloader import DataLoader
 import torch.distributions.normal as Normal
 
-torch.set_default_dtype(torch.float64)
+torch.set_default_dtype(torch.float32)
 class AbstractDynamics(nn.Module):
     '''
     P(s_T|s_0,z) is our "abstract dynamics model", because it predicts the resulting state transition over T timesteps given a skill 
