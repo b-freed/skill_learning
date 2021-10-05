@@ -17,7 +17,7 @@ from skill_model import SkillModel
 import gym
 from pointmass_env import PointmassEnv
 
-torch.set_default_dtype(torch.float64)
+torch.set_default_dtype(torch.float32)
 device = torch.device('cuda:0')
 
 filename = 'log.pth'
