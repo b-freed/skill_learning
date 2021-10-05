@@ -48,7 +48,7 @@ z_sampled = skill_model.reparameterize(z_prior_means, z_prior_sigs)
 # simulate low-level policy in env
 
 state = env.reset() # TODO: consider trying to reset to the same initial state every time
-
+states = []
 # states is going to be a growing sequence of individual states.  So it will be 1xtxstate_dim
 for i in range(H):
     #env.render()  # for visualization
@@ -61,3 +61,6 @@ for i in range(H):
     action_sampled = action_sampled.reshape([2,])
     
     state = env.step(action_sampled)
+    states.append(state)
+    
+states = np.stack(states)
