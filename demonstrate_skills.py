@@ -66,3 +66,7 @@ for i in range(H):
     states.append(state)
     
 states = np.stack(states)
+
+plt.figure()
+plt.scatter(states[:,0],states[:,1])
+plt.show()
