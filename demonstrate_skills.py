@@ -17,7 +17,7 @@ from skill_model import SkillModel
 import gym
 from pointmass_env import PointmassEnv
 
-torch.set_default_dtype(torch.float32)
+
 device = torch.device('cuda:0')
 
 filename = 'log.pth'
@@ -32,7 +32,7 @@ skill_model = SkillModel(state_dim, a_dim, 20, h_dim).cuda() # TODO
 checkpoint = torch.load(PATH)
 skill_model.load_state_dict(checkpoint['model_state_dict'])
 
-# get low-level polic
+# get low-level policy
 ll_policy = skill_model.decoder.ll_policy
 
 # create env
@@ -52,7 +52,9 @@ states = []
 # states is going to be a growing sequence of individual states.  So it will be 1xtxstate_dim
 for i in range(H):
     #env.render()  # for visualization
-    state = torch.reshape(torch.tensor(state,device=device),(1,1,-1))
+    
+    state = torch.reshape(torch.tensor(state,device=device,dtype=torch.float32),(1,1,-1))
+    
     action_mean, action_sig = ll_policy(state,z_sampled)
     action_sampled = skill_model.reparameterize(action_mean, action_sig)
     
