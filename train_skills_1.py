@@ -17,7 +17,7 @@ from skill_model import SkillModel
 from pointmass_env import PointmassEnv
 
 
-torch.set_default_dtype(torch.float32)
+
 def train(model,model_optimizer):
 	
 	losses = []
