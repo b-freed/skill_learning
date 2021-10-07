@@ -69,5 +69,6 @@ states = np.stack(states)
 
 plt.figure()
 plt.scatter(states[:,0],states[:,1])
+plt.scatter(states[0][0],states[0][1])
+plt.scatter(states[H-1][0],states[H-1][1])
 plt.show()
-plt.savefig('states')
