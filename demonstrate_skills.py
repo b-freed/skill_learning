@@ -46,29 +46,33 @@ z_prior_sigs   = torch.ones((1,1,z_dim),device=device)
 z_sampled = skill_model.reparameterize(z_prior_means, z_prior_sigs)
 
 # simulate low-level policy in env
-
-state = env.reset() # TODO: consider trying to reset to the same initial state every time
+epochs = 100
 states = []
-# states is going to be a growing sequence of individual states.  So it will be 1xtxstate_dim
-for i in range(H):
-    #env.render()  # for visualization
+for j in range(epochs):
+    state = env.reset() 
+    epoch_states = []
+    # states is going to be a growing sequence of individual states.  So it will be 1xtxstate_dim
+    for i in range(H):
+        #env.render()  # for visualization
     
-    state = torch.reshape(torch.tensor(state,device=device,dtype=torch.float32),(1,1,-1))
+        state = torch.reshape(torch.tensor(state,device=device,dtype=torch.float32),(1,1,-1))
     
-    action_mean, action_sig = ll_policy(state,z_sampled)
-    action_sampled = skill_model.reparameterize(action_mean, action_sig)
+        action_mean, action_sig = ll_policy(state,z_sampled)
+        action_sampled = skill_model.reparameterize(action_mean, action_sig)
     
-    # converting action_sampled to array
-    action_sampled = action_sampled.cpu().detach().numpy()
-    action_sampled = action_sampled.reshape([2,])
+        # converting action_sampled to array
+        action_sampled = action_sampled.cpu().detach().numpy()
+        action_sampled = action_sampled.reshape([2,])
     
-    state = env.step(action_sampled)
-    states.append(state)
+        state = env.step(action_sampled)
+        epoch_states.append(state)
+        
+    states.append(epoch_states)
     
 states = np.stack(states)
 
 plt.figure()
-plt.scatter(states[:,0],states[:,1])
-plt.scatter(states[0][0],states[0][1])
-plt.scatter(states[H-1][0],states[H-1][1])
+plt.scatter(states[:,:,0],states[:,:,1])
+#plt.scatter(states[0][0],states[0][1])
+#plt.scatter(states[H-1][0],states[H-1][1])
 plt.show()
