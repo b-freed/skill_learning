@@ -40,15 +40,17 @@ env = PointmassEnv()
 
 z_dim = 20
 
-# sample a skill vector from prior
-z_prior_means = torch.zeros((1,1,z_dim),device=device)
-z_prior_sigs   = torch.ones((1,1,z_dim),device=device)
-z_sampled = skill_model.reparameterize(z_prior_means, z_prior_sigs)
 
 # simulate low-level policy in env
 epochs = 100
 states = []
 for j in range(epochs):
+    
+    # sample a skill vector from prior
+    z_prior_means = torch.zeros((1,1,z_dim),device=device)
+    z_prior_sigs   = torch.ones((1,1,z_dim),device=device)
+    z_sampled = skill_model.reparameterize(z_prior_means, z_prior_sigs)
+    
     state = env.reset() 
     epoch_states = []
     # states is going to be a growing sequence of individual states.  So it will be 1xtxstate_dim
