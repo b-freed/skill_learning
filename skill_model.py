@@ -287,6 +287,25 @@ class SkillModel(nn.Module):
         loss_tot = s_T_loss + a_loss + kl_loss
 
         return  loss_tot, s_T_loss, a_loss, kl_loss
+    
+    def get_expected_cost(s0, skill_seq, batch_size=100):
+        '''
+        s0 is initial state  # 1 x 1 x s_dim
+        skill sequence is a 1 x H x z_dim tensor that representents an H-legth sequence of skills
+        '''
+        # tile s0 along batch dimension
+        
+        H = skill_seq.shape[1]
+        for i in range(H):
+            z_i = skill_seq[:,i,:] # might need to reshape
+            # use abstract dynamics model to predict mean and variance of state after executing z_i, conditioned on s_i
+            # sample s_i+1 using reparameterize
+        #compute cost for sequence of states/skills
+        
+        return cost
+            
+        
+            
 
 
     def reparameterize(self, mean, std):
