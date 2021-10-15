@@ -302,20 +302,22 @@ class SkillModel(nn.Module):
         states = []
         for i in range(H):
             z_i = skill_seq[:,i,:] # might need to reshape
+            z_i = torch.reshape(torch.tensor(z_i,device=torch.device('cuda:0'),dtype=torch.float32),(1,1,-1))
+            
             # use abstract dynamics model to predict mean and variance of state after executing z_i, conditioned on s_i
             s_mean, s_sig = self.abstract_dynamics(s_i,z_i)
+            
             # sample s_i+1 using reparameterize
             s_sampled = SkillModel.reparameterize(s_mean, s_sig)
             s_i = s_sampled
+            
             states.append(s_sampled)
+        
         #compute cost for sequence of states/skills
         
         return cost
-            
-        
-            
-
-
+    
+    
     def reparameterize(self, mean, std):
         eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
         return mean + std*eps
