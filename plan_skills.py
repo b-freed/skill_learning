@@ -10,8 +10,12 @@ import torch.distributions.normal as Normal
 from skill_model import SkillModel
 import matplotlib.pyplot as plt
 
+device = torch.device('cuda:0')
+H = 100
+z_dim = 20
+
 # initialize skill sequence
-skill_seq = 
+skill_seq = torch.zeros((1,H,z_dim), device=device)
 # initialize optimizer for skill sequence
 seq_optimizer = torch.optim.Adam(skill_seq, lr=0.002)
 # determine waypoints
