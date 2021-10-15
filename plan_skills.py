@@ -1,5 +1,14 @@
 '''File where we will sample a set of waypionts, and plan a sequence of skills to have our pointmass travel through those waypoits'''
 
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.utils.data import TensorDataset
+from torch.utils.data.dataloader import DataLoader
+import torch.distributions.normal as Normal
+from skill_model import SkillModel
+import matplotlib.pyplot as plt
 
 # initialize skill sequence
 # initialize optimizer for skill sequence
