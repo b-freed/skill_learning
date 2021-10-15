@@ -289,7 +289,7 @@ class SkillModel(nn.Module):
 
         return  loss_tot, s_T_loss, a_loss, kl_loss
     
-    def get_expected_cost(s0, skill_seq, batch_size=100):
+    def get_expected_cost(self, s0, skill_seq, batch_size=100):
         '''
         s0 is initial state  # 1 x 1 x s_dim
         skill sequence is a 1 x H x z_dim tensor that representents an H-legth sequence of skills
