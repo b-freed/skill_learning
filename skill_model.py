@@ -218,7 +218,8 @@ class SkillModel(nn.Module):
         self.a_dim = a_dim # action dimension
 
         self.encoder = Encoder(state_dim,a_dim,z_dim,h_dim)
-        self.decoder = Decoder(state_dim,a_dim,z_dim,h_dim)  # TODO 
+        self.decoder = Decoder(state_dim,a_dim,z_dim,h_dim)  # TODO
+        self.abstract_dynamics = AbstractDynamics(state_dim,z_dim,h_dim)
 
 
     def forward(self,states,actions):
@@ -294,12 +295,15 @@ class SkillModel(nn.Module):
         skill sequence is a 1 x H x z_dim tensor that representents an H-legth sequence of skills
         '''
         # tile s0 along batch dimension
+        s0_tiled = s0.tile([1,batch_size,1])
         
         H = skill_seq.shape[1]
         for i in range(H):
             z_i = skill_seq[:,i,:] # might need to reshape
             # use abstract dynamics model to predict mean and variance of state after executing z_i, conditioned on s_i
+            s_mean, s_sig = self.abstract_dynamics(s0_tiled,z_i)
             # sample s_i+1 using reparameterize
+            s_sampled = SkillModel.reparameterize(s_mean, s_sig)
         #compute cost for sequence of states/skills
         
         return cost
