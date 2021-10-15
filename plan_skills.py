@@ -11,7 +11,9 @@ from skill_model import SkillModel
 import matplotlib.pyplot as plt
 
 # initialize skill sequence
+skill_seq = 
 # initialize optimizer for skill sequence
+seq_optimizer = torch.optim.Adam(skill_seq, lr=0.002)
 # determine waypoints
 
 
