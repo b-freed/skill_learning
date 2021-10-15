@@ -299,7 +299,7 @@ class SkillModel(nn.Module):
         s_i = s0_tiled
         
         H = skill_seq.shape[1]
-        states = []
+        pred_states = []
         for i in range(H):
             z_i = skill_seq[:,i,:] # might need to reshape
             z_i = torch.reshape(torch.tensor(z_i,device=torch.device('cuda:0'),dtype=torch.float32),(1,1,-1))
@@ -311,7 +311,7 @@ class SkillModel(nn.Module):
             s_sampled = SkillModel.reparameterize(s_mean, s_sig)
             s_i = s_sampled
             
-            states.append(s_sampled)
+            pred_states.append(s_sampled)
         
         #compute cost for sequence of states/skills
         
