@@ -21,7 +21,7 @@ s0 = skill_seq[:,0:1,:]
 # initialize optimizer for skill sequence
 seq_optimizer = torch.optim.Adam(skill_seq, lr=0.002)
 # determine waypoints
-goals = 
+goal_seq = 2*torch.rand((1,H,s_dim)) - 1
 
 for e in range(epochs):
   # Optimize plan: compute expected cost according to the current sequence of skills, take GD step on cost to optimize skills
