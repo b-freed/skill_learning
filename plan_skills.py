@@ -13,15 +13,16 @@ import matplotlib.pyplot as plt
 device = torch.device('cuda:0')
 H = 100
 z_dim = 20
+epochs = 100
 
 # initialize skill sequence
 skill_seq = torch.zeros((1,H,z_dim), device=device)
 # initialize optimizer for skill sequence
 seq_optimizer = torch.optim.Adam(skill_seq, lr=0.002)
 # determine waypoints
+goals = 
 
-
-for e in epochs:
+for e in range(epochs):
   # Optimize plan: compute expected cost according to the current sequence of skills, take GD step on cost to optimize skills
   
   # Test plan: deploy learned skills in actual environment.  Now we're going be selecting base-level actions conditioned on the current skill and state, and executign that action in the real environment
