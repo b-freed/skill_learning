@@ -289,7 +289,7 @@ class SkillModel(nn.Module):
 
         return  loss_tot, s_T_loss, a_loss, kl_loss
     
-    def get_expected_cost(self, s0, skill_seq, goal_seq, batch_size=100):
+    def get_expected_cost(self, s0, skill_seq, goal_states, batch_size=100):
         '''
         s0 is initial state  # 1 x 1 x s_dim
         skill sequence is a 1 x H x z_dim tensor that representents an H-legth sequence of skills
@@ -315,7 +315,7 @@ class SkillModel(nn.Module):
         
         #compute cost for sequence of states/skills
         pred_states = torch.stack(pred_states,dim = 1)
-        cost = torch.mean((pred_states - goal_stats)**2)
+        cost = torch.mean((pred_states - goal_states)**2)
         
         return cost
     
