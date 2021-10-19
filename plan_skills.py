@@ -12,11 +12,12 @@ import matplotlib.pyplot as plt
 
 device = torch.device('cuda:0')
 H = 100
-z_dim = 20
+s_dim = 4
 epochs = 100
 
 # initialize skill sequence
-skill_seq = torch.zeros((1,H,z_dim), device=device)
+skill_seq = torch.randn((1,H,s_dim), device=device)
+s0 = skill_seq[:,0:1,:]
 # initialize optimizer for skill sequence
 seq_optimizer = torch.optim.Adam(skill_seq, lr=0.002)
 # determine waypoints
