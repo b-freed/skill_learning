@@ -26,7 +26,7 @@ s0 = torch.zeros((1,1,state_dim), device=device)
 # initialize optimizer for skill sequence
 seq_optimizer = torch.optim.Adam([skill_seq], lr=0.002)
 # determine waypoints
-goal_seq = 2*torch.rand((1,H,state_dim)) - 1
+goal_seq = 2*torch.rand((1,H,state_dim), device=device) - 1
 
 total_cost = 0
 
