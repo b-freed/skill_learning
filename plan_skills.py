@@ -21,8 +21,8 @@ epochs = 100
 skill_model = SkillModel(state_dim, a_dim, z_dim, h_dim).cuda()
 
 # initialize skill sequence
-skill_seq = torch.randn((1,H,state_dim), device=device)
-s0 = skill_seq[:,0:1,:]
+skill_seq = torch.randn((1,H,z_dim), device=device)
+s0 = torch.zeros((1,1,state_dim), device=device)
 # initialize optimizer for skill sequence
 seq_optimizer = torch.optim.Adam([skill_seq], lr=0.002)
 # determine waypoints
