@@ -12,22 +12,27 @@ import matplotlib.pyplot as plt
 
 device = torch.device('cuda:0')
 H = 100
-s_dim = 4
+state_dim = 4
+a_dim = 2
+h_dim = 128
+z_dim = 20
 epochs = 100
 
+skill_model = SkillModel(state_dim, a_dim, z_dim, h_dim).cuda()
+
 # initialize skill sequence
-skill_seq = torch.randn((1,H,s_dim), device=device)
+skill_seq = torch.randn((1,H,state_dim), device=device)
 s0 = skill_seq[:,0:1,:]
 # initialize optimizer for skill sequence
 seq_optimizer = torch.optim.Adam([skill_seq], lr=0.002)
 # determine waypoints
-goal_seq = 2*torch.rand((1,H,s_dim)) - 1
+goal_seq = 2*torch.rand((1,H,state_dim)) - 1
 
 total_cost = 0
 
 for e in range(epochs):
   # Optimize plan: compute expected cost according to the current sequence of skills, take GD step on cost to optimize skills
-  exp_cost = SkillModel.get_expected_cost(s0, skill_seq, goal_seq)
+  exp_cost = skill_model.get_expected_cost(s0, skill_seq, goal_seq)
   seq_optimizer.zero_grad()
   seq_optimizer.step()
 
