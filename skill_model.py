@@ -295,8 +295,8 @@ class SkillModel(nn.Module):
         skill sequence is a 1 x H x z_dim tensor that representents an H-legth sequence of skills
         '''
         # tile s0 along batch dimension
-        s0_tiled = s0.tile([1,batch_size,1])
-        s_i = s0_tiled
+        #s0_tiled = s0.tile([1,batch_size,1])
+        s_i = s0
         
         H = skill_seq.shape[1]
         pred_states = []
@@ -308,7 +308,7 @@ class SkillModel(nn.Module):
             s_mean, s_sig = self.abstract_dynamics(s_i,z_i)
             
             # sample s_i+1 using reparameterize
-            s_sampled = SkillModel.reparameterize(s_mean, s_sig)
+            s_sampled = self.reparameterize(s_mean, s_sig)
             s_i = s_sampled
             
             pred_states.append(s_sampled)
