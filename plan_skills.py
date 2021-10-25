@@ -34,6 +34,7 @@ for e in range(epochs):
   # Optimize plan: compute expected cost according to the current sequence of skills, take GD step on cost to optimize skills
   exp_cost = skill_model.get_expected_cost(s0, skill_seq, goal_seq)
   seq_optimizer.zero_grad()
+  exp_cost.backward()
   seq_optimizer.step()
 
   total_cost += exp_cost
