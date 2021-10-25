@@ -16,9 +16,13 @@ state_dim = 4
 a_dim = 2
 h_dim = 128
 z_dim = 20
-epochs = 100
+epochs = 10000
+
+PATH = 'checkpoints/'+filename
 
 skill_model = SkillModel(state_dim, a_dim, z_dim, h_dim).cuda()
+checkpoint = torch.load(PATH)
+skill_model.load_state_dict(checkpoint['model_state_dict'])
 
 # initialize skill sequence
 skill_seq = torch.randn((1,H,z_dim), device=device)
@@ -37,7 +41,6 @@ for e in range(epochs):
   exp_cost.backward()
   seq_optimizer.step()
 
-  total_cost += exp_cost
   # Test plan: deploy learned skills in actual environment.  Now we're going be selecting base-level actions conditioned on the current skill and state, and executign that action in the real environment
 
   # compute test and train plan cost, plot so we can see what they;re doing
