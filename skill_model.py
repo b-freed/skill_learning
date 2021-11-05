@@ -289,21 +289,24 @@ class SkillModel(nn.Module):
 
         return  loss_tot, s_T_loss, a_loss, kl_loss
     
-    def get_expected_cost(self, s0, skill_seq, goal_states, batch_size=100):
+    def get_expected_cost(self, s0, skill_seq, goal_states):
         '''
-        s0 is initial state  # 1 x 1 x s_dim
+        s0 is initial state  # batch_size x 1 x s_dim
         skill sequence is a 1 x H x z_dim tensor that representents an H-legth sequence of skills
         '''
         # tile s0 along batch dimension
         #s0_tiled = s0.tile([1,batch_size,1])
+        batch_size = s0.shape[0]
+        goal_states = torch.cat(batch_size * [goal_states],dim=0)
         s_i = s0
         
         H = skill_seq.shape[1]
         pred_states = []
         for i in range(H):
-            z_i = skill_seq[:,i,:] # might need to reshape
-            z_i = torch.reshape(torch.tensor(z_i,device=torch.device('cuda:0'),dtype=torch.float32),(1,1,-1))
-            
+            z_i = skill_seq[:,i:i+1,:] # might need to reshape
+#             z_i = torch.reshape(torch.tensor(z_i,device=torch.device('cuda:0'),dtype=torch.float32),(1,1,-1))
+            # converting z_i from 1x1xz_dim to batch_size x 1 x z_dim
+            z_i = torch.cat(batch_size*[z_i],dim=0) # feel free to change this to tile
             # use abstract dynamics model to predict mean and variance of state after executing z_i, conditioned on s_i
             s_mean, s_sig = self.abstract_dynamics(s_i,z_i)
             
