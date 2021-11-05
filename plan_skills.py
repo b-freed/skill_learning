@@ -16,6 +16,7 @@ state_dim = 4
 a_dim = 2
 h_dim = 128
 z_dim = 20
+batch_size = 100
 epochs = 10000
 
 PATH = 'checkpoints/'+filename
@@ -26,7 +27,7 @@ skill_model.load_state_dict(checkpoint['model_state_dict'])
 
 # initialize skill sequence
 skill_seq = torch.randn((1,H,z_dim), device=device)
-s0 = torch.zeros((1,1,state_dim), device=device)
+s0 = torch.zeros((batch_size,1,state_dim), device=device)
 # initialize optimizer for skill sequence
 seq_optimizer = torch.optim.Adam([skill_seq], lr=0.002)
 # determine waypoints
