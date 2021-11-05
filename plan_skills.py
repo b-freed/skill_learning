@@ -26,7 +26,7 @@ checkpoint = torch.load(PATH)
 skill_model.load_state_dict(checkpoint['model_state_dict'])
 
 # initialize skill sequence
-skill_seq = torch.randn((1,H,z_dim), device=device)
+skill_seq = torch.randn((1,H,z_dim), device=device, requires_grad=True)
 s0 = torch.zeros((batch_size,1,state_dim), device=device)
 # initialize optimizer for skill sequence
 seq_optimizer = torch.optim.Adam([skill_seq], lr=0.001)
