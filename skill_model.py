@@ -304,7 +304,6 @@ class SkillModel(nn.Module):
         pred_states = []
         for i in range(H):
             z_i = skill_seq[:,i:i+1,:] # might need to reshape
-#             z_i = torch.reshape(torch.tensor(z_i,device=torch.device('cuda:0'),dtype=torch.float32),(1,1,-1))
             # converting z_i from 1x1xz_dim to batch_size x 1 x z_dim
             z_i = torch.cat(batch_size*[z_i],dim=0) # feel free to change this to tile
             # use abstract dynamics model to predict mean and variance of state after executing z_i, conditioned on s_i
