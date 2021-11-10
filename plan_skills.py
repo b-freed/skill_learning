@@ -18,6 +18,7 @@ h_dim = 128
 z_dim = 20
 batch_size = 100
 epochs = 10000
+skill_seq_len = 10
 
 PATH = 'checkpoints/'+filename
 
@@ -26,12 +27,12 @@ checkpoint = torch.load(PATH)
 skill_model.load_state_dict(checkpoint['model_state_dict'])
 
 # initialize skill sequence
-skill_seq = torch.randn((1,H,z_dim), device=device, requires_grad=True)
+skill_seq = torch.randn((1,skill_seq_len,z_dim), device=device, requires_grad=True)
 s0 = torch.zeros((batch_size,1,state_dim), device=device)
 # initialize optimizer for skill sequence
 seq_optimizer = torch.optim.Adam([skill_seq], lr=0.001)
 # determine waypoints
-goal_seq = 2*torch.rand((1,H,state_dim), device=device) - 1
+goal_seq = 2*torch.rand((1,skill_seq_len,state_dim), device=device) - 1
 
 total_cost = 0
 
@@ -46,17 +47,30 @@ for e in range(epochs):
 ll_policy = skill_model.decoder.ll_policy
 
 env = PointmassEnv()
-for i in range(100):
-  state = env.reset()
-  done = False
-  while not done:
-    current_skill = skill_seq[1,i:i+1,:]
-    current_state = torch.tensor(state, device=device)
-    a_mean, a_sig = ll_policy(current_state, current_skill)
-    a_sampled = skill_model.reparameterize(a_mean, a_sig)
-    
-    a_sampled = a_sampled.cpu().detach().numpy()
-    a_sampled = a_sampled.reshape([2,])
 
-    state = env.step(a_sampled)
+state = env.reset()
+for i in range(skill_seq_len):
+  # get the skill
+  z = skill_seq[1,i:i+1,:]
+  # run skill for H timesteps
+  for j in range(H):
+    action = ll_policy.numpy_policy(state,z)
+    env.step(action)
+    
+    
+  
+
+# for i in range(100):
+#   state = env.reset()
+#   done = False
+#   while not done:
+#     current_skill = skill_seq[1,i:i+1,:]
+#     current_state = torch.tensor(state, device=device)
+#     a_mean, a_sig = ll_policy(current_state, current_skill)
+#     a_sampled = skill_model.reparameterize(a_mean, a_sig)
+    
+#     a_sampled = a_sampled.cpu().detach().numpy()
+#     a_sampled = a_sampled.reshape([2,])
+
+#     state = env.step(a_sampled)
 # compute test and train plan cost, plot so we can see what they;re doing
