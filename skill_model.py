@@ -335,7 +335,7 @@ class SkillModel(nn.Module):
             pred_states.append(s_sampled)
         
         #compute cost for sequence of states/skills
-        pred_states = torch.stack(pred_states,dim = 1)
+        pred_states = torch.cat(pred_states,dim = 1)
         cost = torch.mean((pred_states - goal_states)**2)
         
         return cost
