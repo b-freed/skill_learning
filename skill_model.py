@@ -109,7 +109,26 @@ class LowLevelPolicy(nn.Module):
         a_sig  = self.sig_layer(feats)
 
         return a_mean, a_sig
+    
+    def numpy_policy(self,state,z):
+        '''
+        maps state as a numpy array and z as a pytorch tensor to a numpy action
+        '''
+        state = torch.tensor(state,device=torch.device('cuda:0'))
+        
+        a_mean,a_sig = self.forward(state,z)
+        action = self.reparameterize(a_mean,a_sig)
+        
+        return action.detach().cpu().numpy()
+     
+    def reparameterize(self, mean, std):
+        eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
+        return mean + std*eps
 
+        
+        
+        
+        
 
 class Encoder(nn.Module):
     '''
