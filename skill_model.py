@@ -311,7 +311,7 @@ class SkillModel(nn.Module):
     def get_expected_cost(self, s0, skill_seq, goal_states):
         '''
         s0 is initial state  # batch_size x 1 x s_dim
-        skill sequence is a 1 x skill_seq_len x z_dim tensor that representents an H-legth sequence of skills
+        skill sequence is a 1 x skill_seq_len x z_dim tensor that representents a skill_seq_len sequence of skills
         '''
         # tile s0 along batch dimension
         #s0_tiled = s0.tile([1,batch_size,1])
