@@ -118,17 +118,14 @@ class LowLevelPolicy(nn.Module):
         
         a_mean,a_sig = self.forward(state,z)
         action = self.reparameterize(a_mean,a_sig)
+        action = action.detach().cpu().numpy()
         
-        return action.detach().cpu().numpy()
+        return action.reshape([2,])
      
     def reparameterize(self, mean, std):
         eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
         return mean + std*eps
 
-        
-        
-        
-        
 
 class Encoder(nn.Module):
     '''
