@@ -51,7 +51,7 @@ env = PointmassEnv()
 state = env.reset()
 for i in range(skill_seq_len):
   # get the skill
-  z = skill_seq[1,i:i+1,:]
+  z = skill_seq[:,i:i+1,:]
   # run skill for H timesteps
   for j in range(H):
     action = ll_policy.numpy_policy(state,z)
