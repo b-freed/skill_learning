@@ -114,7 +114,7 @@ class LowLevelPolicy(nn.Module):
         '''
         maps state as a numpy array and z as a pytorch tensor to a numpy action
         '''
-        state = torch.tensor(state,device=torch.device('cuda:0'))
+        state = torch.reshape(torch.tensor(state,device=torch.device('cuda:0'),dtype=torch.float32),(1,1,-1))
         
         a_mean,a_sig = self.forward(state,z)
         action = self.reparameterize(a_mean,a_sig)
