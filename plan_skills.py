@@ -49,28 +49,27 @@ ll_policy = skill_model.decoder.ll_policy
 env = PointmassEnv()
 
 state = env.reset()
+states = []
 for i in range(skill_seq_len):
   # get the skill
   z = skill_seq[:,i:i+1,:]
+  skill_seq_states = []
   # run skill for H timesteps
   for j in range(H):
     action = ll_policy.numpy_policy(state,z)
-    env.step(action)
+    state = env.step(action)
     
-    
+    skill_seq_states.append(state)
   
+  states.append(skill_seq_states)
 
-# for i in range(100):
-#   state = env.reset()
-#   done = False
-#   while not done:
-#     current_skill = skill_seq[1,i:i+1,:]
-#     current_state = torch.tensor(state, device=device)
-#     a_mean, a_sig = ll_policy(current_state, current_skill)
-#     a_sampled = skill_model.reparameterize(a_mean, a_sig)
-    
-#     a_sampled = a_sampled.cpu().detach().numpy()
-#     a_sampled = a_sampled.reshape([2,])
+states = np.stack(states)
 
-#     state = env.step(a_sampled)
+
 # compute test and train plan cost, plot so we can see what they;re doing
+
+
+
+
+
+
