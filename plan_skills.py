@@ -64,6 +64,14 @@ for i in range(skill_seq_len):
   states.append(skill_seq_states)
 
 states = np.stack(states)
+print(states)
+print(np.shape(states))
+
+plt.figure()
+plt.scatter(states[:,:,0],states[:,:,1])
+plt.scatter(states[:,0,0],states[:,0,1])
+plt.scatter(states[skill_seq_len-1,H-1,0],states[skill_seq_len-1,H-1,1])
+plt.show()
 
 
 # compute test and train plan cost, plot so we can see what they;re doing
