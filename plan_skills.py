@@ -17,7 +17,7 @@ a_dim = 2
 h_dim = 128
 z_dim = 20
 batch_size = 100
-epochs = 10000
+epochs = 100000
 skill_seq_len = 10
 
 PATH = 'checkpoints/'+filename
@@ -64,13 +64,15 @@ for i in range(skill_seq_len):
   states.append(skill_seq_states)
 
 states = np.stack(states)
-print(states)
-print(np.shape(states))
+
+goals = goal_seq.detach().cpu().numpy()
+goals = np.stack(goals)
 
 plt.figure()
 plt.scatter(states[:,:,0],states[:,:,1])
 plt.scatter(states[:,0,0],states[:,0,1])
 plt.scatter(states[skill_seq_len-1,H-1,0],states[skill_seq_len-1,H-1,1])
+plt.scatter(goals[:,:,0],goals[:,:,1])
 plt.show()
 
 
