@@ -30,7 +30,7 @@ skill_model.load_state_dict(checkpoint['model_state_dict'])
 skill_seq = torch.randn((1,skill_seq_len,z_dim), device=device, requires_grad=True)
 s0 = torch.zeros((batch_size,1,state_dim), device=device)
 # initialize optimizer for skill sequence
-seq_optimizer = torch.optim.Adam([skill_seq], lr=0.001)
+seq_optimizer = torch.optim.Adam([skill_seq], lr=1e-4)
 # determine waypoints
 goal_seq = 2*torch.rand((1,skill_seq_len,state_dim), device=device) - 1
 
