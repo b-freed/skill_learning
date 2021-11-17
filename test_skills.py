@@ -56,7 +56,7 @@ if __name__ == '__main__':
 		# sample a skill
 		skill = skill_seq[:,i:i+1,:]
 		# predict outcome of that skill
-		pred_next_s_mean, pred_next_s_sig = skill_model.abstract_dynamics(s0,skill)
+		pred_next_s_mean, pred_next_s_sig = skill_model.decoder.abstract_dynamics(s0,skill)
 
 		# run skill in real world
 		state_seq = run_skill(s0,skill,env,H)
