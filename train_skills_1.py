@@ -99,7 +99,7 @@ train_loader = DataLoader(
 
 n_epochs = 1000 # initial value
 for i in range(n_epochs):
-	train(model,model_optimizer)
+	losses, s_T_losses, a_losses, kl_losses = train(model,model_optimizer)
 	print(i)
 
 filename = 'log.pth'
