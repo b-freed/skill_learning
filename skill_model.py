@@ -236,7 +236,6 @@ class SkillModel(nn.Module):
 
         self.encoder = Encoder(state_dim,a_dim,z_dim,h_dim)
         self.decoder = Decoder(state_dim,a_dim,z_dim,h_dim)  # TODO
-        self.abstract_dynamics = AbstractDynamics(state_dim,z_dim,h_dim)
 
 
     def forward(self,states,actions):
