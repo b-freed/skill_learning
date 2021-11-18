@@ -288,7 +288,7 @@ class SkillModel(nn.Module):
             # converting z_i from 1x1xz_dim to batch_size x 1 x z_dim
             z_i = torch.cat(batch_size*[z_i],dim=0) # feel free to change this to tile
             # use abstract dynamics model to predict mean and variance of state after executing z_i, conditioned on s_i
-            s_mean, s_sig = self.abstract_dynamics(s_i,z_i)
+            s_mean, s_sig = self.decoder.abstract_dynamics(s_i,z_i)
             
             # sample s_i+1 using reparameterize
             s_sampled = self.reparameterize(s_mean, s_sig)
