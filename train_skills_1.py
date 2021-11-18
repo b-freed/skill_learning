@@ -120,7 +120,8 @@ if __name__ == '__main__':
 
 
 		if i % 10 == 0:
-			checkpoint_path = 'D:\Anirudh\Thesis\CMU\Study\Work\Checkpoints\log.pth'
+			filename = 'log.pth'
+			checkpoint_path = 'checkpoints/'+filename
 			torch.save({
 							'model_state_dict': model.state_dict(),
 							'model_optimizer_state_dict': model_optimizer.state_dict(),
