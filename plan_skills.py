@@ -1,5 +1,6 @@
 '''File where we will sample a set of waypionts, and plan a sequence of skills to have our pointmass travel through those waypoits'''
 
+from comet_ml import Experiment
 import numpy as np
 import torch
 import torch.nn as nn
@@ -19,6 +20,7 @@ z_dim = 20
 batch_size = 100
 epochs = 100000
 skill_seq_len = 10
+lr = 1e-4
 
 PATH = 'checkpoints/'+filename
 
@@ -30,11 +32,14 @@ skill_model.load_state_dict(checkpoint['model_state_dict'])
 skill_seq = torch.randn((1,skill_seq_len,z_dim), device=device, requires_grad=True)
 s0 = torch.zeros((batch_size,1,state_dim), device=device)
 # initialize optimizer for skill sequence
-seq_optimizer = torch.optim.Adam([skill_seq], lr=1e-4)
+seq_optimizer = torch.optim.Adam([skill_seq], lr=lr)
 # determine waypoints
 goal_seq = 2*torch.rand((1,skill_seq_len,state_dim), device=device) - 1
 
-total_cost = 0
+experiment = Experiment(api_key = 'yQQo8E8TOCWYiVSruS7nxHaB5', project_name = 'skill-learning', workspace="anirudh-27")
+experiment.add_tag('Skill PLanning')
+experiment.log_parameters({'lr':lr,'h_dim':h_dim})
+experiment.log_metric('Goals', goal_seq)
 
 for e in range(epochs):
   # Optimize plan: compute expected cost according to the current sequence of skills, take GD step on cost to optimize skills
@@ -42,6 +47,7 @@ for e in range(epochs):
   seq_optimizer.zero_grad()
   exp_cost.backward()
   seq_optimizer.step()
+  experiment.log_metric("Cost", exp_cost, step=e)
 
 # Test plan: deploy learned skills in actual environment.  Now we're going be selecting base-level actions conditioned on the current skill and state, and executign that action in the real environment
 ll_policy = skill_model.decoder.ll_policy
