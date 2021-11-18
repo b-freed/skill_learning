@@ -145,10 +145,10 @@ class Encoder(nn.Module):
         self.state_dim = state_dim # state dimension
         self.a_dim = a_dim # action dimension
 
-        self.emb_layer  = nn.Linear(state_dim+a_dim,h_dim)
-        self.rnn        = nn.GRU(h_dim,h_dim,batch_first=True,bidirectional=True)
-        self.mean_layer = nn.Linear(h_dim*2,z_dim)
-        self.sig_layer  = nn.Sequential(nn.Linear(h_dim*2,z_dim),nn.Softplus())  # using softplus to ensure stand dev is positive
+        self.emb_layer  = nn.Sequential(nn.Linear(state_dim+a_dim,h_dim),nn.ReLU())
+        self.rnn        = nn.GRU(h_dim,h_dim,batch_first=True,bidirectional=False)
+        self.mean_layer = nn.Linear(h_dim,z_dim)
+        self.sig_layer  = nn.Sequential(nn.Linear(h_dim,z_dim),nn.Softplus())  # using softplus to ensure stand dev is positive
 
 
     def forward(self,states,actions):
@@ -171,9 +171,13 @@ class Encoder(nn.Module):
         embed = self.emb_layer(s_a)
         # through rnn
         feats,hn = self.rnn(embed)
+        hn = hn.transpose(0,1) # use final hidden state, as this should be an encoding of all states and actions previously.
         # get z_mean and z_sig by passing rnn output through mean_layer and sig_layer
-        z_mean = self.mean_layer(feats[:,-1:,:])
-        z_sig = self.sig_layer(feats[:,-1:,:])
+        # z_mean = self.mean_layer(feats[:,-1:,:])
+        # z_sig = self.sig_layer(feats[:,-1:,:])
+
+        z_mean = self.mean_layer(hn)
+        z_sig = self.sig_layer(hn)
         
         return z_mean, z_sig
 
@@ -297,14 +301,15 @@ class SkillModel(nn.Module):
         T = states.shape[1]
         s_T = states[:,-1:,:]  
         s_T_loss = -torch.mean(torch.sum(s_T_dist.log_prob(s_T),dim=-1))/T # divide by T because all other losses we take mean over T dimension, effectively dividing by T
-        a_loss   = -torch.mean(torch.sum(a_dist.log_prob(actions),dim=-1))
+        a_loss   = -torch.mean(torch.sum(a_dist.log_prob(actions),dim=-1)) 
         # print('a_sigs: ', a_sigs)
         # print('a_dist.log_prob(actions)[0,:,:]: ',a_dist.log_prob(actions)[0,:,:])
         # loss term correpsonding ot kl loss between posterior and prior
         # kl_loss = torch.mean(torch.sum(F.kl_div(z_post_dist, z_prior_dist),dim=-1))
-        kl_loss = torch.mean(torch.sum(KL.kl_divergence(z_post_dist, z_prior_dist), dim=-1))
+        kl_loss = torch.mean(torch.sum(KL.kl_divergence(z_post_dist, z_prior_dist), dim=-1))/T # divide by T because all other losses we take mean over T dimension, effectively dividing by T
 
         loss_tot = s_T_loss + a_loss + kl_loss
+        # loss_tot = s_T_loss + kl_loss
 
         return  loss_tot, s_T_loss, a_loss, kl_loss
     

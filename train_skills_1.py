@@ -1,3 +1,4 @@
+from comet_ml import Experiment
 import numpy as np
 import torch
 import torch.nn as nn
@@ -75,36 +76,53 @@ def get_data():
 
 	return obs, actions, goals
 
+if __name__ == '__main__':
+	experiment = Experiment(api_key = '9mxH2vYX20hn9laEr0KtHLjAa', project_name = 'skill-learning')
+	experiment.add_tag('kl loss divided by T')
 
-states, actions, goals = get_data()
-state_dim = states.shape[2]
-a_dim = actions.shape[2]
-h_dim = 128
-N = states.shape[0]
+	states, actions, goals = get_data()
+	state_dim = states.shape[2]
+	a_dim = actions.shape[2]
+	h_dim = 128
+	N = states.shape[0]
+	lr = 1e-4
+	n_epochs = 10000
+
+	# First, instantiate a skill model
+	model = SkillModel(state_dim, a_dim, 20, h_dim).cuda()
+	model_optimizer = torch.optim.Adam(model.parameters(), lr=lr) # default lr-0.0001
+
+	experiment.log_parameters({'lr':lr,
+							   'h_dim':h_dim})
+
+	# add chunks of data to a pytorch dataloader
+	inputs = np.concatenate([states, actions],axis=-1) # array that is dataset_size x T x state_dim+action_dim 
+	targets = goals
+	train_data = TensorDataset(torch.tensor(inputs, dtype=torch.float32), torch.tensor(targets,dtype=torch.float32))
+
+	train_loader = DataLoader(
+		train_data,
+		batch_size=batch_size,
+		num_workers=0)  # not really sure about num_workers...
+
+	
+	for i in range(n_epochs):
+		loss, s_T_loss, a_loss, kl_loss = train(model,model_optimizer)
+		print('loss: ', loss)
+		print('s_T_loss: ', s_T_loss)
+		print('a_loss: ', a_loss)
+		print('kl_loss: ', kl_loss)
+		print(i)
+		experiment.log_metric("loss", loss, step=i)
+		experiment.log_metric("s_T_loss", s_T_loss, step=i)
+		experiment.log_metric("a_loss", a_loss, step=i)
+		experiment.log_metric("kl_loss", kl_loss, step=i)
 
 
-# First, instantiate a skill model
-model = SkillModel(state_dim, a_dim, 20, h_dim).cuda()
-model_optimizer = torch.optim.Adam(model.parameters(), lr=0.002) # default lr-0.0001
-
-# add chunks of data to a pytorch dataloader
-inputs = np.concatenate([states, actions],axis=-1) # array that is dataset_size x T x state_dim+action_dim 
-targets = goals
-train_data = TensorDataset(torch.tensor(inputs, dtype=torch.float32), torch.tensor(targets,dtype=torch.float32))
-
-train_loader = DataLoader(
-	train_data,
-	batch_size=batch_size,
-	num_workers=0)  # not really sure about num_workers...
-
-n_epochs = 1000 # initial value
-for i in range(n_epochs):
-	train(model,model_optimizer)
-	print(i)
-
-filename = 'log.pth'
-checkpoint_path = 'checkpoints/'+filename
-torch.save({
-				'model_state_dict': model.state_dict(),
-				'model_optimizer_state_dict': model_optimizer.state_dict(),
-				}, checkpoint_path)
+		if i % 10 == 0:
+			filename = 'log.pth'
+			checkpoint_path = 'checkpoints/'+filename
+			torch.save({
+							'model_state_dict': model.state_dict(),
+							'model_optimizer_state_dict': model_optimizer.state_dict(),
+							}, checkpoint_path)
