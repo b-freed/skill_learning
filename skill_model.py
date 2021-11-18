@@ -28,6 +28,7 @@ from torch.utils.data import TensorDataset
 from torch.utils.data.dataloader import DataLoader
 import torch.distributions.normal as Normal
 import torch.distributions.kl as KL
+import ipdb
 
 
 class AbstractDynamics(nn.Module):
@@ -294,11 +295,11 @@ class SkillModel(nn.Module):
 
         # loss terms corresponding to -logP(s_T|s_0,z) and -logP(a_t|s_t,z)
         T = states.shape[1]
-        s_T = states[:,-1:,:]  # <-probably oging to be of size batch x state_dim.. We want batch x 1 x state_dim
-        s_T = s_T.unsqueeze(1) # adds extra dimension along time axis
+        s_T = states[:,-1:,:]  
         s_T_loss = -torch.mean(torch.sum(s_T_dist.log_prob(s_T),dim=-1))/T # divide by T because all other losses we take mean over T dimension, effectively dividing by T
         a_loss   = -torch.mean(torch.sum(a_dist.log_prob(actions),dim=-1))
-        print('a_dist.log_prob(actions): ',a_dist.log_prob(actions))
+        # print('a_sigs: ', a_sigs)
+        # print('a_dist.log_prob(actions)[0,:,:]: ',a_dist.log_prob(actions)[0,:,:])
         # loss term correpsonding ot kl loss between posterior and prior
         # kl_loss = torch.mean(torch.sum(F.kl_div(z_post_dist, z_prior_dist),dim=-1))
         kl_loss = torch.mean(torch.sum(KL.kl_divergence(z_post_dist, z_prior_dist), dim=-1))
