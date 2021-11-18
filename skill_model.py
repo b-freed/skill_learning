@@ -295,7 +295,6 @@ class SkillModel(nn.Module):
         # loss terms corresponding to -logP(s_T|s_0,z) and -logP(a_t|s_t,z)
         T = states.shape[1]
         s_T = states[:,-1:,:]  # <-probably oging to be of size batch x state_dim.. We want batch x 1 x state_dim
-        s_T = s_T.unsqueeze(1) # adds extra dimension along time axis
         s_T_loss = -torch.mean(torch.sum(s_T_dist.log_prob(s_T),dim=-1))/T # divide by T because all other losses we take mean over T dimension, effectively dividing by T
         a_loss   = -torch.mean(torch.sum(a_dist.log_prob(actions),dim=-1))
         # loss term correpsonding ot kl loss between posterior and prior
