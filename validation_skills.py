@@ -106,8 +106,9 @@ if __name__ == '__main__':
         experiment.log_metric("kl_loss", kl_loss, step=i)
 
         if i % 10 == 0:
-            checkpoint_path = 'D:\Anirudh\Thesis\CMU\Study\Work\Checkpoints\log_v.pth'
-            torch.save({
+		filename = 'log_v.pth'
+            	checkpoint_path = 'checkpoints/'+filename
+            	torch.save({
 							'model_state_dict': model.state_dict(),
 							'model_optimizer_state_dict': model_optimizer.state_dict(),
 							}, checkpoint_path)
