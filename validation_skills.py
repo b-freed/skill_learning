@@ -104,7 +104,7 @@ if __name__ == '__main__':
 
 	
 	for i in range(n_epochs):
-		loss, s_T_loss, a_loss, kl_loss = train(model,model_optimizer)
+		loss, s_T_loss, a_loss, kl_loss = validate(model,model_optimizer)
 		print('loss: ', loss)
 		print('s_T_loss: ', s_T_loss)
 		print('a_loss: ', a_loss)
