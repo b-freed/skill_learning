@@ -20,8 +20,10 @@ class AbstractDynamics(nn.Module):
         super(AbstractDynamics,self).__init__()
         
         self.layers = nn.Sequential(nn.Linear(state_dim+z_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
-        self.mean_layer = nn.Linear(h_dim,state_dim)
-        self.sig_layer  = nn.Sequential(nn.Linear(h_dim,state_dim),nn.Softplus())
+        #self.mean_layer = nn.Linear(h_dim,state_dim)
+        self.mean_layer = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,state_dim))
+        #self.sig_layer  = nn.Sequential(nn.Linear(h_dim,state_dim),nn.Softplus())
+        self.sig_layer  = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,state_dim),nn.Softplus())
 
     def forward(self,s0,z):
 
@@ -57,8 +59,10 @@ class LowLevelPolicy(nn.Module):
         super(LowLevelPolicy,self).__init__()
         
         self.layers = nn.Sequential(nn.Linear(state_dim+z_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
-        self.mean_layer = nn.Linear(h_dim,a_dim)
-        self.sig_layer  = nn.Sequential(nn.Linear(h_dim,a_dim),nn.Softplus())
+        #self.mean_layer = nn.Linear(h_dim,a_dim)
+        self.mean_layer = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,a_dim))
+        #self.sig_layer  = nn.Sequential(nn.Linear(h_dim,a_dim),nn.Softplus())
+        self.sig_layer  = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,a_dim),nn.Softplus())
 
 
 
@@ -120,8 +124,10 @@ class Encoder(nn.Module):
 
         self.emb_layer  = nn.Sequential(nn.Linear(state_dim+a_dim,h_dim),nn.ReLU())
         self.rnn        = nn.GRU(h_dim,h_dim,batch_first=True,bidirectional=False)
-        self.mean_layer = nn.Linear(h_dim,z_dim)
-        self.sig_layer  = nn.Sequential(nn.Linear(h_dim,z_dim),nn.Softplus())  # using softplus to ensure stand dev is positive
+        #self.mean_layer = nn.Linear(h_dim,z_dim)
+        self.mean_layer = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,z_dim))
+        #self.sig_layer  = nn.Sequential(nn.Linear(h_dim,z_dim),nn.Softplus())  # using softplus to ensure stand dev is positive
+        self.sig_layer  = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,z_dim),nn.Softplus())
 
 
     def forward(self,states,actions):
