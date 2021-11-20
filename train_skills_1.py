@@ -178,7 +178,7 @@ if __name__ == '__main__':
 
 
 		if i % 10 == 0:
-			filename = 'log.pth'
+			filename = 'log_z_dim_2.pth'
 			checkpoint_path = 'checkpoints/'
 			torch.save({'model_state_dict': model.state_dict(),
 						'model_optimizer_state_dict': model_optimizer.state_dict(),
