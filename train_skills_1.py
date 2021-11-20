@@ -63,7 +63,7 @@ def validate(model):
 
 batch_size = 100
 
-def get_data():
+def get_data(datasize):
 
 	env = PointmassEnv()
 	obs = []
@@ -104,16 +104,17 @@ if __name__ == '__main__':
 
 	'''FOR TRAINING'''
 	
-	states, actions, goals = get_data()
+	states, actions, goals = get_data(datasize=10000)
 	state_dim = states.shape[2]
 	a_dim = actions.shape[2]
 	h_dim = 128
+	z_dim = 2
 	N = states.shape[0]
 	lr = 1e-4
 	n_epochs = 10000
 
 	# First, instantiate a skill model
-	model = SkillModel(state_dim, a_dim, 20, h_dim).cuda()
+	model = SkillModel(state_dim, a_dim, z_dim, h_dim).cuda()
 	model_optimizer = torch.optim.Adam(model.parameters(), lr=lr) # default lr-0.0001
 
 	experiment.log_parameters({'lr':lr,
@@ -130,7 +131,7 @@ if __name__ == '__main__':
 
 	'''FOR VALIDATION'''
 
-	states_val, actions_val, goals_val = get_data()
+	states_val, actions_val, goals_val = get_data(datasize=500)
 	inputs_val = np.concatenate([states_val, actions_val],axis=-1)
 	targets_val = goals_val
 	test_data = TensorDataset(torch.tensor(inputs_val, dtype=torch.float32), torch.tensor(targets_val,dtype=torch.float32))
