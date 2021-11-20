@@ -69,7 +69,7 @@ def get_data(datasize):
 	obs = []
 	goals = []
 	actions = []
-	for i in range(10000):
+	for i in range(datasize):
 		start_loc = 2*np.random.uniform(size=2) - 1
 		start_state = np.concatenate([start_loc,np.zeros(2)])
 		goal_loc = 2*np.random.uniform(size=2) - 1
