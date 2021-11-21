@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from torch.utils.data import TensorDataset
 from torch.utils.data.dataloader import DataLoader
 import torch.distributions.normal as Normal
-from skill_model import SkillModel
+from skill_model import SkillModel, SkillModelStateDependentPrior
 from pointmass_env import PointmassEnv
 
 
@@ -41,13 +41,13 @@ def train(model,model_optimizer):
 
 batch_size = 100
 
-def get_data():
+def get_data(N=10000):
 
 	env = PointmassEnv()
 	obs = []
 	goals = []
 	actions = []
-	for i in range(10000):
+	for i in range(N):
 		start_loc = 2*np.random.uniform(size=2) - 1
 		start_state = np.concatenate([start_loc,np.zeros(2)])
 		goal_loc = 2*np.random.uniform(size=2) - 1
@@ -86,14 +86,20 @@ if __name__ == '__main__':
 	h_dim = 128
 	N = states.shape[0]
 	lr = 1e-4
+	z_dim = 4
 	n_epochs = 10000
+	state_dependent_prior = True
 
 	# First, instantiate a skill model
-	model = SkillModel(state_dim, a_dim, 20, h_dim).cuda()
+	if not state_dependent_prior:
+		model = SkillModel(state_dim, a_dim, z_dim, h_dim).cuda()
+	else:
+		model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim).cuda()
 	model_optimizer = torch.optim.Adam(model.parameters(), lr=lr) # default lr-0.0001
 
 	experiment.log_parameters({'lr':lr,
-							   'h_dim':h_dim})
+							   'h_dim':h_dim,
+							   'state_dependent_prior':state_dependent_prior})
 
 	# add chunks of data to a pytorch dataloader
 	inputs = np.concatenate([states, actions],axis=-1) # array that is dataset_size x T x state_dim+action_dim 
@@ -120,7 +126,10 @@ if __name__ == '__main__':
 
 
 		if i % 10 == 0:
-			filename = 'log.pth'
+			if not state_dependent_prior:
+				filename = 'z_dim_'+str(z_dim)+'.pth'
+			else:
+				filename = 'z_dim_'+str(z_dim)+'state_dep_prior.pth'
 			checkpoint_path = 'checkpoints/'+filename
 			torch.save({
 							'model_state_dict': model.state_dict(),

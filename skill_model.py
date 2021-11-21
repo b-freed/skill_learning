@@ -232,6 +232,175 @@ class Decoder(nn.Module):
         return sT_mean,sT_sig,a_mean,a_sig
 
 
+class Prior(nn.Module):
+    '''
+    Decoder module.
+
+    Decoder takes states, actions, and a sampled z and outputs parameters of P(s_T|s_0,z) and P(a_t|s_t,z) for all t in {0,...,T}
+    P(s_T|s_0,z) is our "abstract dynamics model", because it predicts the resulting state transition over T timesteps given a skill 
+    (so similar to regular dynamics model, but in skill space and also temporally extended)
+    P(a_t|s_t,z) is our "low-level policy", so this is the feedback policy the agent runs while executing skill described by z.
+
+    We can try the following architecture:
+    -embed z
+    -Pass into fully connected network to get "state T features"
+
+    '''
+    def __init__(self,state_dim,z_dim,h_dim):
+
+        super(Prior,self).__init__()
+        
+        self.state_dim = state_dim
+        self.z_dim = z_dim
+
+        self.layers = nn.Sequential(nn.Linear(state_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
+        self.mean_layer = nn.Linear(h_dim,z_dim)
+        self.sig_layer  = nn.Sequential(nn.Linear(h_dim,z_dim),nn.Softplus())
+        
+    def forward(self,s0):
+
+        '''
+        INPUTS: 
+            states: batch_size x T x state_dim state sequence tensor
+            
+
+        OUTPUTS:
+            z_mean: batch_size x 1 x state_dim tensor of z means
+            z_sig:  batch_size x 1 x state_dim tensor of z standard devs
+
+            
+        '''
+        feats = self.layers(s0)
+        # get mean and stand dev of action distribution
+        z_mean = self.mean_layer(feats)
+        z_sig  = self.sig_layer(feats)
+
+        return z_mean, z_sig
+        
+
+
+
+class SkillModelStateDependentPrior(nn.Module):
+    def __init__(self,state_dim,a_dim,z_dim,h_dim):
+        super(SkillModelStateDependentPrior, self).__init__()
+
+        self.state_dim = state_dim # state dimension
+        self.a_dim = a_dim # action dimension
+
+        self.encoder = Encoder(state_dim,a_dim,z_dim,h_dim)
+        self.decoder = Decoder(state_dim,a_dim,z_dim,h_dim)  # TODO
+        self.prior   = Prior(state_dim,z_dim,h_dim)
+
+    def forward(self,states,actions):
+        
+        '''
+        Takes states and actions, returns the distributions necessary for computing the objective function
+
+        INPUTS:
+            states: batch_size x T x state_dim state sequence tensor
+            actions: batch_size x T x a_dim action sequence tensor
+
+        OUTPUTS:
+            s_T_mean:     batch_size x 1 x state_dim tensor of means of "decoder" distribution over terminal states
+            S_T_sig:      batch_size x 1 x state_dim tensor of standard devs of "decoder" distribution over terminal states
+            a_means:      batch_size x T x a_dim tensor of means of "decoder" distribution over actions
+            a_sigs:       batch_size x T x a_dim tensor of stand devs
+            z_post_means: batch_size x 1 x z_dim tensor of means of z posterior distribution
+            z_post_sigs:  batch_size x 1 x z_dim tensor of stand devs of z posterior distribution 
+
+        '''
+
+        # STEP 1. Encode states and actions to get posterior over z
+        z_post_means,z_post_sigs = self.encoder(states,actions)
+        # STEP 2. sample z from posterior 
+        z_sampled = self.reparameterize(z_post_means,z_post_sigs)
+
+        # STEP 3. Pass z_sampled and states through decoder 
+        s_T_mean, s_T_sig, a_means, a_sigs = self.decoder(states,z_sampled)
+
+
+
+        return s_T_mean, s_T_sig, a_means, a_sigs, z_post_means, z_post_sigs
+
+        
+
+    def get_losses(self,states,actions):
+        '''
+        Computes various components of the loss:
+
+        L = E_q [log P(s_T|s_0,z)] 
+          + E_q [sum_t=0^T P(a_t|s_t,z)] 
+          - D_kl(q(z|s_0,...,s_T,a_0,...,a_T)||P(z_0|s_0))
+
+        Distributions we need:
+
+        '''
+
+        s_T_mean, s_T_sig, a_means, a_sigs, z_post_means, z_post_sigs  = self.forward(states,actions)
+
+        s_T_dist = Normal.Normal(s_T_mean, s_T_sig )
+        a_dist = Normal.Normal(a_means, a_sigs)
+        z_post_dist = Normal.Normal(z_post_means, z_post_sigs)
+        # z_prior_means = torch.zeros_like(z_post_means)
+        # z_prior_sigs = torch.ones_like(z_post_sigs)
+        z_prior_means,z_prior_sigs = self.prior(states[:,0:1,:]) 
+        z_prior_dist = Normal.Normal(z_prior_means, z_prior_sigs) 
+
+        # loss terms corresponding to -logP(s_T|s_0,z) and -logP(a_t|s_t,z)
+        T = states.shape[1]
+        s_T = states[:,-1:,:]  
+        s_T_loss = -torch.mean(torch.sum(s_T_dist.log_prob(s_T),dim=-1))/T # divide by T because all other losses we take mean over T dimension, effectively dividing by T
+        a_loss   = -torch.mean(torch.sum(a_dist.log_prob(actions),dim=-1)) 
+        # print('a_sigs: ', a_sigs)
+        # print('a_dist.log_prob(actions)[0,:,:]: ',a_dist.log_prob(actions)[0,:,:])
+        # loss term correpsonding ot kl loss between posterior and prior
+        # kl_loss = torch.mean(torch.sum(F.kl_div(z_post_dist, z_prior_dist),dim=-1))
+        kl_loss = torch.mean(torch.sum(KL.kl_divergence(z_post_dist, z_prior_dist), dim=-1))/T # divide by T because all other losses we take mean over T dimension, effectively dividing by T
+
+        loss_tot = s_T_loss + a_loss + kl_loss
+        # loss_tot = s_T_loss + kl_loss
+
+        return  loss_tot, s_T_loss, a_loss, kl_loss
+    
+    def get_expected_cost(self, s0, skill_seq, goal_states):
+        '''
+        s0 is initial state  # batch_size x 1 x s_dim
+        skill sequence is a 1 x skill_seq_len x z_dim tensor that representents a skill_seq_len sequence of skills
+        '''
+        # tile s0 along batch dimension
+        #s0_tiled = s0.tile([1,batch_size,1])
+        batch_size = s0.shape[0]
+        goal_states = torch.cat(batch_size * [goal_states],dim=0)
+        s_i = s0
+        
+        skill_seq_len = skill_seq.shape[1]
+        pred_states = []
+        for i in range(skill_seq_len):
+            z_i = skill_seq[:,i:i+1,:] # might need to reshape
+            # converting z_i from 1x1xz_dim to batch_size x 1 x z_dim
+            z_i = torch.cat(batch_size*[z_i],dim=0) # feel free to change this to tile
+            # use abstract dynamics model to predict mean and variance of state after executing z_i, conditioned on s_i
+            s_mean, s_sig = self.abstract_dynamics(s_i,z_i)
+            
+            # sample s_i+1 using reparameterize
+            s_sampled = self.reparameterize(s_mean, s_sig)
+            s_i = s_sampled
+            
+            pred_states.append(s_sampled)
+        
+        #compute cost for sequence of states/skills
+        pred_states = torch.cat(pred_states,dim = 1)
+        cost = torch.mean((pred_states - goal_states)**2)
+        
+        return cost
+    
+    
+    def reparameterize(self, mean, std):
+        eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
+        return mean + std*eps
+
+
+
 class SkillModel(nn.Module):
     def __init__(self,state_dim,a_dim,z_dim,h_dim):
         super(SkillModel, self).__init__()
