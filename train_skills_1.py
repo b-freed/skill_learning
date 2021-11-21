@@ -108,7 +108,7 @@ if __name__ == '__main__':
 	state_dim = states.shape[2]
 	a_dim = actions.shape[2]
 	h_dim = 128
-	z_dim = 4
+	z_dim = 8
 	N = states.shape[0]
 	lr = 1e-4
 	n_epochs = 10000
@@ -178,7 +178,7 @@ if __name__ == '__main__':
 
 
 		if i % 10 == 0:
-			filename = 'log_z_dim4_2layers.pth'
+			filename = 'log_z_dim8_2layers.pth'
 			checkpoint_path = 'checkpoints/'
 			torch.save({'model_state_dict': model.state_dict(),
 						'model_optimizer_state_dict': model_optimizer.state_dict(),
