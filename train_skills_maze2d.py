@@ -138,9 +138,9 @@ for i in range(n_epochs):
 
 	if i % 10 == 0:
 		if not state_dependent_prior:
-			filename = 'z_dim_'+str(z_dim)+'.pth'
+			filename = 'maze2d_log.pth'
 		else:
-			filename = 'z_dim_'+str(z_dim)+'state_dep_prior.pth'
+			filename = 'maze2d_state_dep_prior_log.pth'
 		checkpoint_path = 'checkpoints/'+ filename
 		torch.save({
 							'model_state_dict': model.state_dict(),
