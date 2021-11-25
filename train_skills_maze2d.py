@@ -9,6 +9,7 @@ import torch.distributions.normal as Normal
 from skill_model import SkillModel, SkillModelStateDependentPrior
 import gym
 import d4rl
+import ipdb
 
 def train(model,model_optimizer):
 	
@@ -117,6 +118,7 @@ experiment.log_parameters({'lr':lr,
 # add chunks of data to a pytorch dataloader
 inputs = np.concatenate([obs_chunks, action_chunks],axis=-1) # array that is dataset_size x T x state_dim+action_dim 
 targets = goals
+ipdb.set_trace()
 train_data = TensorDataset(torch.tensor(inputs, dtype=torch.float32) ,torch.tensor(targets,dtype=torch.float32))
 
 train_loader = DataLoader(
