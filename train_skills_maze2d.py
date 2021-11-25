@@ -9,7 +9,6 @@ import torch.distributions.normal as Normal
 from skill_model import SkillModel, SkillModelStateDependentPrior
 import gym
 import d4rl
-import ipdb
 
 def train(model,model_optimizer):
 	
@@ -76,6 +75,7 @@ def chunks(obs,actions,goals,H,stride):
 	
 	obs_chunks = []
 	action_chunks = []
+	targets = []
 	for i in range((N-1)//stride):
 		start_ind = i*stride
 		end_ind = start_ind + H
@@ -92,12 +92,13 @@ def chunks(obs,actions,goals,H,stride):
 			obs_chunk = obs[start_ind:end_ind,:]
 			action_chunk = actions[start_ind:end_ind,:]
 			
+			targets.append(goals[start_ind:end_ind,:])
 			obs_chunks.append(obs_chunk)
 			action_chunks.append(action_chunk)
 			
-	return np.stack(obs_chunks),np.stack(action_chunks)
+	return np.stack(obs_chunks),np.stack(action_chunks),np.stack(targets)
 
-obs_chunks, action_chunks = chunks(states, actions, goals, H, stride)
+obs_chunks, action_chunks, targets = chunks(states, actions, goals, H, stride)
 
 experiment = Experiment(api_key = 'yQQo8E8TOCWYiVSruS7nxHaB5', project_name = 'skill-learning', workspace = 'anirudh-27')
 experiment.add_tag('New model on d4rl envs')
@@ -117,8 +118,6 @@ experiment.log_parameters({'lr':lr,
 
 # add chunks of data to a pytorch dataloader
 inputs = np.concatenate([obs_chunks, action_chunks],axis=-1) # array that is dataset_size x T x state_dim+action_dim 
-targets = goals
-ipdb.set_trace()
 train_data = TensorDataset(torch.tensor(inputs, dtype=torch.float32) ,torch.tensor(targets,dtype=torch.float32))
 
 train_loader = DataLoader(
