@@ -49,16 +49,16 @@ for j in range(epochs):
 
         #env.render()  # for visualization
 
-        #state = torch.reshape(torch.tensor(state,device=device,dtype=torch.float32),(1,1,-1))
+        state = torch.reshape(torch.tensor(state,device=device,dtype=torch.float32),(1,1,-1))
 
         action_mean, action_sig = ll_policy(state,z_sampled)
         action_sampled = skill_model.reparameterize(action_mean, action_sig)
 
         # converting action_sampled to array
-        #action_sampled = action_sampled.cpu().detach().numpy()
-        #action_sampled = action_sampled.reshape([2,])
+        action_sampled = action_sampled.cpu().detach().numpy()
+        action_sampled = action_sampled.reshape([2,])
 
-        state = env.step(action_sampled)
+        state,_,_,_ = env.step(action_sampled)
         epoch_states.append(state)
     
     states.append(epoch_states)
