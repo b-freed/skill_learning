@@ -9,9 +9,9 @@ import torch.distributions.normal as Normal
 from skill_model import SkillModel, SkillModelStateDependentPrior
 import gym
 import d4rl
-import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 
 device = torch.device('cuda:0')
