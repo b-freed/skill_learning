@@ -47,7 +47,7 @@ for j in range(epochs):
     epoch_states = []
     for i in range(H):
 
-        env.render()  # for visualization
+        #env.render()  # for visualization
 
         state = torch.reshape(torch.tensor(state,device=device,dtype=torch.float32),(1,1,-1))
 
