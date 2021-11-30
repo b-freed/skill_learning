@@ -139,7 +139,8 @@ for i in range(episodes):
 	plt.figure()
 	plt.scatter(states_actual[:,0],states_actual[:,1],c='r')
 	plt.scatter(states_actual[0,0],states_actual[0,1],c='b')
-	plt.scatter(sT_mean[0,-1,0].detach().cpu().numpy(),sT_mean[0,-1,1].detach().cpu().numpy(),c='g')
+	#plt.scatter(sT_mean[0,-1,0].detach().cpu().numpy(),sT_mean[0,-1,1].detach().cpu().numpy(),c='g')
+	plt.scatter(sT_mean[0].detach().cpu().numpy(),sT_mean[1].detach().cpu().numpy(),c='g')
 	# plt.show()
 
 plt.legend(['Actual Trajectory','Initial State','Predicted Terminal State'])
