@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 
 
 device = torch.device('cuda:0')
-H = 10
+H = 100
 filename = 'maze2d_state_dep_prior_log.pth'
 PATH = 'checkpoints/'+filename
 
@@ -36,7 +36,7 @@ env = 'maze2d-large-v1'
 env = gym.make(env)
 
 # simulate low-level policy in env
-epochs = 100
+epochs = 10
 states = []
 for j in range(epochs):
 
