@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 
 
 def run_skill(skill_model,s0,skill,env,H):
-	state = env.reset(x0=s0.flatten().detach().cpu().numpy())
+	state = s0.flatten().detach().cpu().numpy()
 	states = []
 	
 	actions = []
@@ -29,7 +29,7 @@ def run_skill(skill_model,s0,skill,env,H):
 	return np.stack(states),np.stack(actions)
 
 def run_skill_with_disturbance(skill_model,s0,skill,env,H):
-	state = env.reset(x0=s0.flatten().detach().cpu().numpy())
+	state = s0.flatten().detach().cpu().numpy()
 	states = []
 	
 	actions = []
@@ -107,16 +107,16 @@ if __name__ == '__main__':
 
 # collect an episode of data
 for i in range(episodes):
-	states = data['observations']
-	actions = data['actions']
-	goals = data['infos/goal']
-	states = torch.tensor(states,dtype=torch.float32).cuda()
-	actions = torch.tensor(actions,dtype=torch.float32).cuda()
+	initial_state = env.reset()
+	#actions = data['actions']
+	#goals = data['infos/goal']
+	initial_state = torch.tensor(initial_state,dtype=torch.float32).cuda()
+	#actions = torch.tensor(actions,dtype=torch.float32).cuda()
 
-	z_mean,z_sig = skill_model_sdp.prior(states[:,0:1,:])
+	z_mean,z_sig = skill_model_sdp.prior(initial_state)
 
 	z = skill_model_sdp.reparameterize(z_mean,z_sig)
-	sT_mean,sT_sig = skill_model_sdp.decoder.abstract_dynamics(states[:,0:1,:],z)
+	sT_mean,sT_sig = skill_model_sdp.decoder.abstract_dynamics(initial_state,z)
 
 # 	# infer the skill
 # 	z_mean,z_sig = skill_model.encoder(states,actions)
@@ -128,7 +128,7 @@ for i in range(episodes):
 # 	sT_mean,sT_sig = skill_model.decoder.abstract_dynamics(states[:,0:1,:],z)
 	
 
-	states_actual,actions = run_skill(skill_model_sdp, states[:,0:1,:],z,env,H)
+	states_actual,actions = run_skill(skill_model_sdp, initial_state,z,env,H)
 	# states_actual,actions = run_skill_with_disturbance(skill_model_sdp, states[:,0:1,:],z,env,H)
 	# ipdb.set_trace()
 	
