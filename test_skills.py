@@ -6,10 +6,12 @@ from torch.utils.data import TensorDataset
 from torch.utils.data.dataloader import DataLoader
 import torch.distributions.normal as Normal
 from skill_model import SkillModel, SkillModelStateDependentPrior
-import matplotlib.pyplot as plt
 import ipdb
-from pointmass_env import PointmassEnv
-from train_skills_1 import get_data
+import d4rl
+import gym
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 
 def run_skill(skill_model,s0,skill,env,H):
@@ -59,7 +61,7 @@ if __name__ == '__main__':
 	episodes = 5
 
 
-	filename = 'z_dim_4state_dep_prior.pth' #'z_dim_4.pth'#'log.pth'
+	filename = 'maze2d_state_dep_prior_log.pth'
 	PATH = 'checkpoints/'+filename
 	skill_model_sdp = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim).cuda() #SkillModel(state_dim, a_dim, z_dim, h_dim).cuda()
 	checkpoint = torch.load(PATH)
@@ -74,7 +76,9 @@ if __name__ == '__main__':
 	# skill_model.load_state_dict(checkpoint['model_state_dict'])
 	# ll_policy = skill_model.decoder.ll_policy
 
-	env = PointmassEnv()
+	env = 'maze2d-large-v1'
+	env = gym.make(env)
+	data = env.get_dataset()
 
 
 	# # start out in s0
@@ -103,7 +107,9 @@ if __name__ == '__main__':
 
 # collect an episode of data
 for i in range(episodes):
-	states, actions, goals = get_data(1)
+	states = data['observations']
+	actions = data['actions']
+	goals = data['infos/goal']
 	states = torch.tensor(states,dtype=torch.float32).cuda()
 	actions = torch.tensor(actions,dtype=torch.float32).cuda()
 
@@ -126,6 +132,7 @@ for i in range(episodes):
 	# states_actual,actions = run_skill_with_disturbance(skill_model_sdp, states[:,0:1,:],z,env,H)
 	# ipdb.set_trace()
 	
+	plt.figure()
 	plt.scatter(states_actual[:,0],states_actual[:,1],c='r')
 	plt.scatter(states_actual[0,0],states_actual[0,1],c='b')
 	plt.scatter(sT_mean[0,-1,0].detach().cpu().numpy(),sT_mean[0,-1,1].detach().cpu().numpy(),c='g')
@@ -133,7 +140,7 @@ for i in range(episodes):
 
 plt.legend(['Actual Trajectory','Initial State','Predicted Terminal State'])
 plt.title('Skill Execution & Prediction (Skill-Dependent Prior)')
-plt.show()
+plt.savefig('Skill Prediction.png')
 
 	
 # 	# plt.scatter(states_actual[:,0],states_actual[:,1])
