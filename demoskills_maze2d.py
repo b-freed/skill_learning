@@ -36,7 +36,7 @@ env = 'maze2d-large-v1'
 env = gym.make(env)
 
 # simulate low-level policy in env
-epochs = 15
+epochs = 5
 states = []
 for j in range(epochs):
 
@@ -77,4 +77,4 @@ plt.scatter(states[:,H-1,0],states[:,H-1,1])
 plt.title('Skill Demonstration')
 plt.legend(['Trajectory','Initial State','Terminal State'])
 #plt.show()
-plt.savefig('skill_demo_maze2d.png')
+plt.savefig('skill_demo1_maze2d.png')
