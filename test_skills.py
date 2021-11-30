@@ -22,7 +22,7 @@ def run_skill(skill_model,s0,skill,env,H):
 	for j in range(H-1):
 	    action = skill_model.decoder.ll_policy.numpy_policy(state,skill)
 	    actions.append(action)
-	    state = env.step(action)
+	    state,_,_,_ = env.step(action)
 	    
 	    states.append(state)
 	  
@@ -40,7 +40,7 @@ def run_skill_with_disturbance(skill_model,s0,skill,env,H):
 	    	print('adding disturbance!!!!')
 	    	action = action + 20
 	    actions.append(action)
-	    state = env.step(action)
+	    state,_,_,_ = env.step(action)
 	    
 	    states.append(state)
 	  
