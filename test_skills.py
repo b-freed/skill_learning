@@ -110,16 +110,16 @@ for i in range(episodes):
 	initial_state = env.reset()
 	#actions = data['actions']
 	#goals = data['infos/goal']
-	initial_state = torch.tensor(initial_state,dtype=torch.float32).cuda()
+	initial_state = torch.reshape(torch.tensor(initial_state,dtype=torch.float32).cuda(), (1,1,4))
 	#actions = torch.tensor(actions,dtype=torch.float32).cuda()
 
 	z_mean,z_sig = skill_model_sdp.prior(initial_state)
 
 	z = skill_model_sdp.reparameterize(z_mean,z_sig)
 	sT_mean,sT_sig = skill_model_sdp.decoder.abstract_dynamics(initial_state,z)
-	print(sT_mean.shape)
-	print(sT_sig.shape)
-	ipdb.set_trace()
+	#print(sT_mean.shape)
+	#print(sT_sig.shape)
+	#ipdb.set_trace()
 	
 
 # 	# infer the skill
@@ -139,8 +139,7 @@ for i in range(episodes):
 	plt.figure()
 	plt.scatter(states_actual[:,0],states_actual[:,1],c='r')
 	plt.scatter(states_actual[0,0],states_actual[0,1],c='b')
-	#plt.scatter(sT_mean[0,-1,0].detach().cpu().numpy(),sT_mean[0,-1,1].detach().cpu().numpy(),c='g')
-	plt.scatter(sT_mean[0].detach().cpu().numpy(),sT_mean[1].detach().cpu().numpy(),c='g')
+	plt.scatter(sT_mean[0,-1,0].detach().cpu().numpy(),sT_mean[0,-1,1].detach().cpu().numpy(),c='g')
 	# plt.show()
 
 plt.legend(['Actual Trajectory','Initial State','Predicted Terminal State'])
