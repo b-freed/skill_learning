@@ -117,7 +117,7 @@ for i in range(episodes):
 
 	z = skill_model_sdp.reparameterize(z_mean,z_sig)
 	sT_mean,sT_sig = skill_model_sdp.decoder.abstract_dynamics(initial_state,z)
-	ipdb.set_trace()
+	#ipdb.set_trace()
 	
 
 # 	# infer the skill
