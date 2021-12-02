@@ -100,7 +100,6 @@ def chunks(obs,actions,goals,H,stride):
 	return np.stack(obs_chunks),np.stack(action_chunks),np.stack(targets)
 
 obs_chunks, action_chunks, targets = chunks(states, actions, goals, H, stride)
-ipdb.set_trace()
 experiment = Experiment(api_key = 'yQQo8E8TOCWYiVSruS7nxHaB5', project_name = 'skill-learning', workspace = 'anirudh-27')
 experiment.add_tag('New model on d4rl envs')
 
