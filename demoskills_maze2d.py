@@ -22,7 +22,7 @@ PATH = 'checkpoints/'+filename
 state_dim = 4
 a_dim = 2
 h_dim = 128
-z_dim = 4
+z_dim = 20
 skill_model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim).cuda()
 # Load trained skill model
 checkpoint = torch.load(PATH)
