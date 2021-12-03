@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 
 
 device = torch.device('cuda:0')
-H = 20
+H = 50
 filename = 'maze2d_state_dep_prior_log.pth'
 PATH = 'checkpoints/'+filename
 
