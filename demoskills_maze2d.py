@@ -15,8 +15,8 @@ import matplotlib.pyplot as plt
 
 
 device = torch.device('cuda:0')
-H = 20
-filename = 'maze2d_state_dep_prior_log.pth'
+H = 40
+filename = 'maze2d_H'+str(H)+'_log.pth'
 PATH = 'checkpoints/'+filename
 
 state_dim = 4
@@ -77,4 +77,4 @@ plt.scatter(states[:,H-1,0],states[:,H-1,1])
 plt.title('Skill Demonstration')
 plt.legend(['Trajectory','Initial State','Terminal State'])
 #plt.show()
-plt.savefig('skill_demo_maze2d.png')
+plt.savefig('skill_demo_maze2d_H'+str(H)+'.png')
