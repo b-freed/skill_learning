@@ -101,7 +101,7 @@ def chunks(obs,actions,goals,H,stride):
 
 obs_chunks, action_chunks, targets = chunks(states, actions, goals, H, stride)
 experiment = Experiment(api_key = 'yQQo8E8TOCWYiVSruS7nxHaB5', project_name = 'skill-learning', workspace = 'anirudh-27')
-experiment.add_tag('Maze2d H_40')
+experiment.add_tag('Maze2d H_'+str(H)+' model')
 
 # First, instantiate a skill model
 if not state_dependent_prior:
@@ -142,7 +142,7 @@ for i in range(n_epochs):
 		if not state_dependent_prior:
 			filename = 'maze2d_log.pth'
 		else:
-			filename = 'maze2d_H40_log.pth'
+			filename = 'maze2d_H'+str(H)+'_log.pth'
 		checkpoint_path = 'checkpoints/'+ filename
 		torch.save({
 							'model_state_dict': model.state_dict(),
