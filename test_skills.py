@@ -51,7 +51,7 @@ def run_skill_with_disturbance(skill_model,s0,skill,env,H):
 if __name__ == '__main__':
 
 	device = torch.device('cuda:0')
-	H = 20
+	H = 40
 	state_dim = 4
 	a_dim = 2
 	h_dim = 128
@@ -61,7 +61,7 @@ if __name__ == '__main__':
 	episodes = 5
 
 
-	filename = 'maze2d_state_dep_prior_log.pth'
+	filename = 'maze2d_H'+str(H)+'_log.pth'
 	PATH = 'checkpoints/'+filename
 	skill_model_sdp = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim).cuda() #SkillModel(state_dim, a_dim, z_dim, h_dim).cuda()
 	checkpoint = torch.load(PATH)
