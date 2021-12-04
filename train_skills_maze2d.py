@@ -58,8 +58,8 @@ state_dependent_prior = True
 
 N = states.shape[0]
 goals = data['infos/goal']
-H = 20
-stride = 20
+H = 40
+stride = 40
 n_epochs = 10000
 
 # splitting up the dataset into subsequences in which we're going to a particular goal.  Every time the goal changes we make a new subsequence.
@@ -101,7 +101,7 @@ def chunks(obs,actions,goals,H,stride):
 
 obs_chunks, action_chunks, targets = chunks(states, actions, goals, H, stride)
 experiment = Experiment(api_key = 'yQQo8E8TOCWYiVSruS7nxHaB5', project_name = 'skill-learning', workspace = 'anirudh-27')
-experiment.add_tag('New model on d4rl envs')
+experiment.add_tag('Maze2d H_40')
 
 # First, instantiate a skill model
 if not state_dependent_prior:
@@ -114,11 +114,12 @@ model_optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 experiment.log_parameters({'lr':lr,
 							   'h_dim':h_dim,
 							   'state_dependent_prior':state_dependent_prior,
-							   'z_dim':z_dim})
+							   'z_dim':z_dim,
+			  				   'H':H})
 
 # add chunks of data to a pytorch dataloader
 inputs = np.concatenate([obs_chunks, action_chunks],axis=-1) # array that is dataset_size x T x state_dim+action_dim 
-train_data = TensorDataset(torch.tensor(inputs, dtype=torch.float32) ,torch.tensor(targets,dtype=torch.float32))
+train_data = TensorDataset(torch.tensor(inputs, dtype=torch.float32), torch.tensor(targets,dtype=torch.float32))
 
 train_loader = DataLoader(
 	train_data,
@@ -141,7 +142,7 @@ for i in range(n_epochs):
 		if not state_dependent_prior:
 			filename = 'maze2d_log.pth'
 		else:
-			filename = 'maze2d_state_dep_prior_log.pth'
+			filename = 'maze2d_H40_log.pth'
 		checkpoint_path = 'checkpoints/'+ filename
 		torch.save({
 							'model_state_dict': model.state_dict(),
