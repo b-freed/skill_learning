@@ -60,7 +60,7 @@ N = states.shape[0]
 goals = data['infos/goal']
 H = 60
 stride = 60
-n_epochs = 10000
+n_epochs = 50000
 
 # splitting up the dataset into subsequences in which we're going to a particular goal.  Every time the goal changes we make a new subsequence.
 # chunks might not all be same length, might have to split long chunks down into sub-chunks, discarding leftover chunks that are shorter than our chunck length.
