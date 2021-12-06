@@ -58,8 +58,8 @@ state_dependent_prior = True
 
 N = states.shape[0]
 goals = data['infos/goal']
-H = 100
-stride = 100
+H = 20
+stride = 20
 n_epochs = 50000
 
 # splitting up the dataset into subsequences in which we're going to a particular goal.  Every time the goal changes we make a new subsequence.
