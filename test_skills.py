@@ -142,7 +142,7 @@ for i in range(episodes):
 
 plt.legend(['Actual Trajectory','Initial State','Predicted Terminal State'])
 plt.title('Skill Execution & Prediction (Skill-Dependent Prior)')
-plt.savefig('Skill_Prediction.png')
+plt.savefig('Skill_Prediction_H'+str(H)+'.png')
 
 	
 # 	# plt.scatter(states_actual[:,0],states_actual[:,1])
