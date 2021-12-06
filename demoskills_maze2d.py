@@ -36,7 +36,7 @@ env = 'maze2d-large-v1'
 env = gym.make(env)
 
 # simulate low-level policy in env
-epochs = 20
+epochs = 50
 states = []
 for j in range(epochs):
 
