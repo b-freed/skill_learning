@@ -105,6 +105,7 @@ if __name__ == '__main__':
 
 
 actual_states = []
+plt.figure()
 # collect an episode of data
 for i in range(episodes):
 	initial_state = env.reset()
@@ -136,7 +137,6 @@ for i in range(episodes):
 	
 	actual_states.append(states_actual)
 	
-	plt.figure()
 	plt.scatter(sT_mean[0,-1,0].detach().cpu().numpy(),sT_mean[0,-1,1].detach().cpu().numpy(),c='g')
 	# plt.show()
 
