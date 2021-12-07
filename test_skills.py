@@ -104,7 +104,7 @@ if __name__ == '__main__':
 
 
 
-
+actual_states = []
 # collect an episode of data
 for i in range(episodes):
 	initial_state = env.reset()
@@ -134,13 +134,16 @@ for i in range(episodes):
 	# states_actual,actions = run_skill_with_disturbance(skill_model_sdp, states[:,0:1,:],z,env,H)
 	# ipdb.set_trace()
 	
+	actual_states.append(states_actual)
+	
 	plt.figure()
-	plt.scatter(states_actual[:,0],states_actual[:,1],c='r')
-	plt.scatter(states_actual[0,0],states_actual[0,1],c='b')
 	plt.scatter(sT_mean[0,-1,0].detach().cpu().numpy(),sT_mean[0,-1,1].detach().cpu().numpy(),c='g')
 	# plt.show()
 
-plt.legend(['Actual Trajectory','Initial State','Predicted Terminal State'])
+
+plt.scatter(states_actual[:,:,0],states_actual[:,:,1],c='r')
+plt.scatter(states_actual[:,0,0],states_actual[:,0,1],c='b')
+plt.legend(['Predicted Terminal State','Actual Trajectory','Initial State'])
 plt.title('Skill Execution & Prediction (Skill-Dependent Prior)')
 plt.savefig('Skill_Prediction_H'+str(H)+'.png')
 
