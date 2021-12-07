@@ -53,13 +53,13 @@ actions = data['actions']
 a_dim = actions.shape[1]
 h_dim = 128
 z_dim = 20
-lr = 1e-4
+lr = 1e-3
 state_dependent_prior = True
 
 N = states.shape[0]
 goals = data['infos/goal']
-H = 20
-stride = 20
+H = 40
+stride = 40
 n_epochs = 50000
 
 # splitting up the dataset into subsequences in which we're going to a particular goal.  Every time the goal changes we make a new subsequence.
