@@ -38,6 +38,7 @@ env = gym.make(env)
 # simulate low-level policy in env
 epochs = 20
 states = []
+plt.figure()
 for j in range(epochs):
 
     # sample a skill vector from prior
@@ -46,11 +47,14 @@ for j in range(epochs):
     z_sampled = skill_model.reparameterize(z_prior_means, z_prior_sigs)
 
     state = env.reset()
+    initial_state = state
+    
+    sT_mean,sT_sig = skill_model_sdp.decoder.abstract_dynamics(initial_state,z_sampled)
+    
     epoch_states = []
     for i in range(H):
 
         #env.render()  # for visualization
-
         state = torch.reshape(torch.tensor(state,device=device,dtype=torch.float32),(1,1,-1))
 
         action_mean, action_sig = ll_policy(state,z_sampled)
@@ -64,17 +68,18 @@ for j in range(epochs):
         epoch_states.append(state)
     
     states.append(epoch_states)
+    
+    plt.scatter(sT_mean[0,-1,0].detach().cpu().numpy(),sT_mean[0,-1,1].detach().cpu().numpy())
 
 states = np.stack(states)
 #print(states)
 print(np.shape(states))
 
 
-plt.figure()
 plt.scatter(states[:,:,0],states[:,:,1])
 plt.scatter(states[:,0,0],states[:,0,1])
-plt.scatter(states[:,H-1,0],states[:,H-1,1])
+#plt.scatter(states[:,H-1,0],states[:,H-1,1])
 plt.title('Skill Demonstration')
-plt.legend(['Trajectory','Initial State','Terminal State'])
+plt.legend(['Terminal State','Trajectory','Initial State'])
 #plt.show()
 plt.savefig('skill_demo_maze2d_H'+str(H)+'.png')
