@@ -105,7 +105,7 @@ if __name__ == '__main__':
 
 
 actual_states = []
-plt.figure()
+pred_states = []
 # collect an episode of data
 for i in range(episodes):
 	initial_state = env.reset()
@@ -136,13 +136,16 @@ for i in range(episodes):
 	# ipdb.set_trace()
 	
 	actual_states.append(states_actual)
+	pred_states.append([sT_mean[0,-1,0].detach().cpu().numpy(),sT_mean[0,-1,1].detach().cpu().numpy()])
 	
-	plt.scatter(sT_mean[0,-1,0].detach().cpu().numpy(),sT_mean[0,-1,1].detach().cpu().numpy(), c='g')
-	# plt.show()
+	
 
 actual_states = np.stack(actual_states)
+pred_states = np.stack(pred_states)
+plt.figure()
 plt.scatter(actual_states[:,:,0],actual_states[:,:,1], c='r')
 plt.scatter(actual_states[:,0,0],actual_states[:,0,1], c='b')
-plt.legend(['Predicted Terminal State','Actual Trajectory','Initial State'])
+plt.scatter(pred_states[:,0],pred_states[:,1], c='g')
+plt.legend(['Actual Trajectory','Initial State','Predicted Terminal State'])
 plt.title('Skill Execution & Prediction (Skill-Dependent Prior)')
 plt.savefig('Skill_Prediction_H'+str(H)+'.png')
