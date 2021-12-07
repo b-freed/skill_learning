@@ -58,7 +58,7 @@ if __name__ == '__main__':
 	z_dim = 20
 	batch_size = 1
 	epochs = 100000
-	episodes = 5
+	episodes = 20
 
 
 	filename = 'maze2d_H'+str(H)+'_log.pth'
