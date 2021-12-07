@@ -140,7 +140,7 @@ for i in range(episodes):
 	plt.scatter(sT_mean[0,-1,0].detach().cpu().numpy(),sT_mean[0,-1,1].detach().cpu().numpy(),c='g')
 	# plt.show()
 
-
+actual_states = np.stack(actual_states)
 plt.scatter(actual_states[:,:,0],actual_states[:,:,1],c='r')
 plt.scatter(actual_states[:,0,0],actual_states[:,0,1],c='b')
 plt.legend(['Predicted Terminal State','Actual Trajectory','Initial State'])
