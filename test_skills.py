@@ -141,70 +141,8 @@ for i in range(episodes):
 	# plt.show()
 
 
-plt.scatter(states_actual[:,:,0],states_actual[:,:,1],c='r')
-plt.scatter(states_actual[:,0,0],states_actual[:,0,1],c='b')
+plt.scatter(actual_states[:,:,0],actual_states[:,:,1],c='r')
+plt.scatter(actual_states[:,0,0],actual_states[:,0,1],c='b')
 plt.legend(['Predicted Terminal State','Actual Trajectory','Initial State'])
 plt.title('Skill Execution & Prediction (Skill-Dependent Prior)')
 plt.savefig('Skill_Prediction_H'+str(H)+'.png')
-
-	
-# 	# plt.scatter(states_actual[:,0],states_actual[:,1])
-	
-	
-
-# 	# # perturb z slightly and repeate
-# 	# epsilon = torch.randn(torch.zeros_like(z),)
-# 	# z = skill_model.reparameterize(z_mean+.1,z_sig+.1)
-# 	# z = z + epsilon
-# 	z = skill_model.reparameterize(torch.zeros_like(z_mean),torch.ones_like(z_sig))
-# 	sT_mean,sT_sig = skill_model.decoder.abstract_dynamics(states[:,0:1,:],z)
-# 	# print('sT_sig: ', sT_sig)
-# 	print('z: ', z)
-# 	print('initial state: ', states[:,0,:])
-
-# 	states_actual = run_skill(states[:,0:1,:],z,env,H)
-# 	plt.scatter(states_actual[:,0],states_actual[:,1])
-# 	plt.scatter(sT_mean[0,-1,0].detach().cpu().numpy(),sT_mean[0,-1,1].detach().cpu().numpy())
-
-
-
-# 	plt.show()
-
-
-# z:  tensor([[[-1.0387, -0.0625, -1.9619, -0.7790]]], device='cuda:0')
-# initial state:  tensor([[-0.9506, -0.6553,  0.0000,  0.0000]], device='cuda:0')
-
-# s0 = torch.tensor([[[-0.9506, -0.6553,  0.0000,  0.0000]]], device='cuda:0')
-# s0 = torch.tensor([[[0.0000, 0.0000,  0.0000,  0.0000]]], device='cuda:0')
-
-# z =  torch.tensor([[[-1.0387, -0.0625, -1.9619, -0.7790]]], device='cuda:0')
-
-
-# for i in range(10):
-# 	z = skill_model.reparameterize(torch.zeros_like(z),torch.ones_like(z))
-
-# 	sT_mean,sT_sig = skill_model.decoder.abstract_dynamics(s0,z)
-# 	states_actual,actions = run_skill(s0,z,env,H)
-# 	# print('states_actual: ', states_actual)
-
-# 	plt.scatter(sT_mean[0,-1,0].detach().cpu().numpy(),sT_mean[0,-1,1].detach().cpu().numpy())
-# 	plt.scatter(states_actual[:,0],states_actual[:,1])
-
-	
-	
-# 	states_actual_dist,actions_dist = run_skill_with_disturbance(s0,z,env,H)
-	
-
-# 	# print('states_actual: ', states_actual)
-
-# 	plt.scatter(sT_mean[0,-1,0].detach().cpu().numpy(),sT_mean[0,-1,1].detach().cpu().numpy())
-# 	plt.scatter(states_actual_dist[:,0],states_actual_dist[:,1])
-# 	plt.show()
-	
-
-# 	plt.plot(actions[:,0])
-# 	plt.plot(actions[:,1])
-# 	plt.plot(actions_dist[:,0])
-# 	plt.plot(actions_dist[:,1])
-
-# 	plt.show()
