@@ -51,14 +51,14 @@ def run_skill_with_disturbance(skill_model,s0,skill,env,H):
 if __name__ == '__main__':
 
 	device = torch.device('cuda:0')
-	H = 20
+	H = 40
 	state_dim = 4
 	a_dim = 2
 	h_dim = 128
-	z_dim = 20
+	z_dim = 256
 	batch_size = 1
 	epochs = 100000
-	episodes = 20
+	episodes = 10
 
 
 	filename = 'maze2d_H'+str(H)+'_log.pth'
