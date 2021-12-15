@@ -52,7 +52,7 @@ state_dim = states.shape[1]
 actions = data['actions']
 a_dim = actions.shape[1]
 h_dim = 128
-z_dim = 256
+z_dim = 20
 lr = 5e-5
 state_dependent_prior = True
 
