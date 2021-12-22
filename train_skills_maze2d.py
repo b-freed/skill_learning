@@ -60,7 +60,7 @@ lr = 5e-5
 state_dependent_prior = True
 
 N = states.shape[0]
-goals = data['infos/goal']
+goals = dataset['infos/goal']
 H = 40
 stride = 40
 n_epochs = 50000
