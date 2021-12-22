@@ -50,9 +50,9 @@ dataset = h5py.File(dataset_file, "r")
 
 batch_size = 100
 
-states = list(dataset['observations'])
+states = dataset['observations']
 state_dim = states.shape[1]
-actions = list(dataset['actions'])
+actions = dataset['actions']
 a_dim = actions.shape[1]
 h_dim = 128
 z_dim = 256
@@ -60,7 +60,7 @@ lr = 5e-5
 state_dependent_prior = True
 
 N = states.shape[0]
-goals = list(data['infos/goal'])
+goals = data['infos/goal']
 H = 40
 stride = 40
 n_epochs = 50000
