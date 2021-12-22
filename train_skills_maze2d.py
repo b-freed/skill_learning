@@ -10,6 +10,7 @@ from skill_model import SkillModel, SkillModelStateDependentPrior
 import gym
 import d4rl
 import ipdb
+import h5py
 
 def train(model,model_optimizer):
 	
