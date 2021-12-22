@@ -41,15 +41,17 @@ def train(model,model_optimizer):
 
 # instantiating the environmnet, getting the dataset.
 # the data is in a big dictionary, containing long sequences of obs, rew, actions, goals
-env = 'maze2d-large-v1'  # maze whatever
-env = gym.make(env)
-data = env.get_dataset()  # dictionary, with 'observations', 'rewards', 'actions', 'infos/goal'
+#env = 'maze2d-large-v1'  # maze whatever
+#env = gym.make(env)
+# data = env.get_dataset()  # dictionary, with 'observations', 'rewards', 'actions', 'infos/goal'
+dataset_file = "maze2d-umaze-v1.hdf5"
+dataset = h5py.File(dataset_file, "r")
 
 batch_size = 100
 
-states = data['observations']
+states = list(dataset['observations'])
 state_dim = states.shape[1]
-actions = data['actions']
+actions = list(dataset['actions'])
 a_dim = actions.shape[1]
 h_dim = 128
 z_dim = 256
@@ -57,7 +59,7 @@ lr = 5e-5
 state_dependent_prior = True
 
 N = states.shape[0]
-goals = data['infos/goal']
+goals = list(data['infos/goal'])
 H = 40
 stride = 40
 n_epochs = 50000
