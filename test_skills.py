@@ -78,7 +78,7 @@ if __name__ == '__main__':
 
 	env = 'maze2d-large-v1'
 	env = gym.make(env)
-	data = env.get_dataset()
+	# data = env.get_dataset()
 
 
 	# # start out in s0
