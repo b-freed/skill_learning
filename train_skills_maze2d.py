@@ -45,8 +45,10 @@ def train(model,model_optimizer):
 #env = 'maze2d-large-v1'  # maze whatever
 #env = gym.make(env)
 # data = env.get_dataset()  # dictionary, with 'observations', 'rewards', 'actions', 'infos/goal'
-dataset_file = "maze2d-umaze-v1.hdf5"
+dataset_file = "datasets/maze2d-umaze-v1.hdf5"
+dataset_test_file = "datasets/maze2d-umaze-v1-test.hdf5"
 dataset = h5py.File(dataset_file, "r")
+dataset_test = h5py.File(dataset_test_file, "r")
 
 batch_size = 100
 
@@ -54,6 +56,10 @@ states = dataset['observations']
 state_dim = states.shape[1]
 actions = dataset['actions']
 a_dim = actions.shape[1]
+
+test_states = dataset_test['observations']
+test_actions = dataset_test['actions']
+
 h_dim = 128
 z_dim = 256
 lr = 5e-5
@@ -61,6 +67,7 @@ state_dependent_prior = True
 
 N = states.shape[0]
 goals = dataset['infos/goal']
+test_goals = dataset_test['infos/goal']
 H = 40
 stride = 40
 n_epochs = 50000
@@ -103,6 +110,7 @@ def chunks(obs,actions,goals,H,stride):
 	return np.stack(obs_chunks),np.stack(action_chunks),np.stack(targets)
 
 obs_chunks, action_chunks, targets = chunks(states, actions, goals, H, stride)
+test_obs_chunks, test_action_chunks, test_targets = chunks(test_states, test_actions, test_goals, H, stride)
 experiment = Experiment(api_key = 'yQQo8E8TOCWYiVSruS7nxHaB5', project_name = 'skill-learning', workspace = 'anirudh-27')
 experiment.add_tag('Maze2d H_'+str(H)+' model')
 
@@ -121,13 +129,21 @@ experiment.log_parameters({'lr':lr,
 			  				   'H':H})
 
 # add chunks of data to a pytorch dataloader
-inputs = np.concatenate([obs_chunks, action_chunks],axis=-1) # array that is dataset_size x T x state_dim+action_dim 
+inputs = np.concatenate([obs_chunks, action_chunks],axis=-1) # array that is dataset_size x T x state_dim+action_dim
+test_inputs = np.concatenate([test_obs_chunks, test_action_chunks],axis=-1)
+
 train_data = TensorDataset(torch.tensor(inputs, dtype=torch.float32), torch.tensor(targets,dtype=torch.float32))
+test_data = TensorDataset(torch.tensor(test_inputs, dtype=torch.float32), torch.tensor(test_targets,dtype=torch.float32))
 
 train_loader = DataLoader(
 	train_data,
 	batch_size=batch_size,
 	num_workers=0)  # not really sure about num_workers...
+
+test_loader = DataLoader(
+	test_data,
+	batch_size=batch_size,
+	num_workers=0)
 
 for i in range(n_epochs):
 	loss, s_T_loss, a_loss, kl_loss = train(model,model_optimizer)
