@@ -51,8 +51,13 @@ dataset = env.get_dataset()  # dictionary, with 'observations', 'rewards', 'acti
 batch_size = 100
 
 states = dataset['observations']
+
+N = states.shape[0]
+
+states, test_states = torch.utils.data.random_split(states, [0.8*N, 0.2*N])
 state_dim = states.shape[1]
 actions = dataset['actions']
+actions, test_actions = torch.utils.data.random_split(actions, [0.8*N, 0.2*N])
 a_dim = actions.shape[1]
 
 h_dim = 128
@@ -60,8 +65,9 @@ z_dim = 256
 lr = 5e-5
 state_dependent_prior = True
 
-N = states.shape[0]
+
 goals = dataset['infos/goal']
+goals, test_goals = torch.utils.data.random_split(goals, [0.8*N, 0.2*N])
 H = 40
 stride = 40
 n_epochs = 50000
@@ -105,6 +111,8 @@ def chunks(obs,actions,goals,H,stride):
 	return np.stack(obs_chunks),np.stack(action_chunks),np.stack(targets)
 
 obs_chunks, action_chunks, targets = chunks(states, actions, goals, H, stride)
+test_obs_chunks, test_action_chunks, test_targets = chunks(test_states, test_actions, test_goals, H, stride)
+
 experiment = Experiment(api_key = 'yQQo8E8TOCWYiVSruS7nxHaB5', project_name = 'skill-learning', workspace = 'anirudh-27')
 experiment.add_tag('Maze2d H_'+str(H)+' model')
 
@@ -125,13 +133,20 @@ experiment.log_parameters({'lr':lr,
 
 # add chunks of data to a pytorch dataloader
 inputs = np.concatenate([obs_chunks, action_chunks],axis=-1) # array that is dataset_size x T x state_dim+action_dim
+test_inputs = np.concatenate([test_obs_chunks, test_action_chunks],axis=-1)
 
 train_data = TensorDataset(torch.tensor(inputs, dtype=torch.float32), torch.tensor(targets,dtype=torch.float32))
+test_data = TensorDataset(torch.tensor(test_inputs, dtype=torch.float32), torch.tensor(test_targets,dtype=torch.float32))
 
 train_loader = DataLoader(
 	train_data,
 	batch_size=batch_size,
 	num_workers=0)  # not really sure about num_workers...
+
+test_loader = DataLoader(
+	test_data,
+	batch_size=batch_size,
+	num_workers=0)
 
 for i in range(n_epochs):
 	loss, s_T_loss, a_loss, kl_loss = train(model,model_optimizer)
