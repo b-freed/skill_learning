@@ -58,7 +58,7 @@ if __name__ == '__main__':
 	z_dim = 256
 	batch_size = 1
 	epochs = 100000
-	episodes = 3
+	episodes = 5
 
 
 	filename = 'maze2d_H'+str(H)+'_log.pth'
@@ -133,6 +133,15 @@ for i in range(episodes):
 	
 
 	states_actual,actions = run_skill(skill_model_sdp, initial_state,z,env,H)
+	plt.figure()
+	plt.scatter(states_actual[:,0],states_actual[:,1])
+	plt.scatter(states_actual[0,0],states_actual[0,1])
+	plt.errorbar(sT_mean[0,0,0].detach().cpu().numpy(),sT_mean[0,0,1].detach().cpu().numpy(),xerr=sT_sig[0,0,0].detach().cpu().numpy(),yerr=sT_sig[0,0,1].detach().cpu().numpy())
+
+	plt.legend(['Actual Trajectory','Initial State','Predicted Terminal State'])
+	plt.title('Skill Execution & Prediction (Skill-Dependent Prior) '+str(i))
+	plt.savefig('Skill_Prediction_H'+str(H)+'_'+str(i)+'.png')
+	
 	# states_actual,actions = run_skill_with_disturbance(skill_model_sdp, states[:,0:1,:],z,env,H)
 	# ipdb.set_trace()
 	
@@ -142,19 +151,14 @@ for i in range(episodes):
 	
 	
 
-actual_states = np.stack(actual_states)
-pred_states = np.stack(pred_states)
-plt.figure()
-plt.scatter(actual_states[:,:,0],actual_states[:,:,1], c='r')
-plt.scatter(actual_states[:,0,0],actual_states[:,0,1], c='b')
-plt.scatter(pred_states[:,0],pred_states[:,1], c='g')
-plt.legend(['Actual Trajectory','Initial State','Predicted Terminal State'])
-plt.title('Skill Execution & Prediction (Skill-Dependent Prior)')
-plt.savefig('Skill_Prediction_H'+str(H)+'.png')
-
-action_dist = np.stack(action_dist)
+#actual_states = np.stack(actual_states)
+#pred_states = np.stack(pred_states)
 #plt.figure()
-#plt.plot(action_dist[:,:,0])
-#plt.plot(action_dist[:,:,1])
-#plt.title('Action Distribution')
-#plt.savefig('Action_Distribution_H'+str(H)+'.png')
+#plt.scatter(actual_states[:,:,0],actual_states[:,:,1], c='r')
+#plt.scatter(actual_states[:,0,0],actual_states[:,0,1], c='b')
+#plt.scatter(pred_states[:,0],pred_states[:,1], c='g')
+#plt.legend(['Actual Trajectory','Initial State','Predicted Terminal State'])
+#plt.title('Skill Execution & Prediction (Skill-Dependent Prior)')
+#plt.savefig('Skill_Prediction_H'+str(H)+'.png')
+
+#action_dist = np.stack(action_dist)
