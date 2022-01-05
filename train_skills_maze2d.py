@@ -42,11 +42,11 @@ def train(model,model_optimizer):
 
 # instantiating the environmnet, getting the dataset.
 # the data is in a big dictionary, containing long sequences of obs, rew, actions, goals
-#env = 'maze2d-large-v1'  # maze whatever
-#env = gym.make(env)
-# data = env.get_dataset()  # dictionary, with 'observations', 'rewards', 'actions', 'infos/goal'
-dataset_file = "maze2d-umaze-v1.hdf5"
-dataset = h5py.File(dataset_file, "r")
+env = 'maze2d-large-v1'  # maze whatever
+env = gym.make(env)
+dataset = env.get_dataset()  # dictionary, with 'observations', 'rewards', 'actions', 'infos/goal'
+# dataset_file = "maze2d-umaze-v1.hdf5"
+# dataset = h5py.File(dataset_file, "r")
 
 batch_size = 100
 
@@ -64,6 +64,7 @@ goals = dataset['infos/goal']
 H = 40
 stride = 40
 n_epochs = 50000
+a_dist = 'tanh_normal' # 'tanh_normal' or 'normal'
 
 # splitting up the dataset into subsequences in which we're going to a particular goal.  Every time the goal changes we make a new subsequence.
 # chunks might not all be same length, might have to split long chunks down into sub-chunks, discarding leftover chunks that are shorter than our chunck length.
@@ -110,7 +111,7 @@ experiment.add_tag('Maze2d H_'+str(H)+' model')
 if not state_dependent_prior:
 	model = SkillModel(state_dim, a_dim, z_dim, h_dim).cuda()
 else:
-	model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim).cuda()
+	model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim,a_dist=a_dist).cuda()
 
 model_optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
@@ -118,7 +119,8 @@ experiment.log_parameters({'lr':lr,
 							   'h_dim':h_dim,
 							   'state_dependent_prior':state_dependent_prior,
 							   'z_dim':z_dim,
-			  				   'H':H})
+			  				   'H':H,
+							   'a_dist':a_dist})
 
 # add chunks of data to a pytorch dataloader
 inputs = np.concatenate([obs_chunks, action_chunks],axis=-1) # array that is dataset_size x T x state_dim+action_dim 

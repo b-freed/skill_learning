@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from torch.utils.data import TensorDataset
 from torch.utils.data.dataloader import DataLoader
 import torch.distributions.normal as Normal
+from torch.distributions.transformed_distribution import TransformedDistribution
 import torch.distributions.kl as KL
 import ipdb
 
@@ -54,7 +55,7 @@ class LowLevelPolicy(nn.Module):
     P(a_t|s_t,z) is our "low-level policy", so this is the feedback policy the agent runs while executing skill described by z.
     See Encoder and Decoder for more description
     '''
-    def __init__(self,state_dim,a_dim,z_dim,h_dim):
+    def __init__(self,state_dim,a_dim,z_dim,h_dim,a_dist):
 
         super(LowLevelPolicy,self).__init__()
         
@@ -63,6 +64,7 @@ class LowLevelPolicy(nn.Module):
         self.mean_layer = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,a_dim))
         #self.sig_layer  = nn.Sequential(nn.Linear(h_dim,a_dim),nn.Softplus())
         self.sig_layer  = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,a_dim),nn.Softplus())
+        self.a_dist = a_dist
 
 
 
@@ -97,6 +99,8 @@ class LowLevelPolicy(nn.Module):
         
         a_mean,a_sig = self.forward(state,z)
         action = self.reparameterize(a_mean,a_sig)
+        if self.a_dist == 'tanh_normal':
+            action = nn.Tanh()(action)
         action = action.detach().cpu().numpy()
         
         return action.reshape([2,])
@@ -171,16 +175,17 @@ class Decoder(nn.Module):
     -embed z
     -Pass into fully connected network to get "state T features"
     '''
-    def __init__(self,state_dim,a_dim,z_dim,h_dim):
+    def __init__(self,state_dim,a_dim,z_dim,h_dim,a_dist):
 
         super(Decoder,self).__init__()
         
         self.state_dim = state_dim
         self.a_dim = a_dim
         self.z_dim = z_dim
+        
 
-        self.abstract_dynamics = AbstractDynamics(state_dim,z_dim,h_dim) # TODO
-        self.ll_policy = LowLevelPolicy(state_dim,a_dim,z_dim,h_dim) # TODO
+        self.abstract_dynamics = AbstractDynamics(state_dim,z_dim,h_dim) 
+        self.ll_policy = LowLevelPolicy(state_dim,a_dim,z_dim,h_dim,a_dist)
         self.emb_layer  = nn.Linear(state_dim+z_dim,h_dim)
         self.fc = nn.Sequential(nn.Linear(state_dim+z_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
         
@@ -251,14 +256,14 @@ class Prior(nn.Module):
 
 
 class SkillModelStateDependentPrior(nn.Module):
-    def __init__(self,state_dim,a_dim,z_dim,h_dim):
+    def __init__(self,state_dim,a_dim,z_dim,h_dim,a_dist='normal'):
         super(SkillModelStateDependentPrior, self).__init__()
 
         self.state_dim = state_dim # state dimension
         self.a_dim = a_dim # action dimension
 
         self.encoder = Encoder(state_dim,a_dim,z_dim,h_dim)
-        self.decoder = Decoder(state_dim,a_dim,z_dim,h_dim)  # TODO
+        self.decoder = Decoder(state_dim,a_dim,z_dim,h_dim,a_dist)  # TODO
         self.prior   = Prior(state_dim,z_dim,h_dim)
 
     def forward(self,states,actions):
@@ -302,8 +307,16 @@ class SkillModelStateDependentPrior(nn.Module):
 
         s_T_mean, s_T_sig, a_means, a_sigs, z_post_means, z_post_sigs  = self.forward(states,actions)
 
+        print('s_T_mean: ',s_T_mean)
         s_T_dist = Normal.Normal(s_T_mean, s_T_sig )
-        a_dist = Normal.Normal(a_means, a_sigs)
+        if self.decoder.ll_policy.a_dist == 'normal':
+            a_dist = Normal.Normal(a_means, a_sigs)
+        elif self.decoder.ll_policy.a_dist == 'tanh_normal':
+            base_dist = Normal.Normal(a_means, a_sigs)
+            transform = torch.distributions.transforms.TanhTransform()
+            a_dist = TransformedDistribution(base_dist, [transform])
+        else:
+            assert False
         z_post_dist = Normal.Normal(z_post_means, z_post_sigs)
         # z_prior_means = torch.zeros_like(z_post_means)
         # z_prior_sigs = torch.ones_like(z_post_sigs)
