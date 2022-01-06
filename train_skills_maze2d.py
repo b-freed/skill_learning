@@ -154,6 +154,7 @@ experiment.log_parameters({'lr':lr,
 inputs = np.concatenate([obs_chunks, action_chunks],axis=-1) # array that is dataset_size x T x state_dim+action_dim
 
 train_data = TensorDataset(torch.tensor(inputs, dtype=torch.float32))
+ipdb.set_trace()
 dataset_size = train_data.shape[0]
 train_data, test_data = torch.utils.data.random_split(train_data, [int(0.8*dataset_size), int(0.2*dataset_size)])
 
