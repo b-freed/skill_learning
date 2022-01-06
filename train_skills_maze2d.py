@@ -20,7 +20,7 @@ def train(model,model_optimizer):
 	kl_losses = []
 
 	for batch_id, data in enumerate(train_loader):
-		data = data.cuda()
+		#data = data.cuda()
 		states = data[:,:,:model.state_dim]  # first state_dim elements are the state
 		actions = data[:,:,model.state_dim:]	 # rest are actions
 
@@ -48,7 +48,7 @@ def test(model):
 
 	with torch.no_grad():
 		for batch_id, data in enumerate(test_loader):
-			data = data.cuda()
+			#data = data.cuda()
 			states = data[:,:,:model.state_dim]  # first state_dim elements are the state
 			actions = data[:,:,model.state_dim:]	 # rest are actions
 
