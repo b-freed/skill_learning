@@ -154,7 +154,7 @@ experiment.log_parameters({'lr':lr,
 inputs = np.concatenate([obs_chunks, action_chunks],axis=-1) # array that is dataset_size x T x state_dim+action_dim
 
 train_data = TensorDataset(torch.tensor(inputs, dtype=torch.float32))
-train_data, test_data = torch.utils.data.random_split(train_data, [0.8*len(train_data), 0.2*len(train_data)])
+train_data, test_data = torch.utils.data.random_split(train_data, [int(0.8*len(train_data)), int(0.2*len(train_data))])
 
 train_loader = DataLoader(
 	train_data,
