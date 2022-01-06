@@ -37,7 +37,31 @@ def train(model,model_optimizer):
 		a_losses.append(a_loss.item())
 		kl_losses.append(kl_loss.item())
 
-	return np.mean(losses), np.mean(s_T_losses), np.mean(a_losses), np.mean(kl_losses) 
+	return np.mean(losses), np.mean(s_T_losses), np.mean(a_losses), np.mean(kl_losses)
+
+def test(model):
+	
+	losses = []
+	s_T_losses = []
+	a_losses = []
+	kl_losses = []
+
+	with torch.no_grad():
+		for batch_id, (data) in enumerate(test_loader):
+			data = data.cuda()
+			states = data[:,:,:model.state_dim]  # first state_dim elements are the state
+			actions = data[:,:,model.state_dim:]	 # rest are actions
+
+			loss_tot, s_T_loss, a_loss, kl_loss = model.get_losses(states, actions)
+
+			# log losses
+
+			losses.append(loss_tot.item())
+			s_T_losses.append(s_T_loss.item())
+			a_losses.append(a_loss.item())
+			kl_losses.append(kl_loss.item())
+
+	return np.mean(losses), np.mean(s_T_losses), np.mean(a_losses), np.mean(kl_losses)
 
 
 # instantiating the environmnet, getting the dataset.
@@ -144,6 +168,9 @@ test_loader = DataLoader(
 
 for i in range(n_epochs):
 	loss, s_T_loss, a_loss, kl_loss = train(model,model_optimizer)
+	
+	print("--------TRAIN---------")
+	
 	print('loss: ', loss)
 	print('s_T_loss: ', s_T_loss)
 	print('a_loss: ', a_loss)
@@ -153,6 +180,20 @@ for i in range(n_epochs):
 	experiment.log_metric("s_T_loss", s_T_loss, step=i)
 	experiment.log_metric("a_loss", a_loss, step=i)
 	experiment.log_metric("kl_loss", kl_loss, step=i)
+	
+	test_loss, test_s_T_loss, test_a_loss, test_kl_loss = test(model)
+	
+	print("--------TEST---------")
+	
+	print('test_loss: ', test_loss)
+	print('test_s_T_loss: ', test_s_T_loss)
+	print('test_a_loss: ', test_a_loss)
+	print('test_kl_loss: ', test_kl_loss)
+	print(i)
+	experiment.log_metric("test_loss", test_loss, step=i)
+	experiment.log_metric("test_s_T_loss", test_s_T_loss, step=i)
+	experiment.log_metric("test_a_loss", test_a_loss, step=i)
+	experiment.log_metric("test_kl_loss", test_kl_loss, step=i)
 
 	if i % 10 == 0:
 		if not state_dependent_prior:
