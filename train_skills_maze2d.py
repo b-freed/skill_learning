@@ -19,8 +19,8 @@ def train(model,model_optimizer):
 	a_losses = []
 	kl_losses = []
 
-	for batch_id, data in enumerate(train_loader):
-		data = data.cuda()
+	for batch_id, (data, targets) in enumerate(train_loader):
+		data, targets = data.cuda(), targets.cuda()
 		states = data[:,:,:model.state_dim]  # first state_dim elements are the state
 		actions = data[:,:,model.state_dim:]	 # rest are actions
 
@@ -47,8 +47,8 @@ def test(model):
 	kl_losses = []
 
 	with torch.no_grad():
-		for batch_id, data in enumerate(test_loader):
-			data = data.cuda()
+		for batch_id, (data, targets) in enumerate(test_loader):
+			data, targets = data.cuda(), targets.cuda()
 			states = data[:,:,:model.state_dim]  # first state_dim elements are the state
 			actions = data[:,:,model.state_dim:]	 # rest are actions
 
@@ -155,9 +155,10 @@ inputs = np.concatenate([obs_chunks, action_chunks],axis=-1) # array that is dat
 
 dataset_size = len(inputs)
 train_data, test_data = torch.utils.data.random_split(inputs, [int(0.8*dataset_size), int(dataset_size-int(0.8*dataset_size))])
+train_targets, test_targets = torch.utils.data.random_split(targets, [int(0.8*dataset_size), int(dataset_size-int(0.8*dataset_size))])
 
-train_data = TensorDataset(torch.tensor(train_data, dtype=torch.float32))
-test_data = TensorDataset(torch.tensor(test_data, dtype=torch.float32))
+train_data = TensorDataset(torch.tensor(train_data, dtype=torch.float32), torch.tensor(train_targets, dtype=torch.float32))
+test_data = TensorDataset(torch.tensor(test_data, dtype=torch.float32), torch.tensor(test_targets, dtype=torch.float32))
 
 train_loader = DataLoader(
 	train_data,
