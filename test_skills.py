@@ -54,10 +54,9 @@ if __name__ == '__main__':
 	H = 40
 	state_dim = 4
 	a_dim = 2
-	h_dim = 128
+	h_dim = 256
 	z_dim = 256
 	batch_size = 1
-	epochs = 100000
 	episodes = 5
 
 
