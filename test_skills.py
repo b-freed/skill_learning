@@ -230,7 +230,7 @@ for ax, (title, dependency) in zip(axs, PARAMETERS.items()):
 	ax.scatter(mu[0], mu[1], c='red', s=3)
 	ax.set_title(title)
 
-plt.show()
+plt.savefig('Confidence Ellipse_H'+str(H)+'.png')
 #ipdb.set_trace()
 #plt.figure()
 #plt.scatter(actual_states[:,:,0],actual_states[:,:,1], c='r')
