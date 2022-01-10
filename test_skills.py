@@ -128,7 +128,7 @@ if __name__ == '__main__':
 	# skill_model.load_state_dict(checkpoint['model_state_dict'])
 	# ll_policy = skill_model.decoder.ll_policy
 
-	env = 'maze2d-umaze-v1'
+	env = 'maze2d-large-v1'
 	env = gym.make(env)
 	# data = env.get_dataset()
 
