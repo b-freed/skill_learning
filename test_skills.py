@@ -14,6 +14,8 @@ GlfwContext(offscreen=True)
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from matplotlib.patches import Ellipse
+import matplotlib.transforms as transforms
 
 
 def run_skill(skill_model,s0,skill,env,H):
