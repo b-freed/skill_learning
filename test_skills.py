@@ -213,10 +213,10 @@ pred_states = np.stack(pred_states)
 PARAMETERS = {
     'Positive correlation': [[0.85, 0.35],
                              [0.15, -0.65]],
-    'Negative correlation': [[0.9, -0.4],
-                             [0.1, -0.6]],
-    'Weak correlation': [[1, 0],
-                         [0, 1]],
+    #'Negative correlation': [[0.9, -0.4],
+    #                         [0.1, -0.6]],
+    #'Weak correlation': [[1, 0],
+     #                    [0, 1]],
 }
 
 mu = 2, 4
