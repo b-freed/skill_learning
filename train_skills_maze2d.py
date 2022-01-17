@@ -8,6 +8,8 @@ from torch.utils.data.dataloader import DataLoader
 import torch.distributions.normal as Normal
 from skill_model import SkillModel, SkillModelStateDependentPrior
 import gym
+from mujoco_py import GlfwContext
+GlfwContext(offscreen=True)
 import d4rl
 import ipdb
 import h5py
