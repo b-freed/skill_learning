@@ -103,6 +103,13 @@ def confidence_ellipse(x, y, ax, n_std=3.0, facecolor='none', **kwargs):
 
 	return ax.add_patch(ellipse)
 
+def get_correlated_dataset(data, dependency, mu, scale):
+    dependent = data.dot(dependency)
+    scaled = dependent * scale
+    scaled_with_offset = scaled + mu
+    # return x and y of the new, correlated dataset
+    return scaled_with_offset[:, 0], scaled_with_offset[:, 1]
+
 
 
 if __name__ == '__main__':
@@ -224,12 +231,13 @@ scale = 3, 5
 
 fig, axs = plt.subplots(1, 3, figsize=(9, 3))
 for ax, (title, dependency) in zip(axs, PARAMETERS.items()):
-	ax.scatter(pred_states[:,0], pred_states[:,1], s=0.5)
+	x, y = get_correlated_dataset(pred_states, dependency, mu, scale)
+	ax.scatter(x, y, s=0.5)
 
 	ax.axvline(c='grey', lw=1)
 	ax.axhline(c='grey', lw=1)
 
-	confidence_ellipse(pred_states[:,0], pred_states[:,1], ax, edgecolor='red')
+	confidence_ellipse(x, y, ax, edgecolor='red')
 
 	ax.scatter(mu[0], mu[1], c='red', s=3)
 	ax.set_title(title)
