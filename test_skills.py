@@ -222,7 +222,7 @@ scale = 3, 5
 
 fig, axs = plt.subplots(1, 3, figsize=(9, 3))
 for ax, (title, dependency) in zip(axs, PARAMETERS.items()):
-	ax.scatter(x, y, s=0.5)
+	ax.scatter(pred_states[:,0], pred_states[:,1], s=0.5)
 
 	ax.axvline(c='grey', lw=1)
 	ax.axhline(c='grey', lw=1)
