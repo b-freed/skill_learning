@@ -114,7 +114,7 @@ if __name__ == '__main__':
 	h_dim = 256
 	z_dim = 256
 	batch_size = 1
-	episodes = 5
+	episodes = 50
 
 
 	filename = 'maze2d_H'+str(H)+'_log.pth'
@@ -213,10 +213,10 @@ pred_states = np.stack(pred_states)
 PARAMETERS = {
     'Positive correlation': [[0.85, 0.35],
                              [0.15, -0.65]],
-    #'Negative correlation': [[0.9, -0.4],
-    #                         [0.1, -0.6]],
-    #'Weak correlation': [[1, 0],
-     #                    [0, 1]],
+    'Negative correlation': [[0.9, -0.4],
+                             [0.1, -0.6]],
+    'Weak correlation': [[1, 0],
+                         [0, 1]],
 }
 
 mu = 2, 4
