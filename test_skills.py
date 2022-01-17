@@ -9,6 +9,8 @@ from skill_model import SkillModel, SkillModelStateDependentPrior
 import ipdb
 import d4rl
 import gym
+from mujoco_py import GlfwContext
+GlfwContext(offscreen=True)
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
