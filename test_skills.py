@@ -168,7 +168,7 @@ if __name__ == '__main__':
 
 
 actual_states = []
-pred_states = []
+pred_states_sig = []
 action_dist = []
 # collect an episode of data
 for i in range(episodes):
