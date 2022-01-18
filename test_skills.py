@@ -175,11 +175,11 @@ for i in range(episodes):
 	#plt.scatter(u,v, c='g')
 plt.grid(color='lightgray',linestyle='--')
 
-plt.scatter(actual_states[:,:,0],actual_states[:,:,1], c='r')
-plt.scatter(actual_states[:,0,0],actual_states[:,0,1], c='b')
-plt.scatter(pred_states_mean[:,0],pred_states_mean[:,1], c='g')
+plt.scatter(actual_states[:,:,0],actual_states[:,:,1], c='r', label='Actual Trajectory')
+plt.scatter(actual_states[:,0,0],actual_states[:,0,1], c='b', label='Initial State')
+plt.scatter(pred_states_mean[:,0],pred_states_mean[:,1], c='g', label='Mean of Predicted terminal states')
 
-plt.legend(['Actual Trajectory','Initial State','Mean of Predicted terminal states'])
+plt.legend()
 plt.title('Skill Execution & Prediction (Skill-Dependent Prior)')
 plt.savefig('Skill_Prediction_H'+str(H)+'.png')
 
