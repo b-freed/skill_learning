@@ -168,7 +168,8 @@ if __name__ == '__main__':
 
 
 actual_states = []
-pred_states_sig = []
+#pred_states_sig = []
+pred_states = []
 action_dist = []
 # collect an episode of data
 for i in range(episodes):
@@ -210,14 +211,14 @@ for i in range(episodes):
 	
 	actual_states.append(states_actual)
 	action_dist.append(actions)
-	#pred_states.append([sT_mean[0,-1,0].detach().cpu().numpy(),sT_mean[0,-1,1].detach().cpu().numpy()])
-	pred_states_sig.append([sT_sig[0,-1,0].detach().cpu().numpy(),sT_sig[0,-1,1].detach().cpu().numpy()])
+	pred_states.append([sT_mean[0,-1,0].detach().cpu().numpy(),sT_mean[0,-1,1].detach().cpu().numpy()])
+	#pred_states_sig.append([sT_sig[0,-1,0].detach().cpu().numpy(),sT_sig[0,-1,1].detach().cpu().numpy()])
 	
 	
 
 actual_states = np.stack(actual_states)
-pred_states_sig = np.stack(pred_states_sig)
-
+#pred_states_sig = np.stack(pred_states_sig)
+pred_states = np.stack(pred_states)
 PARAMETERS = {
     'Positive correlation': [[0.85, 0.35],
                              [0.15, -0.65]],
@@ -232,7 +233,7 @@ scale = 3, 5
 
 fig, axs = plt.subplots(1, 3, figsize=(9, 3))
 for ax, (title, dependency) in zip(axs, PARAMETERS.items()):
-	x, y = get_correlated_dataset(pred_states_sig, dependency, mu, scale)
+	x, y = get_correlated_dataset(pred_states, dependency, mu, scale)
 	ax.scatter(x, y, s=0.5)
 
 	ax.axvline(c='grey', lw=1)
