@@ -162,16 +162,17 @@ pred_states_sig = np.stack(pred_states_sig)
 pred_states_mean = np.stack(pred_states_mean)
 
 # x = u + a cos(t) ; y = v + b sin(t)
-
-u = pred_states_mean[:,0]       #x-position of the center
-v = pred_states_mean[:,1]       #y-position of the center
-a = (pred_states_sig[:,0])/2    #radius on the x-axis
-b = (pred_states_sig[:,1])/2    #radius on the y-axis
-
-t = np.linspace(0, 2*pi, 100)
 plt.figure()
-plt.plot( u+a*np.cos(t) , v+b*np.sin(t) )
-plt.scatter(u,v, c='g')
+for i in range(episodes):
+	u = pred_states_mean[i,0]       #x-position of the center
+	v = pred_states_mean[i,1]       #y-position of the center
+	a = (pred_states_sig[i,0])/2    #radius on the x-axis
+	b = (pred_states_sig[i,1])/2    #radius on the y-axis
+
+	t = np.linspace(0, 2*pi, 100)
+
+	plt.plot( u+a*np.cos(t) , v+b*np.sin(t) )
+	plt.scatter(u,v, c='g')
 plt.grid(color='lightgray',linestyle='--')
 
 plt.scatter(actual_states[:,:,0],actual_states[:,:,1], c='r')
