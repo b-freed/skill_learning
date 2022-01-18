@@ -182,7 +182,7 @@ t = np.linspace(0, 2*pi, 100)
 plt.plot( u+a*np.cos(t) , v+b*np.sin(t) )
 plt.scatter(u,v)
 plt.grid(color='lightgray',linestyle='--')
-plt.legend(['Mean of Predicted terminal states', 'Std dev of Predicted terminal states'])
+plt.legend(['Std dev of Predicted terminal states', 'Mean of Predicted terminal states'])
 plt.title('Ellipse of std. dev of pred terminal states')
 plt.savefig('Confidence_Ellipse_H'+str(H)+'.png')
 
