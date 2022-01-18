@@ -171,12 +171,12 @@ b = (pred_states_sig[:,1][0])/2    #radius on the y-axis
 t = np.linspace(0, 2*pi, 100)
 plt.figure()
 plt.plot( u+a*np.cos(t) , v+b*np.sin(t) )
-plt.scatter(u,v)
+plt.scatter(u,v, c='black')
 plt.grid(color='lightgray',linestyle='--')
 
 plt.scatter(actual_states[:,:,0],actual_states[:,:,1], c='r')
 plt.scatter(actual_states[:,0,0],actual_states[:,0,1], c='b')
-plt.scatter(pred_states[:,0],pred_states[:,1], c='g')
+plt.scatter(pred_states_mean[:,0],pred_states_mean[:,1], c='g')
 
 plt.legend(['Std dev of Predicted terminal states', 'Mean of Predicted terminal states','Actual Trajectory','Initial State','Predicted Terminal State'])
 plt.title('Skill Execution & Prediction (Skill-Dependent Prior)')
