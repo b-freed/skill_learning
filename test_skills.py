@@ -166,7 +166,7 @@ plt.figure()
 ax = plt.gca()
 
 ellipse = Ellipse(xy=(pred_states_mean[:,0], pred_states_mean[:,1]), width=pred_states_sig[:,0], height=pred_states_sig[:,1], 
-                        edgecolor='r', fc='None', lw=2)
+                        edgecolor='r')
 ax.add_patch(ellipse)
 plt.title('Ellipse of std. dev of pred terminal states')
 
