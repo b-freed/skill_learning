@@ -161,7 +161,7 @@ pred_states_sig = np.stack(pred_states_sig)
 pred_states_mean = np.stack(pred_states_mean)
 
 print(pred_states_mean)
-print(type(pred_states_mean[:,0]))
+print(pred_states_mean[:,0][0])
 print(pred_states_sig)
 plt.figure()
 ax = plt.gca()
