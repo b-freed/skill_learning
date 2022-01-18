@@ -160,7 +160,8 @@ actual_states = np.stack(actual_states)
 pred_states_sig = np.stack(pred_states_sig)
 pred_states_mean = np.stack(pred_states_mean)
 
-ipdb.set_trace()
+print(pred_states_mean)
+print(pred_states_sig)
 plt.figure()
 ax = plt.gca()
 
