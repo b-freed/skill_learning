@@ -177,7 +177,7 @@ plt.grid(color='lightgray',linestyle='--')
 
 plt.scatter(actual_states[:,:,0],actual_states[:,:,1], c='r')
 plt.scatter(actual_states[:,0,0],actual_states[:,0,1], c='b')
-plt.scatter(pred_states[:,0],pred_states[:,1], c='g')
+plt.scatter(pred_states_mean[:,0],pred_states_mean[:,1], c='g')
 
 plt.legend(['Std dev of Predicted terminal states','Actual Trajectory','Initial State','Mean of Predicted terminal states'])
 plt.title('Skill Execution & Prediction (Skill-Dependent Prior)')
