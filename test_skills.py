@@ -241,7 +241,9 @@ for ax, (title, dependency) in zip(axs, PARAMETERS.items()):
 
 	confidence_ellipse(x, y, ax, edgecolor='red')
 
-	ax.scatter(mu[0], mu[1], c='red', s=3)
+	#plt.legend('Predicted Terminal states (std. dev)')
+	plt.legend('Predicted Terminal states (mean)')
+	#ax.scatter(mu[0], mu[1], c='red', s=3)
 	ax.set_title(title)
 
 plt.savefig('Confidence_Ellipse_H'+str(H)+'.png')
