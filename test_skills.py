@@ -160,13 +160,10 @@ actual_states = np.stack(actual_states)
 pred_states_sig = np.stack(pred_states_sig)
 pred_states_mean = np.stack(pred_states_mean)
 
-print(pred_states_mean)
-print(pred_states_mean[:,0][0])
-print(pred_states_sig)
 plt.figure()
 ax = plt.gca()
 
-ellipse = Ellipse(xy=(pred_states_mean[:,0], pred_states_mean[:,1]), width=pred_states_sig[:,0], height=pred_states_sig[:,1], 
+ellipse = Ellipse(xy=(pred_states_mean[:,0][0], pred_states_mean[:,1][0]), width=pred_states_sig[:,0][0], height=pred_states_sig[:,1][0], 
                         edgecolor='r')
 ax.add_patch(ellipse)
 plt.title('Ellipse of std. dev of pred terminal states')
