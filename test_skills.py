@@ -163,22 +163,21 @@ pred_states_mean = np.stack(pred_states_mean)
 
 # x = u + a cos(t) ; y = v + b sin(t)
 
-u = pred_states_mean[:,0][0]       #x-position of the center
-v = pred_states_mean[:,1][0]       #y-position of the center
-a = (pred_states_sig[:,0][0])/2    #radius on the x-axis
-b = (pred_states_sig[:,1][0])/2    #radius on the y-axis
+u = pred_states_mean[:,0]       #x-position of the center
+v = pred_states_mean[:,1]       #y-position of the center
+a = (pred_states_sig[:,0])/2    #radius on the x-axis
+b = (pred_states_sig[:,1])/2    #radius on the y-axis
 
 t = np.linspace(0, 2*pi, 100)
 plt.figure()
 plt.plot( u+a*np.cos(t) , v+b*np.sin(t) )
-plt.scatter(u,v, c='black')
+plt.scatter(u,v, c='g')
 plt.grid(color='lightgray',linestyle='--')
 
 plt.scatter(actual_states[:,:,0],actual_states[:,:,1], c='r')
 plt.scatter(actual_states[:,0,0],actual_states[:,0,1], c='b')
-plt.scatter(pred_states_mean[:,0],pred_states_mean[:,1], c='g')
 
-plt.legend(['Std dev of Predicted terminal states', 'Mean of Predicted terminal states','Actual Trajectory','Initial State','Predicted Terminal State'])
+plt.legend(['Std dev of Predicted terminal states', 'Mean of Predicted terminal states','Actual Trajectory','Initial State'])
 plt.title('Skill Execution & Prediction (Skill-Dependent Prior)')
 plt.savefig('Skill_Prediction_H'+str(H)+'.png')
 
