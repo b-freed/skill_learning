@@ -16,6 +16,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 import matplotlib.transforms as transforms
+from math import pi
 
 
 def run_skill(skill_model,s0,skill,env,H):
@@ -160,6 +161,7 @@ actual_states = np.stack(actual_states)
 pred_states_sig = np.stack(pred_states_sig)
 pred_states_mean = np.stack(pred_states_mean)
 
+'''
 plt.figure()
 ax = plt.gca()
 
@@ -167,8 +169,23 @@ ellipse = Ellipse(xy=(pred_states_mean[:,0][0], pred_states_mean[:,1][0]), width
                         edgecolor='r')
 ax.add_patch(ellipse)
 plt.title('Ellipse of std. dev of pred terminal states')
+'''
 
+# x = u + a cos(t) ; y = v + b sin(t)
+
+u = pred_states_mean[:,0][0]       #x-position of the center
+v = pred_states_mean[:,1][0]       #y-position of the center
+a = (pred_states_sig[:,0][0])/2    #radius on the x-axis
+b = (pred_states_sig[:,1][0])/2    #radius on the y-axis
+
+t = np.linspace(0, 2*pi, 100)
+plt.plot( u+a*np.cos(t) , v+b*np.sin(t) )
+plt.scatter(u,v)
+plt.grid(color='lightgray',linestyle='--')
+plt.legend(['Mean of Predicted terminal states', 'Std dev of Predicted terminal states'])
+plt.title('Ellipse of std. dev of pred terminal states')
 plt.savefig('Confidence_Ellipse_H'+str(H)+'.png')
+
 #ipdb.set_trace()
 #plt.figure()
 #plt.scatter(actual_states[:,:,0],actual_states[:,:,1], c='r')
