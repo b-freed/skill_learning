@@ -56,7 +56,7 @@ def run_skill_with_disturbance(skill_model,s0,skill,env,H):
 if __name__ == '__main__':
 
 	device = torch.device('cuda:0')
-	H = 40
+	H = 20
 	state_dim = 4
 	a_dim = 2
 	h_dim = 256
