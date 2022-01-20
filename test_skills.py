@@ -65,7 +65,7 @@ if __name__ == '__main__':
 	episodes = 1
 
 
-	filename = 'maze2d_H'+str(H)+'_log.pth'
+	filename = 'maze2d_H'+str(H)+'_log_best.pth'
 	PATH = 'checkpoints/'+filename
 	skill_model_sdp = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim).cuda() #SkillModel(state_dim, a_dim, z_dim, h_dim).cuda()
 	checkpoint = torch.load(PATH)
