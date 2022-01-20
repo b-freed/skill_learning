@@ -172,6 +172,7 @@ test_loader = DataLoader(
 	batch_size=batch_size,
 	num_workers=0)
 
+min_test_loss = 10**10
 for i in range(n_epochs):
 	loss, s_T_loss, a_loss, kl_loss = train(model,model_optimizer)
 	
@@ -211,3 +212,9 @@ for i in range(n_epochs):
 							'model_state_dict': model.state_dict(),
 							'model_optimizer_state_dict': model_optimizer.state_dict(),
 							}, checkpoint_path)
+	if test_loss < min_test_loss:
+		min_test_loss = test_loss
+		filename = 'maze2d_H'+str(H)+'_log_best.pth'
+		checkpoint_path = 'checkpoints/'+ filename
+		torch.save({'model_state_dict': model.state_dict(),
+			    'model_optimizer_state_dict': model_optimizer.state_dict()}, checkpoint_path)
