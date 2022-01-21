@@ -163,14 +163,15 @@ pred_states_mean = np.stack(pred_states_mean)
 
 # x = u + a cos(t) ; y = v + b sin(t)
 plt.figure()
-u = pred_states_mean[:,0]       #x-position of the center
-v = pred_states_mean[:,1]       #y-position of the center
-a = (pred_states_sig[:,0])/2    #radius on the x-axis
-b = (pred_states_sig[:,1])/2    #radius on the y-axis
+for i in range(episodes):
+	u = pred_states_mean[i,0]       #x-position of the center
+	v = pred_states_mean[i,1]       #y-position of the center
+	a = (pred_states_sig[i,0])/2    #radius on the x-axis
+	b = (pred_states_sig[i,1])/2    #radius on the y-axis
 
-t = np.linspace(0, 2*pi, 100)
+	t = np.linspace(0, 2*pi, 100)
 
-plt.plot( u+a*np.cos(t) , v+b*np.sin(t), label='Std dev of Predicted terminal states' )
+	plt.plot( u+a*np.cos(t) , v+b*np.sin(t)) #label='Std dev of Predicted terminal states'
 #plt.scatter(u,v, c='g')
 plt.grid(color='lightgray',linestyle='--')
 
