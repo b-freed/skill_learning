@@ -103,7 +103,7 @@ class LowLevelPolicy(nn.Module):
             action = nn.Tanh()(action)
         action = action.detach().cpu().numpy()
         
-        return action.reshape([action.shape[1],])
+        return action.reshape([self.a_dim,])
      
     def reparameterize(self, mean, std):
         eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
