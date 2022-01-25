@@ -56,9 +56,14 @@ def run_skill_with_disturbance(skill_model,s0,skill,env,H):
 if __name__ == '__main__':
 
 	device = torch.device('cuda:0')
+	
+	env = 'antmaze-medium-diverse-v0'
+	env = gym.make(env)
+	data = env.get_dataset()
+	
 	H = 40
-	state_dim = 4
-	a_dim = 2
+	state_dim = data['observations'].shape[1]
+	a_dim = data['actions'].shape[1]
 	h_dim = 256
 	z_dim = 256
 	batch_size = 1
@@ -79,10 +84,6 @@ if __name__ == '__main__':
 	# checkpoint = torch.load(PATH)
 	# skill_model.load_state_dict(checkpoint['model_state_dict'])
 	# ll_policy = skill_model.decoder.ll_policy
-
-	env = 'antmaze-medium-diverse-v0'
-	env = gym.make(env)
-	# data = env.get_dataset()
 
 
 	# # start out in s0
