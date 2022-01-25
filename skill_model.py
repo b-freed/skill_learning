@@ -65,6 +65,7 @@ class LowLevelPolicy(nn.Module):
         #self.sig_layer  = nn.Sequential(nn.Linear(h_dim,a_dim),nn.Softplus())
         self.sig_layer  = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,a_dim),nn.Softplus())
         self.a_dist = a_dist
+        self.a_dim = a_dim
 
 
 
