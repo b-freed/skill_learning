@@ -94,6 +94,8 @@ H = 40
 stride = 40
 n_epochs = 50000
 a_dist = 'normal' # 'tanh_normal' or 'normal'
+print(a_dim)
+print(state_dim)
 
 # splitting up the dataset into subsequences in which we're going to a particular goal.  Every time the goal changes we make a new subsequence.
 # chunks might not all be same length, might have to split long chunks down into sub-chunks, discarding leftover chunks that are shorter than our chunck length.
