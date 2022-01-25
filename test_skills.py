@@ -118,7 +118,7 @@ for i in range(episodes):
 	initial_state = env.reset()
 	#actions = data['actions']
 	#goals = data['infos/goal']
-	initial_state = torch.reshape(torch.tensor(initial_state,dtype=torch.float32).cuda(), (1,1,4))
+	initial_state = torch.reshape(torch.tensor(initial_state,dtype=torch.float32).cuda(), (1,1,state_dim))
 	#actions = torch.tensor(actions,dtype=torch.float32).cuda()
 
 	z_mean,z_sig = skill_model_sdp.prior(initial_state)
