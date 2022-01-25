@@ -65,7 +65,7 @@ if __name__ == '__main__':
 	episodes = 7
 
 
-	filename = 'maze2d_H'+str(H)+'_log_best.pth'
+	filename = 'AntMaze_H'+str(H)+'_log_best.pth'
 	PATH = 'checkpoints/'+filename
 	skill_model_sdp = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim).cuda() #SkillModel(state_dim, a_dim, z_dim, h_dim).cuda()
 	checkpoint = torch.load(PATH)
@@ -80,7 +80,7 @@ if __name__ == '__main__':
 	# skill_model.load_state_dict(checkpoint['model_state_dict'])
 	# ll_policy = skill_model.decoder.ll_policy
 
-	env = 'maze2d-large-v1'
+	env = 'antmaze-medium-diverse-v0'
 	env = gym.make(env)
 	# data = env.get_dataset()
 
