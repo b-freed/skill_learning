@@ -143,7 +143,7 @@ if not state_dependent_prior:
 else:
 	model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist).cuda()
 
-model_optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+model_optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=0.01)
 
 experiment.log_parameters({'lr':lr,
 							   'h_dim':h_dim,
