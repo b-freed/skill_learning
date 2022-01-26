@@ -86,7 +86,7 @@ a_dim = actions.shape[1]
 h_dim = 256
 z_dim = 256
 lr = 5e-5
-wd = 0.01
+wd = 0.1
 state_dependent_prior = True
 
 
