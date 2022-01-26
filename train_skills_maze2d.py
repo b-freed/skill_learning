@@ -86,6 +86,7 @@ a_dim = actions.shape[1]
 h_dim = 256
 z_dim = 256
 lr = 5e-5
+wd = 0.01
 state_dependent_prior = True
 
 
@@ -143,14 +144,17 @@ if not state_dependent_prior:
 else:
 	model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist).cuda()
 
-model_optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=0.01)
+model_optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
 
 experiment.log_parameters({'lr':lr,
 							   'h_dim':h_dim,
 							   'state_dependent_prior':state_dependent_prior,
 							   'z_dim':z_dim,
 			  				   'H':H,
-			   				   'a_dist':a_dist})
+			   				   'a_dist':a_dist,
+			  				   'a_dim':a_dim,
+			  				   'state_dim':state_dim,
+			  				   'l2_reg':wd})
 
 # add chunks of data to a pytorch dataloader
 inputs = np.concatenate([obs_chunks, action_chunks],axis=-1) # array that is dataset_size x T x state_dim+action_dim
@@ -203,7 +207,7 @@ for i in range(n_epochs):
 	experiment.log_metric("test_kl_loss", test_kl_loss, step=i)
 
 	if i % 10 == 0:
-		filename = 'AntMaze_H'+str(H)+'_log.pth'
+		filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log.pth'
 		checkpoint_path = 'checkpoints/'+ filename
 		torch.save({
 							'model_state_dict': model.state_dict(),
@@ -211,7 +215,7 @@ for i in range(n_epochs):
 							}, checkpoint_path)
 	if test_loss < min_test_loss:
 		min_test_loss = test_loss
-		filename = 'AntMaze_H'+str(H)+'_log_best.pth'
+		filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
 		checkpoint_path = 'checkpoints/'+ filename
 		torch.save({'model_state_dict': model.state_dict(),
 			    'model_optimizer_state_dict': model_optimizer.state_dict()}, checkpoint_path)
