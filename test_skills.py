@@ -68,9 +68,10 @@ if __name__ == '__main__':
 	z_dim = 256
 	batch_size = 1
 	episodes = 1
+	wd = 5e-4
 
 
-	filename = 'AntMaze_H'+str(H)+'_log_best.pth'
+	filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
 	PATH = 'checkpoints/'+filename
 	skill_model_sdp = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim).cuda() #SkillModel(state_dim, a_dim, z_dim, h_dim).cuda()
 	checkpoint = torch.load(PATH)
