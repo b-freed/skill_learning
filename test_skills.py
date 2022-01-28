@@ -168,8 +168,8 @@ plt.figure()
 for i in range(episodes):
 	u = pred_states_mean[i,0]       #x-position of the center
 	v = pred_states_mean[i,1]       #y-position of the center
-	a = (pred_states_sig[i,0])/2    #radius on the x-axis
-	b = (pred_states_sig[i,1])/2    #radius on the y-axis
+	a = (pred_states_sig[i,0])      #radius on the x-axis
+	b = (pred_states_sig[i,1])      #radius on the y-axis
 
 	t = np.linspace(0, 2*pi, 100)
 
