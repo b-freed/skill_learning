@@ -48,7 +48,7 @@ if __name__ == '__main__':
 	h_dim = 256
 	z_dim = 256
 	batch_size = 1
-	episodes = 1
+	episodes = 3
 	wd = 0.001
 
 
@@ -64,45 +64,24 @@ actual_states = []
 pred_states_sig = []
 pred_states_mean = []
 # collect an episode of data
+initial_state = env.reset()
 for i in range(episodes):
-	initial_state = env.reset()
-	#actions = data['actions']
-	#goals = data['infos/goal']
+	
 	initial_state = torch.reshape(torch.tensor(initial_state,dtype=torch.float32).cuda(), (1,1,state_dim))
-	#actions = torch.tensor(actions,dtype=torch.float32).cuda()
 
 	z_mean,z_sig = skill_model_sdp.prior(initial_state)
 
 	z = skill_model_sdp.reparameterize(z_mean,z_sig)
 	sT_mean,sT_sig = skill_model_sdp.decoder.abstract_dynamics(initial_state,z)
 	#ipdb.set_trace()
-	
-
-# 	# infer the skill
-# 	z_mean,z_sig = skill_model.encoder(states,actions)
-
-# 	z = skill_model.reparameterize(z_mean,z_sig)
-
-# 	# from the skill, predict the actions and terminal state
-# 	# sT_mean,sT_sig,a_mean,a_sig = skill_model.decoder(states,z)
-# 	sT_mean,sT_sig = skill_model.decoder.abstract_dynamics(states[:,0:1,:],z)
-	
 
 	states_actual,actions = run_skill(skill_model_sdp, initial_state,z,env,H)
-	# states_actual,actions = run_skill_with_disturbance(skill_model_sdp, states[:,0:1,:],z,env,H)
-	'''
-	plt.figure()
-	plt.scatter(states_actual[:,0],states_actual[:,1])
-	plt.scatter(states_actual[0,0],states_actual[0,1])
-	plt.errorbar(sT_mean[0,0,0].detach().cpu().numpy(),sT_mean[0,0,1].detach().cpu().numpy(),xerr=sT_sig[0,0,0].detach().cpu().numpy(),yerr=sT_sig[0,0,1].detach().cpu().numpy())
-	plt.legend(['Actual Trajectory','Initial State','Predicted Terminal State'])
-	plt.title('Skill Execution & Prediction (Skill-Dependent Prior) '+str(i))
-	plt.savefig('Skill_Prediction_H'+str(H)+'_'+str(i)+'.png')
-	'''
 	
 	actual_states.append(states_actual)
 	pred_states_mean.append([sT_mean[0,-1,0].detach().cpu().numpy(),sT_mean[0,-1,1].detach().cpu().numpy()])
 	pred_states_sig.append([sT_sig[0,-1,0].detach().cpu().numpy(),sT_sig[0,-1,1].detach().cpu().numpy()])
+	
+	initial_state = states_actual[-1,:]
 	
 	
 
