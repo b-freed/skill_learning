@@ -183,7 +183,7 @@ plt.scatter(pred_states_mean[:,0],pred_states_mean[:,1], c='g', label='Mean of P
 
 plt.legend()
 plt.title('Skill Execution & Prediction (Skill-Dependent Prior)')
-plt.savefig('Skill_Prediction_H'+str(H)+'.png')
+plt.savefig('Skill_Prediction_H'+str(H)+'_l2reg_'+str(wd)+'.png')
 
 #ipdb.set_trace()
 #plt.figure()
