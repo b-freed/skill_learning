@@ -68,7 +68,7 @@ if __name__ == '__main__':
 	z_dim = 256
 	batch_size = 1
 	episodes = 1
-	wd = 0
+	wd = 0.001
 
 
 	filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
