@@ -178,7 +178,7 @@ for i in range(episodes):
 plt.grid(color='lightgray',linestyle='--')
 
 plt.scatter(actual_states[:,:,0],actual_states[:,:,1], c='r', label='Actual Trajectory')
-plt.scatter(actual_states[:,0,0],actual_states[:,0,1], c='b', label='Initial State')
+plt.scatter(actual_states[:,0,0],actual_states[:,0,1], c='b', marker='x', label='Initial State')
 plt.scatter(pred_states_mean[:,0],pred_states_mean[:,1], c='g', label='Mean of Predicted terminal states')
 
 plt.legend()
