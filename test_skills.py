@@ -21,7 +21,7 @@ from math import pi
 
 def run_skill(skill_model,s0,skill,env,H):
 	state = s0.flatten().detach().cpu().numpy()
-	states = []
+	states = [state]
 	
 	actions = []
 	for j in range(H): #H-1 if H!=1
