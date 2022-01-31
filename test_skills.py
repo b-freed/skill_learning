@@ -24,7 +24,7 @@ def run_skill(skill_model,s0,skill,env,H):
 	states = []
 	
 	actions = []
-	for j in range(H-1):
+	for j in range(H): #H-1 if H!=1
 	    action = skill_model.decoder.ll_policy.numpy_policy(state,skill)
 	    actions.append(action)
 	    state,_,_,_ = env.step(action)
