@@ -181,7 +181,7 @@ plt.scatter(actual_states[:,:,0],actual_states[:,:,1], c='r', label='Actual Traj
 plt.scatter(actual_states[:,0,0],actual_states[:,0,1], c='b', marker='x', label='Initial State')
 plt.scatter(pred_states_mean[:,0],pred_states_mean[:,1], c='g', label='Mean of Predicted terminal states')
 
-plt.legend(loc='lower center', bbox_to_anchor=(0.5, -0.2), ncol= 3)
+plt.legend(loc='lower center', bbox_to_anchor=(0.5, -0.15), ncol= 3)
 plt.title('Skill Execution & Prediction (Skill-Dependent Prior)')
 plt.savefig('Skill_Prediction_H'+str(H)+'_l2reg_'+str(wd)+'.png')
 
