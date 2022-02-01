@@ -21,10 +21,10 @@ from math import pi
 
 def run_skill(skill_model,s0,skill,env,H):
 	state = s0.flatten().detach().cpu().numpy()
-	states = []
+	states = [state]
 	
 	actions = []
-	for j in range(H-1):
+	for j in range(H):
 	    action = skill_model.decoder.ll_policy.numpy_policy(state,skill)
 	    actions.append(action)
 	    state,_,_,_ = env.step(action)
@@ -38,7 +38,8 @@ if __name__ == '__main__':
 
 	device = torch.device('cuda:0')
 	
-	env = 'antmaze-medium-diverse-v0'
+	#env = 'antmaze-medium-diverse-v0'
+	env = 'maze2d-large-v1'
 	env = gym.make(env)
 	data = env.get_dataset()
 	
@@ -49,10 +50,11 @@ if __name__ == '__main__':
 	z_dim = 256
 	batch_size = 1
 	episodes = 3
-	wd = 0.001
+	#wd = 0.001
 
 
-	filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
+	#filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
+	filename = 'maze2d_H'+str(H)+'_log_best.pth'
 	PATH = 'checkpoints/'+filename
 	skill_model_sdp = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim).cuda() #SkillModel(state_dim, a_dim, z_dim, h_dim).cuda()
 	checkpoint = torch.load(PATH)
@@ -104,7 +106,7 @@ for i in range(episodes):
 plt.grid(color='lightgray',linestyle='--')
 
 plt.scatter(actual_states[:,:,0],actual_states[:,:,1], c='r', label='Actual Trajectory')
-plt.scatter(actual_states[:,0,0],actual_states[:,0,1], c='b', label='Initial State')
+plt.scatter(actual_states[:,0,0],actual_states[:,0,1], c='b', marker='x', label='Initial State')
 plt.scatter(pred_states_mean[:,0],pred_states_mean[:,1], c='g', label='Mean of Predicted terminal states')
 
 plt.legend()
