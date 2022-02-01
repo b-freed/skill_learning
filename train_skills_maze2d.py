@@ -86,13 +86,13 @@ a_dim = actions.shape[1]
 h_dim = 256
 z_dim = 256
 lr = 5e-5
-wd = 0.001
+wd = 0
 state_dependent_prior = True
 
 
 goals = dataset['infos/goal']
-H = 1
-stride = 1
+H = 10
+stride = 10
 n_epochs = 50000
 a_dist = 'normal' # 'tanh_normal' or 'normal'
 
