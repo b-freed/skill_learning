@@ -378,7 +378,7 @@ class SkillModelStateDependentPrior(nn.Module):
 
 
 class SkillModel(nn.Module):
-    def __init__(self,state_dim,a_dim,z_dim,h_dim):
+    def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal'):
         super(SkillModel, self).__init__()
 
         self.state_dim = state_dim # state dimension
