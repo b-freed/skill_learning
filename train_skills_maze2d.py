@@ -87,12 +87,12 @@ h_dim = 256
 z_dim = 256
 lr = 5e-5
 wd = 0.001
-state_dependent_prior = True
+state_dependent_prior = False
 
 
 goals = dataset['infos/goal']
-H = 10
-stride = 10
+H = 20
+stride = 20
 n_epochs = 50000
 a_dist = 'normal' # 'tanh_normal' or 'normal'
 
@@ -140,7 +140,7 @@ experiment.add_tag('AntMaze H_'+str(H)+' model')
 
 # First, instantiate a skill model
 if not state_dependent_prior:
-	model = SkillModel(state_dim, a_dim, z_dim, h_dim).cuda()
+	model = SkillModel(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist).cuda()
 else:
 	model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist).cuda()
 
@@ -207,7 +207,7 @@ for i in range(n_epochs):
 	experiment.log_metric("test_kl_loss", test_kl_loss, step=i)
 
 	if i % 10 == 0:
-		filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log.pth'
+		filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log.pth'
 		checkpoint_path = 'checkpoints/'+ filename
 		torch.save({
 							'model_state_dict': model.state_dict(),
@@ -215,7 +215,7 @@ for i in range(n_epochs):
 							}, checkpoint_path)
 	if test_loss < min_test_loss:
 		min_test_loss = test_loss
-		filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
+		filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
 		checkpoint_path = 'checkpoints/'+ filename
 		torch.save({'model_state_dict': model.state_dict(),
 			    'model_optimizer_state_dict': model_optimizer.state_dict()}, checkpoint_path)
