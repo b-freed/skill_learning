@@ -385,7 +385,7 @@ class SkillModel(nn.Module):
         self.a_dim = a_dim # action dimension
 
         self.encoder = Encoder(state_dim,a_dim,z_dim,h_dim)
-        self.decoder = Decoder(state_dim,a_dim,z_dim,h_dim)  # TODO
+        self.decoder = Decoder(state_dim,a_dim,z_dim,h_dim, a_dist)  # TODO
 
 
     def forward(self,states,actions):
