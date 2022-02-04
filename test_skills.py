@@ -117,18 +117,15 @@ action_dist = []
 # collect an episode of data
 for i in range(episodes):
 	initial_state = env.reset()
-	states = data['observations']
-	actions = data['actions']
-	states = torch.tensor(states,dtype=torch.float32).cuda()
-	actions = torch.tensor(actions,dtype=torch.float32).cuda()
-	#goals = data['infos/goal']
+
 	initial_state = torch.reshape(torch.tensor(initial_state,dtype=torch.float32).cuda(), (1,1,state_dim))
 	#actions = torch.tensor(actions,dtype=torch.float32).cuda()
 
 	#z_mean,z_sig = skill_model_sdp.prior(initial_state)
 	
 	# without prior
-	z_mean,z_sig = skill_model_sdp.encoder(states,actions)
+	z_mean = torch.zeros((1,1,z_dim))
+    	z_sig = torch.ones((1,1,z_dim))
 
 	z = skill_model_sdp.reparameterize(z_mean,z_sig)
 	sT_mean,sT_sig = skill_model_sdp.decoder.abstract_dynamics(initial_state,z)
