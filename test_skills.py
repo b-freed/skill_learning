@@ -126,7 +126,6 @@ for i in range(episodes):
 	# without prior
 	z_mean = torch.zeros((1,1,z_dim))
     	z_sig = torch.ones((1,1,z_dim))
-
 	z = skill_model_sdp.reparameterize(z_mean,z_sig)
 	sT_mean,sT_sig = skill_model_sdp.decoder.abstract_dynamics(initial_state,z)
 	#ipdb.set_trace()
