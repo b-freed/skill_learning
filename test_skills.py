@@ -118,7 +118,9 @@ action_dist = []
 for i in range(episodes):
 	initial_state = env.reset()
 	actions = data['actions']
+	actions = torch.reshape(torch.tensor(actions,dtype=torch.float32).cuda())
 	states = data['observations']
+	states = torch.reshape(torch.tensor(states,dtype=torch.float32).cuda())
 	#goals = data['infos/goal']
 	initial_state = torch.reshape(torch.tensor(initial_state,dtype=torch.float32).cuda(), (1,1,state_dim))
 	#actions = torch.tensor(actions,dtype=torch.float32).cuda()
