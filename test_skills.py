@@ -69,11 +69,17 @@ if __name__ == '__main__':
 	batch_size = 1
 	episodes = 1
 	wd = 0
+	state_dependent_prior = False
 
 
-	filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+'False'+'_log_best.pth'
+	filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
 	PATH = 'checkpoints/'+filename
-	skill_model_sdp = SkillModel(state_dim, a_dim, z_dim, h_dim).cuda() #SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim).cuda()
+	
+	if not state_dependent_prior:
+		skill_model_sdp = SkillModel(state_dim, a_dim, z_dim, h_dim).cuda()
+	else:
+		skill_model_sdp = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim).cuda()
+		
 	checkpoint = torch.load(PATH)
 	skill_model_sdp.load_state_dict(checkpoint['model_state_dict'])
 	# ll_policy = skill_model_sdp.decoder.ll_policy
@@ -120,12 +126,13 @@ for i in range(episodes):
 
 	initial_state = torch.reshape(torch.tensor(initial_state,dtype=torch.float32).cuda(), (1,1,state_dim))
 	#actions = torch.tensor(actions,dtype=torch.float32).cuda()
-
-	#z_mean,z_sig = skill_model_sdp.prior(initial_state)
 	
-	# without prior
-	z_mean = torch.zeros((1,1,z_dim), device=device)
-	z_sig = torch.ones((1,1,z_dim), device=device)
+	if not state_dependent_prior:
+		z_mean = torch.zeros((1,1,z_dim), device=device)
+		z_sig = torch.ones((1,1,z_dim), device=device)
+	else:
+		z_mean,z_sig = skill_model_sdp.prior(initial_state)
+	
 	z = skill_model_sdp.reparameterize(z_mean,z_sig)
 	sT_mean,sT_sig = skill_model_sdp.decoder.abstract_dynamics(initial_state,z)
 	#ipdb.set_trace()
@@ -184,7 +191,12 @@ plt.scatter(actual_states[:,0,0],actual_states[:,0,1], c='b', marker='x', label=
 plt.scatter(pred_states_mean[:,0],pred_states_mean[:,1], c='g', label='Mean of Predicted terminal states')
 
 plt.legend(loc='lower center', bbox_to_anchor=(0.5, -0.15), ncol= 3)
-plt.title('Skill Execution & Prediction (No Skill-Dependent Prior)')
+
+if not state_dependent_prior:
+	plt.title('Skill Execution & Prediction (No Skill-Dependent Prior)')
+else:
+	plt.title('Skill Execution & Prediction (Skill-Dependent Prior)')
+	
 plt.savefig('Skill_Prediction_H'+str(H)+'_l2reg_'+str(wd)+'.png')
 
 #ipdb.set_trace()
