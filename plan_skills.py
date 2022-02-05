@@ -1,4 +1,4 @@
-'''File where we will sample a set of waypionts, and plan a sequence of skills to have our pointmass travel through those waypoits'''
+'''File where we will sample a set of waypionts, and plan a sequence of skills to have our pointmass travel through those waypoints'''
 
 from comet_ml import Experiment
 import numpy as np
@@ -12,19 +12,35 @@ from skill_model import SkillModel
 import matplotlib.pyplot as plt
 
 device = torch.device('cuda:0')
-H = 100
-state_dim = 4
-a_dim = 2
-h_dim = 128
-z_dim = 20
+
+env = 'antmaze-medium-diverse-v0'
+env = gym.make(env)
+data = env.get_dataset()
+
+H = 40
+state_dim = data['observations'].shape[1]
+a_dim = data['actions'].shape[1]
+h_dim = 256
+z_dim = 256
 batch_size = 100
 epochs = 100000
 skill_seq_len = 10
-lr = 1e-4
+lr = 5e-5
+wd = 0
+state_dependent_prior = False
+
+if not state_dependent_prior:
+  filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
+else:
+  filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
 
 PATH = 'checkpoints/'+filename
 
-skill_model = SkillModel(state_dim, a_dim, z_dim, h_dim).cuda()
+if not state_dependent_prior:
+  skill_model = SkillModel(state_dim, a_dim, z_dim, h_dim).cuda()
+else:
+  skill_model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim).cuda()
+
 checkpoint = torch.load(PATH)
 skill_model.load_state_dict(checkpoint['model_state_dict'])
 
@@ -38,7 +54,15 @@ goal_seq = 2*torch.rand((1,skill_seq_len,state_dim), device=device) - 1
 
 experiment = Experiment(api_key = 'yQQo8E8TOCWYiVSruS7nxHaB5', project_name = 'skill-learning', workspace="anirudh-27")
 experiment.add_tag('Skill PLanning')
-experiment.log_parameters({'lr':lr,'h_dim':h_dim})
+experiment.log_parameters({'lr':lr,
+							   'h_dim':h_dim,
+							   'state_dependent_prior':state_dependent_prior,
+							   'z_dim':z_dim,
+                 'skill_seq_len':skill_seq_len,
+			  				   'H':H,
+			  				   'a_dim':a_dim,
+			  				   'state_dim':state_dim,
+			  				   'l2_reg':wd})
 experiment.log_metric('Goals', goal_seq)
 
 for e in range(epochs):
@@ -52,8 +76,6 @@ for e in range(epochs):
 # Test plan: deploy learned skills in actual environment.  Now we're going be selecting base-level actions conditioned on the current skill and state, and executign that action in the real environment
 ll_policy = skill_model.decoder.ll_policy
 
-env = PointmassEnv()
-
 state = env.reset()
 states = []
 for i in range(skill_seq_len):
@@ -63,7 +85,7 @@ for i in range(skill_seq_len):
   # run skill for H timesteps
   for j in range(H):
     action = ll_policy.numpy_policy(state,z)
-    state = env.step(action)
+    state,_,_,_ = env.step(action)
     
     skill_seq_states.append(state)
   
