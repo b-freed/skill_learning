@@ -207,7 +207,11 @@ for i in range(n_epochs):
 	experiment.log_metric("test_kl_loss", test_kl_loss, step=i)
 
 	if i % 10 == 0:
-		filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log.pth'
+		if not state_dependent_prior:
+			filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log.pth'
+		else:
+			filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log.pth'
+			
 		checkpoint_path = 'checkpoints/'+ filename
 		torch.save({
 							'model_state_dict': model.state_dict(),
@@ -215,7 +219,11 @@ for i in range(n_epochs):
 							}, checkpoint_path)
 	if test_loss < min_test_loss:
 		min_test_loss = test_loss
-		filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
+		if not state_dependent_prior:
+			filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
+		else:
+			filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
+			
 		checkpoint_path = 'checkpoints/'+ filename
 		torch.save({'model_state_dict': model.state_dict(),
 			    'model_optimizer_state_dict': model_optimizer.state_dict()}, checkpoint_path)
