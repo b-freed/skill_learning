@@ -30,16 +30,16 @@ wd = 0
 state_dependent_prior = False
 
 if not state_dependent_prior:
-  filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
+  	filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
 else:
-  filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
+  	filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
 
 PATH = 'checkpoints/'+filename
 
 if not state_dependent_prior:
-  skill_model = SkillModel(state_dim, a_dim, z_dim, h_dim).cuda()
+  	skill_model = SkillModel(state_dim, a_dim, z_dim, h_dim).cuda()
 else:
-  skill_model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim).cuda()
+  	skill_model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim).cuda()
 
 checkpoint = torch.load(PATH)
 skill_model.load_state_dict(checkpoint['model_state_dict'])
@@ -58,7 +58,7 @@ experiment.log_parameters({'lr':lr,
 							   'h_dim':h_dim,
 							   'state_dependent_prior':state_dependent_prior,
 							   'z_dim':z_dim,
-                 'skill_seq_len':skill_seq_len,
+                 				           'skill_seq_len':skill_seq_len,
 			  				   'H':H,
 			  				   'a_dim':a_dim,
 			  				   'state_dim':state_dim,
@@ -66,12 +66,12 @@ experiment.log_parameters({'lr':lr,
 experiment.log_metric('Goals', goal_seq)
 
 for e in range(epochs):
-  # Optimize plan: compute expected cost according to the current sequence of skills, take GD step on cost to optimize skills
-  exp_cost = skill_model.get_expected_cost(s0, skill_seq, goal_seq)
-  seq_optimizer.zero_grad()
-  exp_cost.backward()
-  seq_optimizer.step()
-  experiment.log_metric("Cost", exp_cost, step=e)
+  	# Optimize plan: compute expected cost according to the current sequence of skills, take GD step on cost to optimize skills
+  	exp_cost = skill_model.get_expected_cost(s0, skill_seq, goal_seq)
+  	seq_optimizer.zero_grad()
+  	exp_cost.backward()
+  	seq_optimizer.step()
+  	experiment.log_metric("Cost", exp_cost, step=e)
 
 # Test plan: deploy learned skills in actual environment.  Now we're going be selecting base-level actions conditioned on the current skill and state, and executign that action in the real environment
 ll_policy = skill_model.decoder.ll_policy
@@ -79,17 +79,17 @@ ll_policy = skill_model.decoder.ll_policy
 state = env.reset()
 states = []
 for i in range(skill_seq_len):
-  # get the skill
-  z = skill_seq[:,i:i+1,:]
-  skill_seq_states = []
-  # run skill for H timesteps
-  for j in range(H):
-    action = ll_policy.numpy_policy(state,z)
-    state,_,_,_ = env.step(action)
+  	# get the skill
+  	z = skill_seq[:,i:i+1,:]
+  	skill_seq_states = []
+  	# run skill for H timesteps
+  	for j in range(H):
+    		action = ll_policy.numpy_policy(state,z)
+    		state,_,_,_ = env.step(action)
     
-    skill_seq_states.append(state)
+    		skill_seq_states.append(state)
   
-  states.append(skill_seq_states)
+  	states.append(skill_seq_states)
 
 states = np.stack(states)
 
