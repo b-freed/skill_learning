@@ -87,7 +87,8 @@ for e in range(epochs):
 	seq_optimizer.step()
 	print(e)
 	print("Cost: ", exp_cost)
-	experiment.log_metric("Cost", exp_cost, step=e)
+	if e % 100 == 0:
+		experiment.log_metric("Cost", exp_cost, step=e)
 
 # Test plan: deploy learned skills in actual environment.  Now we're going be selecting base-level actions conditioned on the current skill and state, and executign that action in the real environment
 ll_policy = skill_model.decoder.ll_policy
