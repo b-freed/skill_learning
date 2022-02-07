@@ -23,7 +23,8 @@ from math import pi
 
 device = torch.device('cuda:0')
 
-env = 'antmaze-medium-diverse-v0'
+#env = 'antmaze-medium-diverse-v0'
+env = 'maze2d-large-v1'
 env = gym.make(env)
 data = env.get_dataset()
 
