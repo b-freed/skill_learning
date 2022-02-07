@@ -44,7 +44,7 @@ if not state_dependent_prior:
 else:
   	filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
 '''
-filename = 'Maze2d_H'+str(H)+'_log_best.pth'
+filename = 'maze2d_H'+str(H)+'_log_best.pth'
 
 PATH = 'checkpoints/'+filename
 
