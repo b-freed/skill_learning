@@ -80,14 +80,14 @@ experiment.log_parameters({'lr':lr,
 #experiment.log_metric('Goals', goal_seq)
 
 for e in range(epochs):
-  	# Optimize plan: compute expected cost according to the current sequence of skills, take GD step on cost to optimize skills
-  	exp_cost = skill_model.get_expected_cost(s0, skill_seq, goal_seq)
-  	seq_optimizer.zero_grad()
-  	exp_cost.backward()
-  	seq_optimizer.step()
+	# Optimize plan: compute expected cost according to the current sequence of skills, take GD step on cost to optimize skills
+	exp_cost = skill_model.get_expected_cost(s0, skill_seq, goal_seq)
+	seq_optimizer.zero_grad()
+	exp_cost.backward()
+	seq_optimizer.step()
 	print(e)
-	print('Cost: ', exp_cost)
-  	experiment.log_metric("Cost", exp_cost, step=e)
+	print("Cost: ", exp_cost)
+	experiment.log_metric("Cost", exp_cost, step=e)
 
 # Test plan: deploy learned skills in actual environment.  Now we're going be selecting base-level actions conditioned on the current skill and state, and executign that action in the real environment
 ll_policy = skill_model.decoder.ll_policy
