@@ -25,6 +25,7 @@ device = torch.device('cuda:0')
 
 #env = 'antmaze-medium-diverse-v0'
 env = 'maze2d-large-v1'
+env_name = env
 env = gym.make(env)
 data = env.get_dataset()
 
@@ -66,7 +67,7 @@ seq_optimizer = torch.optim.Adam([skill_seq], lr=lr)
 goal_seq = 2*torch.rand((1,skill_seq_len,state_dim), device=device) - 1
 
 experiment = Experiment(api_key = 'yQQo8E8TOCWYiVSruS7nxHaB5', project_name = 'skill-learning', workspace="anirudh-27")
-experiment.add_tag('Skill PLanning')
+experiment.add_tag('Skill PLanning for '+env_name)
 experiment.log_parameters({'lr':lr,
 							   'h_dim':h_dim,
 							   'state_dependent_prior':state_dependent_prior,
