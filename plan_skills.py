@@ -120,9 +120,11 @@ plt.scatter(goals[:,:,0],goals[:,:,1], label='Goals')
 plt.legend(loc='lower center', bbox_to_anchor=(0.5, -0.15), ncol= 3)
 
 if not state_dependent_prior:
-	plt.savefig('Planned Skills (No State Dependent Prior)')
+	plt.title('Planned Skills (No State Dependent Prior)')
+	plt.savefig('Skill_planning_H'+str(H)+'_sdp_'+'false'+'.png')
 else:
-	plt.savefig('Planned skills (State Dependent Prior)')
+	plt.title('Planned skills (State Dependent Prior)')
+	plt.savefig('Skill_planning_H'+str(H)+'.png')
 
 
 # compute test and train plan cost, plot so we can see what they;re doing
