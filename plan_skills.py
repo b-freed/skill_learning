@@ -27,12 +27,14 @@ epochs = 100000
 skill_seq_len = 10
 lr = 5e-5
 wd = 0
-state_dependent_prior = False
-
+state_dependent_prior = True
+'''
 if not state_dependent_prior:
   	filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
 else:
   	filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
+'''
+filename = 'Maze2d_H'+str(H)+'_log_best.pth'
 
 PATH = 'checkpoints/'+filename
 
@@ -97,11 +99,16 @@ goals = goal_seq.detach().cpu().numpy()
 goals = np.stack(goals)
 
 plt.figure()
-plt.scatter(states[:,:,0],states[:,:,1])
-plt.scatter(states[:,0,0],states[:,0,1])
-plt.scatter(states[skill_seq_len-1,H-1,0],states[skill_seq_len-1,H-1,1])
-plt.scatter(goals[:,:,0],goals[:,:,1])
-plt.show()
+plt.scatter(states[:,:,0],states[:,:,1], label='Trajectory')
+plt.scatter(states[:,0,0],states[:,0,1], label='Initial State')
+plt.scatter(states[skill_seq_len-1,H-1,0],states[skill_seq_len-1,H-1,1], label='Final State')
+plt.scatter(goals[:,:,0],goals[:,:,1], label='Goals')
+plt.legend(loc='lower center', bbox_to_anchor=(0.5, -0.15), ncol= 3)
+
+if not state_dependent_prior:
+	plt.savefig('Planned Skills (No State Dependent Prior)')
+else:
+	plt.savefig('Planned skills (State Dependent Prior)')
 
 
 # compute test and train plan cost, plot so we can see what they;re doing
