@@ -97,10 +97,10 @@ ll_policy = skill_model.decoder.ll_policy
 states = []
 for i in range(skill_seq_len):
 	state = env.reset()
-  	# get the skill
-  	z = skill_seq[:,i:i+1,:]
-  	skill_seq_states = []
-  	# run skill for H timesteps
+	# get the skill
+	z = skill_seq[:,i:i+1,:]
+	skill_seq_states = []
+	# run skill for H timesteps
   	for j in range(H):
     		action = ll_policy.numpy_policy(state,z)
     		state,_,_,_ = env.step(action)
