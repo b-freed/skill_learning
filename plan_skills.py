@@ -106,7 +106,6 @@ for i in range(skill_seq_len):
 		state,_,_,_ = env.step(action)
 
 		skill_seq_states.append(state)
-  
 	states.append(skill_seq_states)
 
 states = np.stack(states)
