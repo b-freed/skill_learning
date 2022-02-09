@@ -102,12 +102,12 @@ for i in range(skill_seq_len):
 	skill_seq_states = []
 	# run skill for H timesteps
   	for j in range(H):
-    		action = ll_policy.numpy_policy(state,z)
-    		state,_,_,_ = env.step(action)
-    
-    		skill_seq_states.append(state)
+		action = ll_policy.numpy_policy(state,z)
+		state,_,_,_ = env.step(action)
+
+		skill_seq_states.append(state)
   
-  	states.append(skill_seq_states)
+	states.append(skill_seq_states)
 
 states = np.stack(states)
 
