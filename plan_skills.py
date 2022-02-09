@@ -101,15 +101,13 @@ for i in range(skill_seq_len):
 	z = skill_seq[:,i:i+1,:]
 	skill_seq_states = []
 	# run skill for H timesteps
-  	for j in range(H):
+	for j in range(H):
 		action = ll_policy.numpy_policy(state,z)
 		state,_,_,_ = env.step(action)
-
 		skill_seq_states.append(state)
 	states.append(skill_seq_states)
 
 states = np.stack(states)
-
 goals = goal_seq.detach().cpu().numpy()
 goals = np.stack(goals)
 
