@@ -93,10 +93,9 @@ for e in range(epochs):
 # Test plan: deploy learned skills in actual environment.  Now we're going be selecting base-level actions conditioned on the current skill and state, and executign that action in the real environment
 ll_policy = skill_model.decoder.ll_policy
 
-#state = env.reset()
+state = env.reset()
 states = []
 for i in range(skill_seq_len):
-	state = env.reset()
 	# get the skill
 	z = skill_seq[:,i:i+1,:]
 	skill_seq_states = []
