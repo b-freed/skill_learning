@@ -65,7 +65,7 @@ s0 = torch.zeros((batch_size,1,state_dim), device=device)
 # initialize optimizer for skill sequence
 seq_optimizer = torch.optim.Adam([skill_seq], lr=lr)
 # determine waypoints
-goal_seq = torch.tensor(random.choice(data['observations'][:,:2]), device=device)
+goal_seq = torch.tensor(random.choice(data['observations']), device=device)
 #goal_seq = 2*torch.rand((1,skill_seq_len,state_dim), device=device) - 1
 
 experiment = Experiment(api_key = 'yQQo8E8TOCWYiVSruS7nxHaB5', project_name = 'skill-learning', workspace="anirudh-27")
