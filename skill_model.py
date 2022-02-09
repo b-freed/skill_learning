@@ -366,7 +366,7 @@ class SkillModelStateDependentPrior(nn.Module):
         
         #compute cost for sequence of states/skills
         pred_states = torch.cat(s_i,dim = 1)
-        cost = torch.mean((pred_states[:,:2] - goal_states[:,:2])**2)
+        cost = torch.mean((pred_states[:,:,:2] - goal_states[:,:,:2])**2)
         
         return cost
     
@@ -480,7 +480,7 @@ class SkillModel(nn.Module):
         
         #compute cost for sequence of states/skills
         pred_states = torch.cat(s_i,dim = 1)
-        cost = torch.mean((pred_states[:,:2] - goal_states[:,:2])**2)
+        cost = torch.mean((pred_states[:,:,:2] - goal_states[:,:,:2])**2)
         
         return cost
     
