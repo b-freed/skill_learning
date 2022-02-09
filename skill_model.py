@@ -350,7 +350,7 @@ class SkillModelStateDependentPrior(nn.Module):
         s_i = s0
         
         skill_seq_len = skill_seq.shape[1]
-        pred_states = []
+        #pred_states = []
         for i in range(skill_seq_len):
             z_i = skill_seq[:,i:i+1,:] # might need to reshape
             # converting z_i from 1x1xz_dim to batch_size x 1 x z_dim
@@ -362,11 +362,11 @@ class SkillModelStateDependentPrior(nn.Module):
             s_sampled = self.reparameterize(s_mean, s_sig)
             s_i = s_sampled
             
-            pred_states.append(s_sampled)
+            #pred_states.append(s_sampled)
         
         #compute cost for sequence of states/skills
-        pred_states = torch.cat(pred_states,dim = 1)
-        cost = torch.mean((pred_states - goal_states)**2)
+        pred_states = torch.cat(s_i,dim = 1)
+        cost = torch.mean((pred_states[:,:2] - goal_states)**2)
         
         return cost
     
@@ -464,7 +464,7 @@ class SkillModel(nn.Module):
         s_i = s0
         
         skill_seq_len = skill_seq.shape[1]
-        pred_states = []
+        #pred_states = []
         for i in range(skill_seq_len):
             z_i = skill_seq[:,i:i+1,:] # might need to reshape
             # converting z_i from 1x1xz_dim to batch_size x 1 x z_dim
@@ -476,11 +476,11 @@ class SkillModel(nn.Module):
             s_sampled = self.reparameterize(s_mean, s_sig)
             s_i = s_sampled
             
-            pred_states.append(s_sampled)
+            #pred_states.append(s_sampled)
         
         #compute cost for sequence of states/skills
-        pred_states = torch.cat(pred_states,dim = 1)
-        cost = torch.mean((pred_states - goal_states)**2)
+        pred_states = torch.cat(s_i,dim = 1)
+        cost = torch.mean((pred_states[:,:2] - goal_states)**2)
         
         return cost
     
