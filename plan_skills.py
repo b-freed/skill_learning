@@ -117,7 +117,7 @@ plt.scatter(states[:,:,0],states[:,:,1], label='Trajectory')
 plt.scatter(states[:,0,0],states[:,0,1], label='Initial States')
 plt.scatter(states[:,-1,0],states[:,-1,1], label='Predicted Final States')
 plt.scatter(goals[:,:,0],goals[:,:,1], label='Goals')
-plt.legend(loc='lower center', bbox_to_anchor=(0.5, -0.2), ncol= 3)
+plt.legend(loc='lower center', bbox_to_anchor=(0.5, -0.2), ncol= 4)
 
 if not state_dependent_prior:
 	plt.title('Planned Skills (No State Dependent Prior)')
