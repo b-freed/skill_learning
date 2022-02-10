@@ -124,7 +124,7 @@ if not state_dependent_prior:
 	plt.savefig('Skill_planning_H'+str(H)+'_sdp_'+'false'+'.png')
 else:
 	plt.title('Planned skills (State Dependent Prior)')
-	plt.savefig('Skill_planning_H'+str(H)+'.png')
+	plt.savefig('Skill_planning1_H'+str(H)+'.png')
 
 
 # compute test and train plan cost, plot so we can see what they;re doing
