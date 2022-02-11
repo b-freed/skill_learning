@@ -22,6 +22,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 import matplotlib.transforms as transforms
 from math import pi
+from cem import cem
 
 device = torch.device('cuda:0')
 
@@ -87,17 +88,17 @@ seq_optimizer = torch.optim.Adam([skill_seq], lr=lr)
 goal_seq = torch.tensor([[random.choice(data['observations'])]], device=device)
 #goal_seq = 2*torch.rand((1,skill_seq_len,state_dim), device=device) - 1
 
-experiment = Experiment(api_key = 'yQQo8E8TOCWYiVSruS7nxHaB5', project_name = 'skill-learning', workspace="anirudh-27")
-experiment.add_tag('Skill PLanning for '+env_name)
-experiment.log_parameters({'lr':lr,
-							   'h_dim':h_dim,
-							   'state_dependent_prior':state_dependent_prior,
-							   'z_dim':z_dim,
-				 						   'skill_seq_len':skill_seq_len,
-			  				   'H':H,
-			  				   'a_dim':a_dim,
-			  				   'state_dim':state_dim,
-			  				   'l2_reg':wd})
+# experiment = Experiment(api_key = 'yQQo8E8TOCWYiVSruS7nxHaB5', project_name = 'skill-learning', workspace="anirudh-27")
+# experiment.add_tag('Skill PLanning for '+env_name)
+# experiment.log_parameters({'lr':lr,
+# 							   'h_dim':h_dim,
+# 							   'state_dependent_prior':state_dependent_prior,
+# 							   'z_dim':z_dim,
+# 				 						   'skill_seq_len':skill_seq_len,
+# 			  				   'H':H,
+# 			  				   'a_dim':a_dim,
+# 			  				   'state_dim':state_dim,
+# 			  				   'l2_reg':wd})
 #experiment.log_metric('Goals', goal_seq)
 
 def run_skill_seq(env,s0,model):
@@ -153,35 +154,40 @@ def run_skill_seq(env,s0,model):
 		plt.title('Planned skills (State Dependent Prior)')
 		plt.savefig('Skill_planning_H'+str(H)+'.png')
 
-for e in range(epochs):
-	# Optimize plan: compute expected cost according to the current sequence of skills, take GD step on cost to optimize skills
-	# print('goal_seq: ', goal_seq)
-	if e % 100 == 0:
-		run_skill_seq(env, s0, skill_model)
+	print('SAVED FIG!')
 
-	exp_cost,pred_states = skill_model.get_expected_cost(s0_torch, skill_seq, goal_seq)
-	seq_optimizer.zero_grad()
-	exp_cost.backward()
-	seq_optimizer.step()
-	# print(e)
-	# print("Cost: ", exp_cost)
-	# ipdb.set_trace()
-	if e % 100 == 0:
-		experiment.log_metric("Cost", exp_cost, step=e)
-		print('cost: ', exp_cost)
-		print('e: ', e)
-		plt.figure()
-		plt.plot(pred_states[:,:,0].T.detach().cpu().numpy(),pred_states[:,:,1].T.detach().cpu().numpy())
-		plt.scatter(goal_seq.flatten().detach().cpu().numpy()[0],goal_seq.flatten().detach().cpu().numpy()[1])
-		plt.savefig('heeeere figgy figgy')
-		
+# for e in range(epochs):
+# 	# Optimize plan: compute expected cost according to the current sequence of skills, take GD step on cost to optimize skills
+# 	# print('goal_seq: ', goal_seq)
+# 	if e % 100 == 0:
+# 		run_skill_seq(env, s0, skill_model)
 
+# 	exp_cost,pred_states = skill_model.get_expected_cost(s0_torch, skill_seq, goal_seq)
+# 	seq_optimizer.zero_grad()
+# 	exp_cost.backward()
+# 	seq_optimizer.step()
+# 	# print(e)
+# 	# print("Cost: ", exp_cost)
+# 	# ipdb.set_trace()
+# 	if e % 100 == 0:
+# 		experiment.log_metric("Cost", exp_cost, step=e)
+# 		print('cost: ', exp_cost)
+# 		print('e: ', e)
+# 		plt.figure()
+# 		plt.plot(pred_states[:,:,0].T.detach().cpu().numpy(),pred_states[:,:,1].T.detach().cpu().numpy())
+# 		plt.scatter(goal_seq.flatten().detach().cpu().numpy()[0],goal_seq.flatten().detach().cpu().numpy()[1])
+# 		plt.savefig('heeeere figgy figgy')
+
+cost_fn = lambda skill_seq: skill_model.get_expected_cost_for_cem(s0_torch, skill_seq, goal_seq)
 		
-		
+skill_seq,_ = cem(torch.zeros((skill_seq_len,z_dim),device=device),torch.ones((skill_seq_len,z_dim),device=device),cost_fn,100,.5,50)
+# ipdb.set_trace()
+skill_seq = skill_seq.unsqueeze(0)		
+
 		# if exp_cost < 1.0:
 		# 	break
 
-# run_skill_seq(env,s0,skill_model.decoder.ll_policy)
+run_skill_seq(env,s0,skill_model)
 
 # Test plan: deploy learned skills in actual environment.  Now we're going be selecting base-level actions conditioned on the current skill and state, and executign that action in the real environment
 # ll_policy = skill_model.decoder.ll_policy

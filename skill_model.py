@@ -8,6 +8,7 @@ from torch.distributions.transformed_distribution import TransformedDistribution
 import torch.distributions.normal as Normal
 import torch.distributions.kl as KL
 import ipdb
+import matplotlib.pyplot as plt
 
 
 class AbstractDynamics(nn.Module):
@@ -350,11 +351,15 @@ class SkillModelStateDependentPrior(nn.Module):
         s_i = s0
         
         skill_seq_len = skill_seq.shape[1]
-        #pred_states = []
+        pred_states = [s_i]
         for i in range(skill_seq_len):
-            z_i = skill_seq[:,i:i+1,:] # might need to reshape
+            # z_i = skill_seq[:,i:i+1,:] # might need to reshape
+            mu_z, sigma_z = self.prior(s_i)
+          
+
+            z_i = mu_z + sigma_z*torch.cat(batch_size*[skill_seq[:,i:i+1,:]],dim=0)
             # converting z_i from 1x1xz_dim to batch_size x 1 x z_dim
-            z_i = torch.cat(batch_size*[z_i],dim=0) # feel free to change this to tile
+            # z_i = torch.cat(batch_size*[z_i],dim=0) # feel free to change this to tile
             # use abstract dynamics model to predict mean and variance of state after executing z_i, conditioned on s_i
             s_mean, s_sig = self.decoder.abstract_dynamics(s_i,z_i)
             
@@ -362,14 +367,62 @@ class SkillModelStateDependentPrior(nn.Module):
             s_sampled = self.reparameterize(s_mean, s_sig)
             s_i = s_sampled
             
-            #pred_states.append(s_sampled)
+            pred_states.append(s_i)
         
         #compute cost for sequence of states/skills
-        pred_states = s_i
-        cost = torch.mean((pred_states[:,:,:2] - goal_states[:,:,:2])**2)
+        # print('predicted final loc: ', s_i[:,:,:2])
+        s_term = s_i
+        cost = torch.mean((s_term[:,:,:2] - goal_states[:,:,:2])**2)
+        
+        
+        return cost, torch.cat(pred_states,dim=1)
+    
+    def get_expected_cost_for_cem(self, s0, skill_seq, goal_state):
+        '''
+        s0 is initial state, batch_size x 1 x s_dim
+        skill sequence is a batch_size x skill_seq_len x z_dim tensor that representents a skill_seq_len sequence of skills
+        '''
+        # tile s0 along batch dimension
+        #s0_tiled = s0.tile([1,batch_size,1])
+        batch_size = s0.shape[0]
+        goal_state = torch.cat(batch_size * [goal_state],dim=0)
+        s_i = s0
+        
+        skill_seq_len = skill_seq.shape[1]
+        pred_states = [s_i]
+        for i in range(skill_seq_len):
+            # z_i = skill_seq[:,i:i+1,:] # might need to reshape
+            mu_z, sigma_z = self.prior(s_i)
+          
+
+            z_i = mu_z + sigma_z*skill_seq[:,i:i+1,:]
+            # ipdb.set_trace()
+            # converting z_i from 1x1xz_dim to batch_size x 1 x z_dim
+            # z_i = torch.cat(batch_size*[z_i],dim=0) # feel free to change this to tile
+            # use abstract dynamics model to predict mean and variance of state after executing z_i, conditioned on s_i
+            s_mean, s_sig = self.decoder.abstract_dynamics(s_i,z_i)
+            
+            # sample s_i+1 using reparameterize
+            s_sampled = self.reparameterize(s_mean, s_sig)
+            s_i = s_sampled
+            
+            pred_states.append(s_i)
+        
+        plt.figure()
+        pred_states = torch.cat(pred_states,1)
+        plt.plot(pred_states[:,:,0].T.detach().cpu().numpy(),pred_states[:,:,1].T.detach().cpu().numpy())
+        plt.scatter(s0[0,0,0].detach().cpu().numpy(),s0[0,0,1].detach().cpu().numpy(), label='init state')
+        plt.scatter(goal_state[0,0,0].detach().cpu().numpy(),goal_state[0,0,1].detach().cpu().numpy(),label='goal',s=300)
+        plt.legend()
+        plt.savefig('pred_states_cem')
+        #compute cost for sequence of states/skills
+        # print('predicted final loc: ', s_i[:,:,:2])
+        s_term = s_i
+        cost = torch.mean((s_term[:,:,:2] - goal_state[:,:,:2])**2,dim=-1).squeeze()
+        # ipdb.set_trace()
+        
         
         return cost
-    
     
     def reparameterize(self, mean, std):
         eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
