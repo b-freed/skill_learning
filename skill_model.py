@@ -414,6 +414,7 @@ class SkillModelStateDependentPrior(nn.Module):
         plt.scatter(s0[0,0,0].detach().cpu().numpy(),s0[0,0,1].detach().cpu().numpy(), label='init state')
         plt.scatter(goal_state[0,0,0].detach().cpu().numpy(),goal_state[0,0,1].detach().cpu().numpy(),label='goal',s=300)
         plt.legend()
+        plt.axis('square')
         plt.savefig('pred_states_cem')
         #compute cost for sequence of states/skills
         # print('predicted final loc: ', s_i[:,:,:2])
@@ -423,6 +424,61 @@ class SkillModelStateDependentPrior(nn.Module):
         
         
         return cost
+
+    def get_expected_cost_variable_length(self, s0, skill_seq, lengths, goal_state):
+        '''
+        s0 is initial state, batch_size x 1 x s_dim
+        skill sequence is a batch_size x skill_seq_len x z_dim tensor that representents a skill_seq_len sequence of skills
+        '''
+        # tile s0 along batch dimension
+        #s0_tiled = s0.tile([1,batch_size,1])
+        batch_size = s0.shape[0]
+        goal_state = torch.cat(batch_size * [goal_state],dim=0)
+        s_i = s0
+        
+        skill_seq_len = skill_seq.shape[1]
+        pred_states = [s_i]
+        costs = torch.zeros(batch_size,device=s0.device)
+        for i in range(skill_seq_len):
+            cost_i = (lengths == i)*torch.mean((s_i[:,:,:2] - goal_state[:,:,:2])**2,dim=-1).squeeze()
+            costs += cost_i
+            # z_i = skill_seq[:,i:i+1,:] # might need to reshape
+            mu_z, sigma_z = self.prior(s_i)
+          
+            # ipdb.set_trace()
+            z_i = mu_z + sigma_z*skill_seq[:,i:i+1,:]
+            # ipdb.set_trace()
+            # converting z_i from 1x1xz_dim to batch_size x 1 x z_dim
+            # z_i = torch.cat(batch_size*[z_i],dim=0) # feel free to change this to tile
+            # use abstract dynamics model to predict mean and variance of state after executing z_i, conditioned on s_i
+            s_mean, s_sig = self.decoder.abstract_dynamics(s_i,z_i)
+            
+            # sample s_i+1 using reparameterize
+            s_sampled = self.reparameterize(s_mean, s_sig)
+            s_i = s_sampled
+
+            
+            
+            pred_states.append(s_i)
+        
+        plt.figure()
+        plt.scatter(s0[0,0,0].detach().cpu().numpy(),s0[0,0,1].detach().cpu().numpy(), label='init state')
+        plt.scatter(goal_state[0,0,0].detach().cpu().numpy(),goal_state[0,0,1].detach().cpu().numpy(),label='goal',s=300)
+        pred_states = torch.cat(pred_states,1)
+        for i in range(batch_size):
+            # ipdb.set_trace()
+            plt.plot(pred_states[i,:lengths[i].item()+1,0].detach().cpu().numpy(),pred_states[i,:lengths[i].item()+1,1].detach().cpu().numpy())
+            
+        # pred_states = torch.cat(pred_states,1)
+        # plt.plot(pred_states[:,:,0].T.detach().cpu().numpy(),pred_states[:,:,1].T.detach().cpu().numpy())
+        # plt.scatter(s0[0,0,0].detach().cpu().numpy(),s0[0,0,1].detach().cpu().numpy(), label='init state')
+        # plt.scatter(goal_state[0,0,0].detach().cpu().numpy(),goal_state[0,0,1].detach().cpu().numpy(),label='goal',s=300)
+        # plt.legend()
+        # plt.axis('square')
+        plt.savefig('pred_states_cem_variable_length')
+        
+        
+        return costs
     
     def reparameterize(self, mean, std):
         eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
