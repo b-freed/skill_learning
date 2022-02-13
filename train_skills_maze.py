@@ -68,7 +68,7 @@ def test(model):
 
 # instantiating the environmnet, getting the dataset.
 # the data is in a big dictionary, containing long sequences of obs, rew, actions, goals
-env = 'kitchen-partial-v0'  # maze whatever
+env = 'antmaze-medium-diverse-v0'  # maze whatever
 env = gym.make(env)
 dataset = env.get_dataset()  # dictionary, with 'observations', 'rewards', 'actions', 'infos/goal'
 #dataset_file = "datasets/maze2d-umaze-v1.hdf5"
@@ -90,7 +90,7 @@ wd = 0
 state_dependent_prior = True
 
 
-goals = dataset['infos']
+goals = dataset['infos/goals']
 H = 20
 stride = 20
 n_epochs = 50000
@@ -136,7 +136,7 @@ def chunks(obs,actions,goals,H,stride):
 obs_chunks, action_chunks, targets = chunks(states, actions, goals, H, stride)
 
 experiment = Experiment(api_key = 'yQQo8E8TOCWYiVSruS7nxHaB5', project_name = 'skill-learning', workspace = 'anirudh-27')
-experiment.add_tag('Franka H_'+str(H)+' model')
+experiment.add_tag('Antmaze H_'+str(H)+' model')
 
 # First, instantiate a skill model
 if not state_dependent_prior:
@@ -208,9 +208,9 @@ for i in range(n_epochs):
 
 	if i % 10 == 0:
 		if not state_dependent_prior:
-			filename = 'Franka_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log.pth'
+			filename = 'Antmaze_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log.pth'
 		else:
-			filename = 'Franka_H'+str(H)+'_l2reg_'+str(wd)+'_log.pth'
+			filename = 'Antmaze_H'+str(H)+'_l2reg_'+str(wd)+'_log.pth'
 			
 		checkpoint_path = 'checkpoints/'+ filename
 		torch.save({
@@ -220,9 +220,9 @@ for i in range(n_epochs):
 	if test_loss < min_test_loss:
 		min_test_loss = test_loss
 		if not state_dependent_prior:
-			filename = 'Franka_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
+			filename = 'Antmaze_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
 		else:
-			filename = 'Franka_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
+			filename = 'Antmaze_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
 			
 		checkpoint_path = 'checkpoints/'+ filename
 		torch.save({'model_state_dict': model.state_dict(),
