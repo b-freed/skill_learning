@@ -90,7 +90,7 @@ wd = 0
 state_dependent_prior = True
 
 
-goals = dataset['infos/goal']
+goals = dataset['infos']
 H = 20
 stride = 20
 n_epochs = 50000
