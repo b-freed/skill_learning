@@ -89,8 +89,8 @@ state_dependent_prior = True
 
 
 goals = dataset['infos']
-H = 40
-stride = 40
+H = 20
+stride = 20
 n_epochs = 50000
 a_dist = 'normal' # 'tanh_normal' or 'normal'
 
