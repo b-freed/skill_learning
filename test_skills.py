@@ -69,7 +69,7 @@ if __name__ == '__main__':
 	batch_size = 1
 	episodes = 1
 	wd = 0
-	state_dependent_prior = False
+	state_dependent_prior = True
 
 
 	if not state_dependent_prior:
