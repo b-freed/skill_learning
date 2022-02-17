@@ -61,7 +61,7 @@ if __name__ == '__main__':
 	env = gym.make(env)
 	data = env.get_dataset()
 	
-	H = 20
+	H = 40
 	state_dim = data['observations'].shape[1]
 	a_dim = data['actions'].shape[1]
 	h_dim = 256
