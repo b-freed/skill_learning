@@ -18,7 +18,9 @@ import matplotlib.transforms as transforms
 from math import pi
 from matplotlib import animation
 from PIL import Image
-
+import cv2
+# from pygifsicle import optimize
+import imageio
 
 # def save_frames_as_gif(frames, path='./', filename='gym_animation.gif'):
 
@@ -39,3 +41,18 @@ def make_gif(frames,name):
     frame_one = frames[0]
     frame_one.save(name+'.gif', format="GIF", append_images=frames,
                save_all=True, duration=100, loop=0)
+
+# def make_video(frames,name):
+#     height,width,_ = frames[0].shape
+#     out = cv2.VideoWriter(name+'.avi',0,15, (height,width))
+ 
+#     for i in range(len(frames)):
+#         out.write(frames[i])
+#     out.release()
+
+def make_video(frames,name):
+    writer = imageio.get_writer(name+'.mp4', fps=20)
+
+    for im in frames:
+        writer.append_data(im)
+    writer.close()

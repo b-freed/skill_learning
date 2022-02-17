@@ -23,9 +23,9 @@ from matplotlib.patches import Ellipse
 import matplotlib.transforms as transforms
 from math import pi
 from cem import cem
-from utils import save_frames_as_gif
-from gym.wrappers.monitoring import video_recorder
-from utils import make_gif
+# from utils import make_video, save_frames_as_gif
+# from gym.wrappers.monitoring import video_recorder
+from utils import make_gif,make_video
 
 device = torch.device('cuda:0')
 
@@ -43,12 +43,11 @@ a_dim = data['actions'].shape[1]
 h_dim = 256
 z_dim = 256
 batch_size = 100
-epochs = 300000
 skill_seq_len = 10
 lr = 1e-4
-wd = 0
+wd = .001
 state_dependent_prior = True
-n_iters = 10
+n_iters = 50
 import glob
 '''
 if not state_dependent_prior:
@@ -94,9 +93,11 @@ skill_seq.requires_grad = True
 
 # s0_torch = torch.stack([env.reset_to_location(initial_loc)])
 # initialize optimizer for skill sequence
-seq_optimizer = torch.optim.Adam([skill_seq], lr=lr)
 # determine waypoints
-goal_seq = torch.tensor([[random.choice(data['observations'])]], device=device)
+goal_state = np.array(env.target_goal)#random.choice(data['observations'])
+print('goal_state: ', goal_state)
+# env.set_target(goal_state[:2])
+goal_seq = torch.tensor(goal_state, device=device).reshape(1,1,-1)
 #goal_seq = 2*torch.rand((1,skill_seq_len,state_dim), device=device) - 1
 
 # experiment = Experiment(api_key = 'yQQo8E8TOCWYiVSruS7nxHaB5', project_name = 'skill-learning', workspace="anirudh-27")
@@ -130,27 +131,47 @@ def run_skills_iterative_replanning(env,model,goals):
 	plt.figure()
 	# for i in range(skill_seq_len):
 	# ipdb.set_trace()
+	states = [s0]
 	frames = []
+	n=0
 	while np.sum((state[:2] - goals.flatten().detach().cpu().numpy()[:2])**2) > 1.0:
 	# for i in range(2):
 		state_torch = torch.cat(batch_size*[torch.tensor(state,dtype=torch.float32).cuda().reshape((1,1,-1))])
 		# ipdb.set_trace()
 		cost_fn = lambda skill_seq: skill_model.get_expected_cost_for_cem(state_torch, skill_seq, goal_seq)
-		skill_seq,_ = cem(torch.zeros((skill_seq_len,z_dim),device=device),torch.ones((skill_seq_len,z_dim),device=device),cost_fn,100,.5,n_iters)
+		skill_seq,_ = cem(torch.zeros((skill_seq_len,z_dim),device=device),torch.ones((skill_seq_len,z_dim),device=device),cost_fn,batch_size,.5,n_iters)
 		skill = skill_seq[0,:].unsqueeze(0)
 		mu_z, sigma_z = model.prior(torch.tensor(state,dtype=torch.float32).cuda().reshape(1,1,-1))
 		z = mu_z + sigma_z*skill
 		
 		for j in range(H):
 			frames.append(env.render(mode='rgb_array'))
-			env.render()
+			# env.render()
 			# vid.capture_frame()
 			action = model.decoder.ll_policy.numpy_policy(state,z)
 			state,_,_,_ = env.step(action)
+			states.append(state)
 			# skill_seq_states.append(state)
-			plt.scatter(state[0],state[1], label='Trajectory',c='b')
-		plt.savefig('ant_skills_iterative_replanning')
+			# plt.scatter(state[0],state[1], label='Trajectory',c='b')
+		n += 1
+
+		if n > 50:
+			return np.stack(states),False  # we did not succeed 
+	
+
+		plt.figure()
+		plt.scatter(np.stack(states)[:,0],np.stack(states)[:,1])
+		plt.scatter(goals.flatten().detach().cpu().numpy()[0],goals.flatten().detach().cpu().numpy()[1])
+		plt.axis('equal')
+		plt.savefig('ant_iterative_replanning_actual_states')
+	
+
+	
+
+
+		# plt.savefig('ant_skills_iterative_replanning')
 	# ipdb.set_trace()
+
 
 	# save_frames_as_gif(frames)
 	# for i,f in enumerate(frames):
@@ -158,7 +179,11 @@ def run_skills_iterative_replanning(env,model,goals):
 	# 	plt.imshow(f)
 	# 	plt.savefig('ant'+str())
 	env.close()
-	make_gif(frames,name='ant')
+	# make_gif(frames,name='ant')
+	print('MAKING VIDEO!')
+	make_video(frames,name='ant')
+
+	return np.stack(states),True
 
 
 		
@@ -239,8 +264,19 @@ def run_skill_seq(env,s0,model):
 # s0 = env.reset()
 # run_skill_seq(env,s0,skill_model)
 
-run_skills_iterative_replanning(env,skill_model,goal_seq)
-
+success_list = []
+for i in range(10):
+	states,success = run_skills_iterative_replanning(env,skill_model,goal_seq)
+	success_list.append(success)
+	np.save('success_list',success_list)
+print('success_list: ', success_list)
+print('np.mean(success_list): ', np.mean(success_list))
+# plt.figure()
+# plt.scatter(states[:,0],states[:,1])
+# plt.scatter(goal_state[0],goal_state[1])
+# plt.axis('equal')
+# print('SAVING!')
+# plt.savefig('ant_iterative_replanning_actual_states')
 
 
 

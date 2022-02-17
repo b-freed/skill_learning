@@ -86,8 +86,10 @@ a_dim = actions.shape[1]
 h_dim = 256
 z_dim = 256
 lr = 5e-5
-wd = 0
-state_dependent_prior = False
+wd = 0.001
+state_dependent_prior = True
+state_dec_stop_grad = True
+beta = 0.1
 
 
 goals = dataset['infos/goal']
@@ -135,14 +137,14 @@ def chunks(obs,actions,goals,H,stride):
 
 obs_chunks, action_chunks, targets = chunks(states, actions, goals, H, stride)
 
-experiment = Experiment(api_key = 'yQQo8E8TOCWYiVSruS7nxHaB5', project_name = 'skill-learning', workspace = 'anirudh-27')
+experiment = Experiment(api_key = '9mxH2vYX20hn9laEr0KtHLjAa', project_name = 'skill-learning')
 experiment.add_tag('AntMaze H_'+str(H)+' model')
 
 # First, instantiate a skill model
 if not state_dependent_prior:
 	model = SkillModel(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist).cuda()
 else:
-	model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist).cuda()
+	model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist,state_dec_stop_grad=state_dec_stop_grad,beta=beta).cuda()
 
 model_optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
 
@@ -154,7 +156,8 @@ experiment.log_parameters({'lr':lr,
 			   				   'a_dist':a_dist,
 			  				   'a_dim':a_dim,
 			  				   'state_dim':state_dim,
-			  				   'l2_reg':wd})
+			  				   'l2_reg':wd,
+							   'state_dec_stop_grad':state_dec_stop_grad})
 
 # add chunks of data to a pytorch dataloader
 inputs = np.concatenate([obs_chunks, action_chunks],axis=-1) # array that is dataset_size x T x state_dim+action_dim

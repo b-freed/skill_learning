@@ -177,7 +177,7 @@ class Decoder(nn.Module):
     -embed z
     -Pass into fully connected network to get "state T features"
     '''
-    def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist):
+    def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist,state_dec_stop_grad):
 
         super(Decoder,self).__init__()
         
@@ -189,6 +189,8 @@ class Decoder(nn.Module):
         self.ll_policy = LowLevelPolicy(state_dim,a_dim,z_dim,h_dim, a_dist)
         self.emb_layer  = nn.Linear(state_dim+z_dim,h_dim)
         self.fc = nn.Sequential(nn.Linear(state_dim+z_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
+
+        self.state_dec_stop_grad = state_dec_stop_grad
         
     def forward(self,states,z):
 
@@ -204,7 +206,8 @@ class Decoder(nn.Module):
         '''
         
         s_0 = states[:,0:1,:]
-        sT_mean,sT_sig = self.abstract_dynamics(s_0,z)
+        z_detached = z.detach()
+        sT_mean,sT_sig = self.abstract_dynamics(s_0,z_detached)
         a_mean,a_sig   = self.ll_policy(states,z)
 
 
@@ -257,15 +260,16 @@ class Prior(nn.Module):
 
 
 class SkillModelStateDependentPrior(nn.Module):
-    def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal'):
+    def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal',state_dec_stop_grad=False,beta=1.0):
         super(SkillModelStateDependentPrior, self).__init__()
 
         self.state_dim = state_dim # state dimension
         self.a_dim = a_dim # action dimension
 
         self.encoder = Encoder(state_dim,a_dim,z_dim,h_dim)
-        self.decoder = Decoder(state_dim,a_dim,z_dim,h_dim, a_dist)  # TODO
+        self.decoder = Decoder(state_dim,a_dim,z_dim,h_dim, a_dist, state_dec_stop_grad)
         self.prior   = Prior(state_dim,z_dim,h_dim)
+        self.beta    = beta
 
     def forward(self,states,actions):
         
@@ -334,7 +338,7 @@ class SkillModelStateDependentPrior(nn.Module):
         # kl_loss = torch.mean(torch.sum(F.kl_div(z_post_dist, z_prior_dist),dim=-1))
         kl_loss = torch.mean(torch.sum(KL.kl_divergence(z_post_dist, z_prior_dist), dim=-1))/T # divide by T because all other losses we take mean over T dimension, effectively dividing by T
 
-        loss_tot = s_T_loss + a_loss + kl_loss
+        loss_tot = s_T_loss + a_loss + self.beta*kl_loss
         # loss_tot = s_T_loss + kl_loss
 
         return  loss_tot, s_T_loss, a_loss, kl_loss
