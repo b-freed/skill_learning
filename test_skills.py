@@ -57,7 +57,7 @@ if __name__ == '__main__':
 
 	device = torch.device('cuda:0')
 	
-	env = 'antmaze-medium-diverse-v0'
+	env = 'maze2d-large-v1'
 	env = gym.make(env)
 	data = env.get_dataset()
 	
@@ -73,9 +73,11 @@ if __name__ == '__main__':
 
 
 	if not state_dependent_prior:
-		filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
+		#filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
+		filename = 'Noisy1_maze2d_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
 	else:
-		filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
+		#filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
+		filename = 'Noisy1_maze2d_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
 	PATH = 'checkpoints/'+filename
 	
 	if not state_dependent_prior:
@@ -196,9 +198,9 @@ plt.scatter(pred_states_mean[:,0],pred_states_mean[:,1], c='g', label='Mean of P
 plt.legend(loc='lower center', bbox_to_anchor=(0.5, -0.15), ncol= 3)
 
 if not state_dependent_prior:
-	plt.title('Skill Execution & Prediction (No Skill-Dependent Prior)')
+	plt.title('Skill Execution & Prediction (Noisy, No Skill-Dependent Prior)')
 else:
-	plt.title('Skill Execution & Prediction (Skill-Dependent Prior)')
+	plt.title('Skill Execution & Prediction (Noisy, Skill-Dependent Prior)')
 	
 plt.savefig('Skill_Prediction_H'+str(H)+'_l2reg_'+str(wd)+'.png')
 
