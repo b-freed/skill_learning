@@ -26,8 +26,8 @@ def run_skill(skill_model,s0,skill,env,H,render):
 	
 	actions = []
 	frames = []
-	for j in range(H): #H-1 if H!=1
-	# for j in range(40):
+	# for j in range(H): #H-1 if H!=1
+	for j in range(40):
 		if render:
 			frames.append(env.render(mode='rgb_array'))
 		action = skill_model.decoder.ll_policy.numpy_policy(state,skill)
@@ -76,13 +76,17 @@ if __name__ == '__main__':
 	episodes = 20
 	wd = .001
 	state_dependent_prior = True
+	n_skills = 3
+	colors = ['r','g','b']
 
 
-	if not state_dependent_prior:
-		filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
-	else:
-		filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
+	# if not state_dependent_prior:
+	# 	filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
+	# else:
+	# 	filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
 	# filename = 'Franka_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
+	# filename = 'Antmaze_H20_l2reg_0.001_stopgrad_log_best.pth'
+	filename = 'AntMaze_H20_l2reg_0.001_a_10.0_b_1.0_log_best.pth'
 	PATH = 'checkpoints/'+filename
 	
 	
@@ -128,97 +132,117 @@ if __name__ == '__main__':
 
 
 
-actual_states = []
-terminal_states = []
-pred_states_sig = []
-pred_states_mean = []
-action_dist = []
-frames = []
-mses = []
-state_lls = []
-# collect an episode of data
+	actual_states = []
+	terminal_states = []
+	pred_states_sig = []
+	pred_states_mean = []
+	action_dist = []
+	frames = []
+	mses = []
+	state_lls = []
+	# collect an episode of data
 
-render = False
+	render = False
 
-for i in range(episodes):
-	initial_state = env.reset()
-	state = initial_state
-	print('i: ', i)
-
-	state = torch.reshape(torch.tensor(state,dtype=torch.float32).cuda(), (1,1,state_dim))
-	#actions = torch.tensor(actions,dtype=torch.float32).cuda()
-	
-	if not state_dependent_prior:
-		z_mean = torch.zeros((1,1,z_dim), device=device)
-		z_sig = torch.ones((1,1,z_dim), device=device)
-	else:
-		z_mean,z_sig = skill_model_sdp.prior(state)
-	
-	z = skill_model_sdp.reparameterize(z_mean,z_sig)
-	sT_mean,sT_sig = skill_model_sdp.decoder.abstract_dynamics(state,z)
-	#ipdb.set_trace()
-	
-
-# 	# infer the skill
-# 	z_mean,z_sig = skill_model.encoder(states,actions)
-
-# 	z = skill_model.reparameterize(z_mean,z_sig)
-
-# 	# from the skill, predict the actions and terminal state
-# 	# sT_mean,sT_sig,a_mean,a_sig = skill_model.decoder(states,z)
-# 	sT_mean,sT_sig = skill_model.decoder.abstract_dynamics(states[:,0:1,:],z)
-	
-
-	states_actual,actions,skill_frames = run_skill(skill_model_sdp, state,z,env,H,render)
-	state = states_actual[-1,:]
-	terminal_states.append(state)
-	mses.append(np.mean((state - sT_mean.flatten().detach().cpu().numpy())**2))
-	state_dist = Normal.Normal(sT_mean, sT_sig )
-	state_ll = torch.mean(state_dist.log_prob(torch.tensor(state,dtype=torch.float32,device=device).reshape(1,1,-1)))
-	state_lls.append(state_ll.item())
-	frames += skill_frames
-	# states_actual,actions = run_skill_with_disturbance(skill_model_sdp, states[:,0:1,:],z,env,H)
-	
 	plt.figure()
-	plt.scatter(states_actual[:,0],states_actual[:,1])
-	plt.scatter(states_actual[0,0],states_actual[0,1])
-	plt.errorbar(sT_mean[0,0,0].detach().cpu().numpy(),sT_mean[0,0,1].detach().cpu().numpy(),xerr=sT_sig[0,0,0].detach().cpu().numpy(),yerr=sT_sig[0,0,1].detach().cpu().numpy())
+	for j in range(n_skills):
+		initial_state = env.reset()
+		state = initial_state
 
+		state = torch.reshape(torch.tensor(state,dtype=torch.float32).cuda(), (1,1,state_dim))
+		#actions = torch.tensor(actions,dtype=torch.float32).cuda()
+
+		if not state_dependent_prior:
+			z_mean = torch.zeros((1,1,z_dim), device=device)
+			z_sig = torch.ones((1,1,z_dim), device=device)
+		else:
+			z_mean,z_sig = skill_model_sdp.prior(state)
+
+		z = skill_model_sdp.reparameterize(z_mean,z_sig)
+
+		for i in range(episodes):
+			initial_state = env.reset()
+			state = initial_state
+			print('i: ', i)
+
+			state = torch.reshape(torch.tensor(state,dtype=torch.float32).cuda(), (1,1,state_dim))
+			#actions = torch.tensor(actions,dtype=torch.float32).cuda()
+			
+			# if not state_dependent_prior:
+			# 	z_mean = torch.zeros((1,1,z_dim), device=device)
+			# 	z_sig = torch.ones((1,1,z_dim), device=device)
+			# else:
+			# 	z_mean,z_sig = skill_model_sdp.prior(state)
+			
+			# z = skill_model_sdp.reparameterize(z_mean,z_sig)
+			sT_mean,sT_sig = skill_model_sdp.decoder.abstract_dynamics(state,z)
+			#ipdb.set_trace()
+			
+
+		# 	# infer the skill
+		# 	z_mean,z_sig = skill_model.encoder(states,actions)
+
+		# 	z = skill_model.reparameterize(z_mean,z_sig)
+
+		# 	# from the skill, predict the actions and terminal state
+		# 	# sT_mean,sT_sig,a_mean,a_sig = skill_model.decoder(states,z)
+		# 	sT_mean,sT_sig = skill_model.decoder.abstract_dynamics(states[:,0:1,:],z)
+			
+
+			states_actual,actions,skill_frames = run_skill(skill_model_sdp, state,z,env,H,render)
+			state = states_actual[-1,:]
+			terminal_states.append(state)
+			mses.append(np.mean((state - sT_mean.flatten().detach().cpu().numpy())**2))
+			state_dist = Normal.Normal(sT_mean, sT_sig )
+			state_ll = torch.mean(state_dist.log_prob(torch.tensor(state,dtype=torch.float32,device=device).reshape(1,1,-1)))
+			state_lls.append(state_ll.item())
+			frames += skill_frames
+			# states_actual,actions = run_skill_with_disturbance(skill_model_sdp, states[:,0:1,:],z,env,H)
+			
+			
+			plt.scatter(states_actual[:,0],states_actual[:,1],c=colors[j])
+			plt.scatter(states_actual[0,0],states_actual[0,1],c=colors[j])
+			plt.errorbar(sT_mean[0,0,0].detach().cpu().numpy(),sT_mean[0,0,1].detach().cpu().numpy(),xerr=sT_sig[0,0,0].detach().cpu().numpy(),yerr=sT_sig[0,0,1].detach().cpu().numpy(),c=colors[j])
+
+		actual_states.append(states_actual)
+		action_dist.append(actions)
+		pred_states_mean.append(sT_mean[0,0,:].detach().cpu().numpy())
+		
+	
 	plt.legend(['Actual Trajectory','Initial State','Predicted Terminal State'])
 	plt.title('Skill Execution & Prediction (Skill-Dependent Prior) '+str(i))
 	plt.axis('square')
-	plt.savefig('Skill_Prediction_H'+str(H)+'_'+str(i)+'.png')
-	
-	
-	
-	actual_states.append(states_actual)
-	action_dist.append(actions)
-	pred_states_mean.append(sT_mean[0,0,:].detach().cpu().numpy())
-	
-	# pred_states_sig.append([sT_sig[0,-1,0].detach().cpu().numpy(),sT_sig[0,-1,1].detach().cpu().numpy()])
-	
-pred_states_mean = np.stack(pred_states_mean)
-terminal_states = np.stack(terminal_states)
-	
-# make_gif(frames,'franka')
-if render:
-	make_video(frames,'franka')
+	# plt.savefig('Skill_Prediction_H'+str(H)+'_'+str(i)+'.png')
+	plt.savefig('Skill_Prediction_H'+str(H)+'_'+'.png')
 
-# print('pred_states_mean.shape: ', pred_states_mean.shape)
-# print('terminal_states.shape: ', terminal_states.shape)
-# for i in range(terminal_states.shape[-1]):
-# 	plt.figure()
-# 	plt.plot(terminal_states[:,i])
-# 	plt.plot(pred_states_mean[:,i])
-# 	plt.savefig('states_'+str(i))
+		
+		
+		
+		
+		# pred_states_sig.append([sT_sig[0,-1,0].detach().cpu().numpy(),sT_sig[0,-1,1].detach().cpu().numpy()])
+		
+	pred_states_mean = np.stack(pred_states_mean)
+	terminal_states = np.stack(terminal_states)
+		
+	# make_gif(frames,'franka')
+	if render:
+		make_video(frames,'franka')
 
-# plt.figure()
-# plt.plot(mses)
-# plt.savefig('mses')
+	# print('pred_states_mean.shape: ', pred_states_mean.shape)
+	# print('terminal_states.shape: ', terminal_states.shape)
+	# for i in range(terminal_states.shape[-1]):
+	# 	plt.figure()
+	# 	plt.plot(terminal_states[:,i])
+	# 	plt.plot(pred_states_mean[:,i])
+	# 	plt.savefig('states_'+str(i))
 
-# plt.figure()
-# plt.plot(state_lls)
-# plt.savefig('state_lls')
+	# plt.figure()
+	# plt.plot(mses)
+	# plt.savefig('mses')
+
+	# plt.figure()
+	# plt.plot(state_lls)
+	# plt.savefig('state_lls')
 
 
 

@@ -6,10 +6,12 @@ from torch.utils.data import TensorDataset
 from torch.utils.data.dataloader import DataLoader
 from torch.distributions.transformed_distribution import TransformedDistribution
 import torch.distributions.normal as Normal
+import torch.distributions.categorical as Categorical
+import torch.distributions.mixture_same_family as MixtureSameFamily
 import torch.distributions.kl as KL
 import ipdb
 import matplotlib.pyplot as plt
-
+from utils import reparameterize
 
 class AbstractDynamics(nn.Module):
     '''
@@ -110,6 +112,45 @@ class LowLevelPolicy(nn.Module):
     def reparameterize(self, mean, std):
         eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
         return mean + std*eps
+
+class LowLevelDynamics(nn.Module):
+
+    def __init__(self,s_dim,a_dim,h_dim):
+
+        super(LowLevelDynamics,self).__init__()
+        
+        self.emb_layer = nn.Sequential(nn.Linear(s_dim+a_dim,h_dim),nn.ReLU())
+        self.rnn = nn.GRU(input_size=h_dim,hidden_size=h_dim,batch_first=True)
+        self.mean_layer = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,s_dim))
+        self.sig_layer  = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,s_dim),nn.Softplus())
+
+       
+
+
+    def forward(self,states,actions,h=None):
+        '''
+        INPUTS:
+            states:  batch_size x T x state_dim tensor of states 
+            actions: batch_size x T x z_dim tensor of actions
+        OUTPUTS:
+            s_next_mean: batch_size x T x s_dim tensor of means for predicted next states
+            s_next_sig:  batch_size x T x a_dim tensor of standard devs for predicted next states
+        '''
+
+        state_acitons = torch.cat([states,actions],dim=-1)
+        sa_emb = self.emb_layer(state_acitons)
+        if h is not None:
+            feat,h = self.rnn(sa_emb,h)
+        else:
+            feat,h = self.rnn(sa_emb)
+
+        delta_means = self.mean_layer(feat)
+        s_next_mean = delta_means + states
+        s_next_sig = self.sig_layer(feat)
+
+
+
+        return s_next_mean, s_next_sig, h
 
 
 class Encoder(nn.Module):
@@ -260,7 +301,7 @@ class Prior(nn.Module):
 
 
 class SkillModelStateDependentPrior(nn.Module):
-    def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal',state_dec_stop_grad=False,beta=1.0):
+    def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal',state_dec_stop_grad=False,beta=1.0,alpha=1.0):
         super(SkillModelStateDependentPrior, self).__init__()
 
         self.state_dim = state_dim # state dimension
@@ -270,6 +311,7 @@ class SkillModelStateDependentPrior(nn.Module):
         self.decoder = Decoder(state_dim,a_dim,z_dim,h_dim, a_dist, state_dec_stop_grad)
         self.prior   = Prior(state_dim,z_dim,h_dim)
         self.beta    = beta
+        self.alpha   = alpha
 
     def forward(self,states,actions):
         
@@ -338,7 +380,7 @@ class SkillModelStateDependentPrior(nn.Module):
         # kl_loss = torch.mean(torch.sum(F.kl_div(z_post_dist, z_prior_dist),dim=-1))
         kl_loss = torch.mean(torch.sum(KL.kl_divergence(z_post_dist, z_prior_dist), dim=-1))/T # divide by T because all other losses we take mean over T dimension, effectively dividing by T
 
-        loss_tot = s_T_loss + a_loss + self.beta*kl_loss
+        loss_tot = self.alpha*s_T_loss + a_loss + self.beta*kl_loss
         # loss_tot = s_T_loss + kl_loss
 
         return  loss_tot, s_T_loss, a_loss, kl_loss
@@ -488,7 +530,193 @@ class SkillModelStateDependentPrior(nn.Module):
         eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
         return mean + std*eps
 
+class DecoderWithLLDynamics(nn.Module):
+    def __init__(self,state_dim,a_dim,z_dim,h_dim):
 
+        super(DecoderWithLLDynamics,self).__init__()
+        
+        self.state_dim = state_dim
+        self.a_dim = a_dim
+        self.z_dim = z_dim
+
+        self.ll_dynamics = LowLevelDynamics(state_dim,a_dim,h_dim)
+        self.ll_policy = LowLevelPolicy(state_dim,a_dim,z_dim,h_dim, 'normal')
+        
+    def forward(self,states,actions,z):
+
+        '''
+        INPUTS: 
+            states: batch_size x T x state_dim state sequence tensor
+            z:      batch_size x 1 x z_dim sampled z/skill variable
+        OUTPUTS:
+            sT_mean: batch_size x 1 x state_dim tensor of terminal (time=T) state means
+            sT_sig:  batch_size x 1 x state_dim tensor of terminal (time=T) state standard devs
+            a_mean: batch_size x T x a_dim tensor of action means for each t in {0.,,,.T}
+            a_sig:  batch_size x T x a_dim tensor of action standard devs for each t in {0.,,,.T}
+        '''
+        
+        s_0 = states[:,0:1,:]
+        z_detached = z.detach()
+        s_next_mean,s_next_sig,_ = self.ll_dynamics(states[:,:-1,:],actions[:,:-1,:])
+        a_mean,a_sig   = self.ll_policy(states,z)
+
+
+        return s_next_mean,s_next_sig,a_mean,a_sig
+
+    def get_expected_sT_dist(self,s0,z,H,n_samples=10):
+
+        # tile s0 and z n_samples number of times
+        batch_size,T,state_dim = s0.shape
+        _,_,z_dim = z.shape
+        s0_tiled = torch.stack(n_samples*[s0])
+        z_tiled = torch.stack(n_samples*[z])
+        s0_tiled_reshaped = s0_tiled.reshape(n_samples*batch_size,T,state_dim)
+        z_tiled_reshaped  =  z_tiled.reshape(n_samples*batch_size,1,z_dim)
+        h = None
+        state = s0_tiled_reshaped
+        for t in range(H):
+            a_mean,a_sig = self.ll_policy(state,z_tiled_reshaped)
+            action = reparameterize(a_mean,a_sig)
+            s_next_mean,s_next_sig,h = self.ll_dynamics(state,action,h)
+            s_next = reparameterize(s_next_mean,s_next_sig)
+            state = s_next
+
+        sT_dist_means = s_next_mean.reshape(s0_tiled.shape)
+        sT_dist_sigs  = s_next_sig.reshape( s0_tiled.shape)
+        # mix = Categorical.Categorical(torch.ones(n_samples,))
+        # comp = Normal.Normal(sT_dist_means,sT_dist_sigs)
+        # sT_dist = MixtureSameFamily.MixtureSameFamily(mix, comp)
+        sT_dist = GaussianMixtureDist(sT_dist_means,sT_dist_sigs)
+        print('sT_dist_means.shape: ',sT_dist_means.shape)
+        print('sT_dist_means[:,0,0,:2]: ', sT_dist_means[:,0,0,:2])
+        print('sT_dist_sigs[:,0,0,:2]: ', sT_dist_sigs[:,0,0,:2])
+
+        return sT_dist
+
+    def get_expected_next_state_dist(self,states,z):
+        batch_size,T,state_dim = s0.shape
+        _,_,z_dim = z.shape
+        states_tiled = torch.stack(n_samples*[states])
+        z_tiled      = torch.stack(n_samples*[z])
+        state_tiled_reshaped = state_tiled.reshape(n_samples*batch_size,T,state_dim)
+        z_tiled_reshaped     =  z_tiled.reshape(n_samples*batch_size,1,z_dim)
+
+        action_samples = self.ll_policy(states_tiled_reshaped,z_tiled_reshaped)
+
+
+
+class GaussianMixtureDist(nn.Module):
+    def __init__(self,means,sigs):
+        super(GaussianMixtureDist, self).__init__()
+        self.n_mix_comps = means.shape[0]
+        self.mix_comps = [Normal.Normal(means[i,...],sigs[i,...]) for i in range(self.n_mix_comps)]
+        self.weight = 1/self.n_mix_comps
+
+    def log_prob(self,x):
+
+        log_prob_comps = torch.stack([self.mix_comps[i].log_prob(x) for i in range(self.n_mix_comps)])
+        
+        log_prob = torch.logsumexp(log_prob_comps,dim=0) + np.log(self.weight)
+
+        return log_prob
+    
+    def sample(self,n_samples):
+        samples = torch.cat([self.mix_comps[i].sample((n_samples,)) for i in range(self.n_mix_comps)])
+        return samples
+
+class BilevelSkillModel(nn.Module):
+    def __init__(self,state_dim,a_dim,z_dim,h_dim):
+        super(BilevelSkillModel, self).__init__()
+
+        self.state_dim = state_dim # state dimension
+        self.a_dim = a_dim # action dimension
+
+        self.encoder = Encoder(state_dim,a_dim,z_dim,h_dim)
+        self.decoder = DecoderWithLLDynamics(state_dim,a_dim,z_dim,h_dim)
+        self.prior   = Prior(state_dim,z_dim,h_dim)
+
+    def forward(self):
+        pass
+
+    def get_losses(self,states,actions):
+
+        '''
+        s_T_mean, s_T_sig, a_means, a_sigs, z_post_means, z_post_sigs  = self.forward(states,actions)
+
+        s_T_dist = Normal.Normal(s_T_mean, s_T_sig )
+        if self.decoder.ll_policy.a_dist == 'normal':
+            a_dist = Normal.Normal(a_means, a_sigs)
+        elif self.decoder.ll_policy.a_dist == 'tanh_normal':
+            base_dist = Normal.Normal(a_means, a_sigs)
+            transform = torch.distributions.transforms.TanhTransform()
+            a_dist = TransformedDistribution(base_dist, [transform])
+        else:
+            assert False
+        z_post_dist = Normal.Normal(z_post_means, z_post_sigs)
+        # z_prior_means = torch.zeros_like(z_post_means)
+        # z_prior_sigs = torch.ones_like(z_post_sigs)
+        z_prior_means,z_prior_sigs = self.prior(states[:,0:1,:]) 
+        z_prior_dist = Normal.Normal(z_prior_means, z_prior_sigs) 
+
+        # loss terms corresponding to -logP(s_T|s_0,z) and -logP(a_t|s_t,z)
+        T = states.shape[1]
+        s_T = states[:,-1:,:]  
+        s_T_loss = -torch.mean(torch.sum(s_T_dist.log_prob(s_T),dim=-1))/T # divide by T because all other losses we take mean over T dimension, effectively dividing by T
+        a_loss   = -torch.mean(torch.sum(a_dist.log_prob(actions),dim=-1)) 
+        # print('a_sigs: ', a_sigs)
+        # print('a_dist.log_prob(actions)[0,:,:]: ',a_dist.log_prob(actions)[0,:,:])
+        # loss term correpsonding ot kl loss between posterior and prior
+        # kl_loss = torch.mean(torch.sum(F.kl_div(z_post_dist, z_prior_dist),dim=-1))
+        kl_loss = torch.mean(torch.sum(KL.kl_divergence(z_post_dist, z_prior_dist), dim=-1))/T # divide by T because all other losses we take mean over T dimension, effectively dividing by T
+
+        loss_tot = s_T_loss + a_loss + self.beta*kl_loss
+        # loss_tot = s_T_loss + kl_loss
+
+        return  loss_tot, s_T_loss, a_loss, kl_loss
+        '''
+
+        batch_size, T, _ = states.shape
+
+        s_next = states[:,1:,:]
+        s0 = states[:,:1,:]
+        sT = states[:,-1:,:]
+
+        z_post_means,z_post_sigs = self.encoder(states,actions)
+        z_post_dist = Normal.Normal(z_post_means, z_post_sigs) 
+        z_sampled = self.reparameterize(z_post_means,z_post_sigs)
+
+        
+        z_prior_means,z_prior_sigs = self.prior(s0) 
+        z_prior_dist = Normal.Normal(z_prior_means, z_prior_sigs) 
+
+        s_next_means,s_next_sigs,a_means,a_sigs = self.decoder(states,actions,z_sampled)
+
+        a_dist = Normal.Normal(a_means, a_sigs)
+        s_next_dist = Normal.Normal(s_next_means,s_next_sigs)
+        
+        sT_dist = self.decoder.get_expected_sT_dist(s0,z_sampled,T)
+
+        s_T_loss = - torch.sum(sT_dist.log_prob(sT))/(batch_size*T)
+        s_loss = - torch.sum(s_next_dist.log_prob(s_next))/(batch_size*T)
+        a_loss = - torch.sum(a_dist.log_prob(actions))/(batch_size*T)
+
+        kl_loss = torch.sum(KL.kl_divergence(z_post_dist, z_prior_dist))/(batch_size*T) # divide by T because all other losses we take mean over T dimension, effectively dividing by T
+
+        loss = s_loss + a_loss + s_T_loss + kl_loss
+
+        return loss, s_loss, a_loss, s_T_loss, kl_loss
+
+
+
+    def reparameterize(self, mean, std):
+        eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
+        return mean + std*eps
+
+
+
+        
+
+    
 
 class SkillModel(nn.Module):
     def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal'):
@@ -601,3 +829,5 @@ class SkillModel(nn.Module):
     def reparameterize(self, mean, std):
         eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
         return mean + std*eps
+
+
