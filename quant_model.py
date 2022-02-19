@@ -9,6 +9,7 @@ from skill_model import SkillModel, SkillModelStateDependentPrior
 import ipdb
 import d4rl
 import gym
+import pickle
 from mujoco_py import GlfwContext
 GlfwContext(offscreen=True)
 import matplotlib
@@ -189,6 +190,9 @@ for i in range(episodes):
 pred_states_mean = np.stack(pred_states_mean)
 terminal_states = np.stack(terminal_states)
 print(mses)
+
+with open("MSE", 'wb') as mse_file:
+	pickle.dump(mses, mse_file)
 	
 # make_gif(frames,'franka')
 if render:
