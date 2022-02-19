@@ -17,7 +17,6 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 import matplotlib.transforms as transforms
 from math import pi
-from utils import make_gif, make_video
 
 
 def run_skill(skill_model,s0,skill,env,H,render):
