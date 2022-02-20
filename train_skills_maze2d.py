@@ -88,9 +88,9 @@ z_dim = 256
 lr = 5e-5
 wd = 0.001
 state_dependent_prior = True
-state_dec_stop_grad = False
-beta = 1.0
-alpha = 10.0
+state_dec_stop_grad = True
+beta = 0.1
+alpha = 1.0
 
 
 goals = dataset['infos/goal']
@@ -183,6 +183,7 @@ test_loader = DataLoader(
 	num_workers=0)
 
 min_test_loss = 10**10
+filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_sg_'+str(state_dec_stop_grad)+'_log'
 for i in range(n_epochs):
 	loss, s_T_loss, a_loss, kl_loss = train(model,model_optimizer)
 	
@@ -213,23 +214,18 @@ for i in range(n_epochs):
 	experiment.log_metric("test_kl_loss", test_kl_loss, step=i)
 
 	if i % 10 == 0:
-		if not state_dependent_prior:
-			filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log.pth'
-		else:
-			filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_log.pth'
+		
 			
-		checkpoint_path = 'checkpoints/'+ filename
+		checkpoint_path = 'checkpoints/'+ filename + '.pth'
 		torch.save({
 							'model_state_dict': model.state_dict(),
 							'model_optimizer_state_dict': model_optimizer.state_dict(),
 							}, checkpoint_path)
 	if test_loss < min_test_loss:
 		min_test_loss = test_loss
-		if not state_dependent_prior:
-			filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
-		else:
-			filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_log_best.pth'
+
+		
 			
-		checkpoint_path = 'checkpoints/'+ filename
+		checkpoint_path = 'checkpoints/'+ filename + '_best.pth'
 		torch.save({'model_state_dict': model.state_dict(),
 			    'model_optimizer_state_dict': model_optimizer.state_dict()}, checkpoint_path)

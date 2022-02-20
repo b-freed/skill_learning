@@ -20,14 +20,14 @@ from math import pi
 from utils import make_gif, make_video
 
 
-def run_skill(skill_model,s0,skill,env,H,render):
+def run_skill(skill_model,s0,skill,env,H,render,pred_state):
 	state = s0.flatten().detach().cpu().numpy()
 	states = [state]
 	
 	actions = []
 	frames = []
 	# for j in range(H): #H-1 if H!=1
-	for j in range(40):
+	for j in range(200):
 		if render:
 			frames.append(env.render(mode='rgb_array'))
 		action = skill_model.decoder.ll_policy.numpy_policy(state,skill)
@@ -35,6 +35,8 @@ def run_skill(skill_model,s0,skill,env,H,render):
 		state,_,_,_ = env.step(action)
 		
 		states.append(state)
+		# if np.sum((state[:2] - pred_state[:2])**2) < .5:
+		# 	break
 	  
 	return np.stack(states),np.stack(actions),frames
 
@@ -86,7 +88,8 @@ if __name__ == '__main__':
 	# 	filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
 	# filename = 'Franka_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
 	# filename = 'Antmaze_H20_l2reg_0.001_stopgrad_log_best.pth'
-	filename = 'AntMaze_H20_l2reg_0.001_a_10.0_b_1.0_log_best.pth'
+	# filename = 'AntMaze_H20_l2reg_0.001_a_10.0_b_1.0_log_best.pth'
+	filename = 'AntMaze_H20_l2reg_0.001_a_1.0_b_0.1_sg_True_log_best.pth'
 	PATH = 'checkpoints/'+filename
 	
 	
@@ -189,7 +192,7 @@ if __name__ == '__main__':
 		# 	sT_mean,sT_sig = skill_model.decoder.abstract_dynamics(states[:,0:1,:],z)
 			
 
-			states_actual,actions,skill_frames = run_skill(skill_model_sdp, state,z,env,H,render)
+			states_actual,actions,skill_frames = run_skill(skill_model_sdp, state,z,env,H,render,sT_mean.flatten().detach().cpu().numpy())
 			state = states_actual[-1,:]
 			terminal_states.append(state)
 			mses.append(np.mean((state - sT_mean.flatten().detach().cpu().numpy())**2))

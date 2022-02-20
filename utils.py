@@ -60,3 +60,12 @@ def make_video(frames,name):
 def reparameterize(mean, std):
     eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
     return mean + std*eps
+
+def stable_weighted_log_sum_exp(x,w,sum_dim):
+    a = torch.min(x)
+    ipdb.set_trace()
+
+    weighted_sum = torch.sum(w * torch.exp(x - a),sum_dim)
+
+    return a + torch.log(weighted_sum)
+
