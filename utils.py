@@ -54,5 +54,5 @@ def make_video(frames,name):
     writer = imageio.get_writer(name+'.mp4', fps=20)
 
     for im in frames:
-        writer.append_data(np.array(im))
+        writer.append_data(im)
     writer.close()
