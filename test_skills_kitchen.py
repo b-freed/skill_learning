@@ -34,7 +34,7 @@ def run_skill(skill_model,s0,skill,env,H,render):
 		actions.append(action)
 		state,_,_,_ = env.step(action)
 		
-		states.append(state)
+		states.append(state), frames
 	  
 	return np.stack(states),np.stack(actions),frames
 
