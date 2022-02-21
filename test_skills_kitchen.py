@@ -62,8 +62,8 @@ if __name__ == '__main__':
 
 	device = torch.device('cuda:0')
 	
-	env = 'maze2d-large-v1'
-	# env = 'kitchen-partial-v0'
+	env = 'kitchen-partial-v0'
+	maze_name = env
 	env = gym.make(env)
 	data = env.get_dataset()
 	
@@ -73,17 +73,15 @@ if __name__ == '__main__':
 	h_dim = 256
 	z_dim = 256
 	batch_size = 1
-	episodes = 1
+	episodes = 10
 	wd = 0
 	state_dependent_prior = True
-	beta = 0.1
-	state_dec_stop_grad = True
 
 
 	if not state_dependent_prior:
-		filename = 'Noisy1_cem_maze2d_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
+		filename = maze_name+'_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
 	else:
-		filename = 'Noisy1_cem_maze2d_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
+		filename = maze_name+'_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
 	# filename = 'Franka_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
 	PATH = 'checkpoints/'+filename
 	
@@ -92,7 +90,7 @@ if __name__ == '__main__':
 	if not state_dependent_prior:
 		skill_model_sdp = SkillModel(state_dim, a_dim, z_dim, h_dim).cuda()
 	else:
-		skill_model_sdp = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, state_dec_stop_grad=state_dec_stop_grad, beta=beta).cuda()
+		skill_model_sdp = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim).cuda()
 		
 	checkpoint = torch.load(PATH)
 	skill_model_sdp.load_state_dict(checkpoint['model_state_dict'])
