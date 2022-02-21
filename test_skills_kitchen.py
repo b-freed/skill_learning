@@ -27,7 +27,7 @@ def run_skill(skill_model,s0,skill,env,H,render,pred_state):
 	actions = []
 	frames = []
 	# for j in range(H): #H-1 if H!=1
-	for j in range(200):
+	for j in range(H):
 		if render:
 			frames.append(env.render(mode='rgb_array'))
 		action = skill_model.decoder.ll_policy.numpy_policy(state,skill)
@@ -195,7 +195,8 @@ if __name__ == '__main__':
 			state_dist = Normal.Normal(sT_mean, sT_sig )
 			state_ll = torch.mean(state_dist.log_prob(torch.tensor(state,dtype=torch.float32,device=device).reshape(1,1,-1)))
 			state_lls.append(state_ll.item())
-			frames += skill_frames
+			#frames += skill_frames
+			frames.append(skill_frames)
 			# states_actual,actions = run_skill_with_disturbance(skill_model_sdp, states[:,0:1,:],z,env,H)
 			
 			
@@ -222,6 +223,7 @@ if __name__ == '__main__':
 		
 	pred_states_mean = np.stack(pred_states_mean)
 	terminal_states = np.stack(terminal_states)
+	frames = np.stack(frames)
 		
 	# make_gif(frames,'franka')
 	if render:
