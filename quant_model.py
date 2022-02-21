@@ -191,29 +191,10 @@ pred_states_mean = np.stack(pred_states_mean)
 terminal_states = np.stack(terminal_states)
 print(mses)
 
-with open("MSE", 'wb') as mse_file:
-	pickle.dump(mses, mse_file)
+plt.figure()
+plt.plot(mses)
+plt.savefig('mses')
 	
 # make_gif(frames,'franka')
 if render:
 	make_video(frames,'franka')
-
-# print('pred_states_mean.shape: ', pred_states_mean.shape)
-# print('terminal_states.shape: ', terminal_states.shape)
-# for i in range(terminal_states.shape[-1]):
-# 	plt.figure()
-# 	plt.plot(terminal_states[:,i])
-# 	plt.plot(pred_states_mean[:,i])
-# 	plt.savefig('states_'+str(i))
-
-# plt.figure()
-# plt.plot(mses)
-# plt.savefig('mses')
-
-# plt.figure()
-# plt.plot(state_lls)
-# plt.savefig('state_lls')
-
-
-
-
