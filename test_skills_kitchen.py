@@ -195,8 +195,7 @@ if __name__ == '__main__':
 			state_dist = Normal.Normal(sT_mean, sT_sig )
 			state_ll = torch.mean(state_dist.log_prob(torch.tensor(state,dtype=torch.float32,device=device).reshape(1,1,-1)))
 			state_lls.append(state_ll.item())
-			#frames += skill_frames
-			frames.append(skill_frames)
+			frames += skill_frames
 			# states_actual,actions = run_skill_with_disturbance(skill_model_sdp, states[:,0:1,:],z,env,H)
 			
 			
