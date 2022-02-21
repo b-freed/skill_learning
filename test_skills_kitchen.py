@@ -62,7 +62,7 @@ if __name__ == '__main__':
 
 	device = torch.device('cuda:0')
 	
-	env = 'kitchen-partial-v0'
+	env = 'pen-expert-v1'
 	maze_name = env
 	env = gym.make(env)
 	data = env.get_dataset()
