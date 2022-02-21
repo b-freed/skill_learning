@@ -223,7 +223,6 @@ if __name__ == '__main__':
 		
 	pred_states_mean = np.stack(pred_states_mean)
 	terminal_states = np.stack(terminal_states)
-	frames = np.stack(frames)
 		
 	# make_gif(frames,'franka')
 	if render:
