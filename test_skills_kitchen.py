@@ -221,6 +221,7 @@ if __name__ == '__main__':
 		
 		# pred_states_sig.append([sT_sig[0,-1,0].detach().cpu().numpy(),sT_sig[0,-1,1].detach().cpu().numpy()])
 		
+	env.close()
 	pred_states_mean = np.stack(pred_states_mean)
 	terminal_states = np.stack(terminal_states)
 		
