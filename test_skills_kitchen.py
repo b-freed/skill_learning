@@ -20,7 +20,7 @@ from math import pi
 from utils import make_gif, make_video
 
 
-def run_skill(skill_model,s0,skill,env,H,render,pred_state):
+def run_skill(skill_model,s0,skill,env,H,render):
 	state = s0.flatten().detach().cpu().numpy()
 	states = [state]
 	
