@@ -58,7 +58,7 @@ class LowLevelPolicy(nn.Module):
     P(a_t|s_t,z) is our "low-level policy", so this is the feedback policy the agent runs while executing skill described by z.
     See Encoder and Decoder for more description
     '''
-    def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist):
+    def __init__(self,state_dim,a_dim,z_dim,h_dim,a_dist,max_sig=None,fixed_sig=None):
 
         super(LowLevelPolicy,self).__init__()
         
@@ -66,9 +66,11 @@ class LowLevelPolicy(nn.Module):
         #self.mean_layer = nn.Linear(h_dim,a_dim)
         self.mean_layer = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,a_dim))
         #self.sig_layer  = nn.Sequential(nn.Linear(h_dim,a_dim),nn.Softplus())
-        self.sig_layer  = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,a_dim),nn.Softplus())
+        self.sig_layer  = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,a_dim))
         self.a_dist = a_dist
         self.a_dim = a_dim
+        self.max_sig = max_sig
+        self.fixed_sig = fixed_sig
 
 
 
@@ -91,7 +93,13 @@ class LowLevelPolicy(nn.Module):
         feats = self.layers(state_z)
         # get mean and stand dev of action distribution
         a_mean = self.mean_layer(feats)
-        a_sig  = self.sig_layer(feats)
+        if self.max_sig is None:
+            a_sig  = nn.Softplus()(self.sig_layer(feats))
+        else:
+            a_sig = self.max_sig * nn.Sigmoid()(self.sig_layer(feats))
+
+        if self.fixed_sig is not None:
+            a_sig = self.fixed_sig*torch.ones_like(a_sig)
 
         return a_mean, a_sig
     
@@ -112,6 +120,40 @@ class LowLevelPolicy(nn.Module):
     def reparameterize(self, mean, std):
         eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
         return mean + std*eps
+
+class LowLevelDynamicsFF(nn.Module):
+
+    def __init__(self,s_dim,a_dim,h_dim):
+
+        super(LowLevelDynamics,self).__init__()
+        
+        self.layer1 = nn.Sequential(nn.Linear(s_dim+a_dim,h_dim),nn.ReLU())
+        self.mean_layer = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,s_dim))
+        self.sig_layer  = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,s_dim),nn.Softplus())
+
+       
+
+
+    def forward(self,states,actions):
+        '''
+        INPUTS:
+            states:  batch_size x T x state_dim tensor of states 
+            actions: batch_size x T x z_dim tensor of actions
+        OUTPUTS:
+            s_next_mean: batch_size x T x s_dim tensor of means for predicted next states
+            s_next_sig:  batch_size x T x a_dim tensor of standard devs for predicted next states
+        '''
+
+        state_acitons = torch.cat([states,actions],dim=-1)
+        feats = self.layer1(state_actions)
+        delta_means = self.mean_layer(feat)
+        s_next_mean = delta_means + states
+        s_next_sig = self.sig_layer(feat)
+
+
+
+        return s_next_mean, s_next_sig
+
 
 class LowLevelDynamics(nn.Module):
 
@@ -218,7 +260,7 @@ class Decoder(nn.Module):
     -embed z
     -Pass into fully connected network to get "state T features"
     '''
-    def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist,state_dec_stop_grad):
+    def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist,state_dec_stop_grad, max_sig, fixed_sig):
 
         super(Decoder,self).__init__()
         
@@ -227,7 +269,7 @@ class Decoder(nn.Module):
         self.z_dim = z_dim
 
         self.abstract_dynamics = AbstractDynamics(state_dim,z_dim,h_dim)
-        self.ll_policy = LowLevelPolicy(state_dim,a_dim,z_dim,h_dim, a_dist)
+        self.ll_policy = LowLevelPolicy(state_dim,a_dim,z_dim,h_dim, a_dist, max_sig = max_sig, fixed_sig=fixed_sig)
         self.emb_layer  = nn.Linear(state_dim+z_dim,h_dim)
         self.fc = nn.Sequential(nn.Linear(state_dim+z_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
 
@@ -301,14 +343,14 @@ class Prior(nn.Module):
 
 
 class SkillModelStateDependentPrior(nn.Module):
-    def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal',state_dec_stop_grad=False,beta=1.0,alpha=1.0):
+    def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal',state_dec_stop_grad=False,beta=1.0,alpha=1.0,max_sig=None,fixed_sig=None):
         super(SkillModelStateDependentPrior, self).__init__()
 
         self.state_dim = state_dim # state dimension
         self.a_dim = a_dim # action dimension
 
         self.encoder = Encoder(state_dim,a_dim,z_dim,h_dim)
-        self.decoder = Decoder(state_dim,a_dim,z_dim,h_dim, a_dist, state_dec_stop_grad)
+        self.decoder = Decoder(state_dim,a_dim,z_dim,h_dim, a_dist, state_dec_stop_grad,max_sig=max_sig,fixed_sig=fixed_sig)
         self.prior   = Prior(state_dim,z_dim,h_dim)
         self.beta    = beta
         self.alpha   = alpha
@@ -531,15 +573,19 @@ class SkillModelStateDependentPrior(nn.Module):
         return mean + std*eps
 
 class DecoderWithLLDynamics(nn.Module):
-    def __init__(self,state_dim,a_dim,z_dim,h_dim):
+    def __init__(self,state_dim,a_dim,z_dim,h_dim,ff=False):
 
         super(DecoderWithLLDynamics,self).__init__()
         
         self.state_dim = state_dim
         self.a_dim = a_dim
         self.z_dim = z_dim
+        self.ff = ff
 
-        self.ll_dynamics = LowLevelDynamics(state_dim,a_dim,h_dim)
+        if ff:
+            self.ll_dynamics = LowLevelDynamicsFF(state_dim,a_dim,h_dim)
+        else:
+            self.ll_dynamics = LowLevelDynamics(state_dim,a_dim,h_dim)
         self.ll_policy = LowLevelPolicy(state_dim,a_dim,z_dim,h_dim, 'normal')
         
     def forward(self,states,actions,z):
@@ -594,14 +640,23 @@ class DecoderWithLLDynamics(nn.Module):
         return sT_dist
 
     def get_expected_next_state_dist(self,states,z):
+        assert self.ff
         batch_size,T,state_dim = s0.shape
         _,_,z_dim = z.shape
-        states_tiled = torch.stack(n_samples*[states])
-        z_tiled      = torch.stack(n_samples*[z])
-        state_tiled_reshaped = state_tiled.reshape(n_samples*batch_size,T,state_dim)
-        z_tiled_reshaped     =  z_tiled.reshape(n_samples*batch_size,1,z_dim)
+        states_tiled = torch.stack(n_samples*[states],dim=0)
+        z_tiled      = torch.stack(n_samples*[z],dim=0)
+        # state_tiled_reshaped = state_tiled.reshape(n_samples*batch_size,T,state_dim)
+        # z_tiled_reshaped     =  z_tiled.reshape(n_samples*batch_size,1,z_dim)
 
-        action_samples = self.ll_policy(states_tiled_reshaped,z_tiled_reshaped)
+        a_means,a_sigs = self.ll_policy(states,z)
+        a_means_tiled = torch.stack(n_samples*[a_means],dim=0) 
+        a_sigs_tiled = torch.stack(n_samples*[a_sigs],dim=0)
+        actions = reparameterize(a_means,a_sigs)  # this should be n_samples distinct action sample for every (state,z)
+
+        next_s_means,next_s_sigs = self.ll_dynamics(states_tiled[:,:,:-1,:],actions[:,:,:-1,:])
+        s_next_dist = GaussianMixtureDist(s_next_means,s_next_sigs)
+
+        return s_next_dist
 
 
 
@@ -694,7 +749,7 @@ class BilevelSkillModel(nn.Module):
         a_dist = Normal.Normal(a_means, a_sigs)
         s_next_dist = Normal.Normal(s_next_means,s_next_sigs)
         
-        sT_dist = self.decoder.get_expected_sT_dist(s0,z_sampled,T)
+        exp_next_s_dist = self.decoder.get_expected_sT_dist(s0,z_sampled,T)
 
         s_T_loss = - torch.sum(sT_dist.log_prob(sT))/(batch_size*T)
         s_loss = - torch.sum(s_next_dist.log_prob(s_next))/(batch_size*T)
@@ -715,7 +770,59 @@ class BilevelSkillModel(nn.Module):
 
 
         
+class BilevelSkillModelV2(nn.Module):
+    def __init__(self,state_dim,a_dim,z_dim,h_dim):
+        super(BilevelSkillModelV2, self).__init__()
 
+        self.state_dim = state_dim # state dimension
+        self.a_dim = a_dim # action dimension
+
+        self.encoder = Encoder(state_dim,a_dim,z_dim,h_dim)
+        self.decoder = DecoderWithLLDynamics(state_dim,a_dim,z_dim,h_dim,ff=True)
+        self.prior   = Prior(state_dim,z_dim,h_dim)
+
+    def forward(self):
+        pass
+
+    def get_losses(self,states,actions):
+
+
+        batch_size, T, _ = states.shape
+
+        s_next = states[:,1:,:]
+        s0 = states[:,:1,:]
+        sT = states[:,-1:,:]
+
+        z_post_means,z_post_sigs = self.encoder(states,actions)
+        z_post_dist = Normal.Normal(z_post_means, z_post_sigs) 
+        z_sampled = self.reparameterize(z_post_means,z_post_sigs)
+
+        
+        z_prior_means,z_prior_sigs = self.prior(s0) 
+        z_prior_dist = Normal.Normal(z_prior_means, z_prior_sigs) 
+
+        s_next_means,s_next_sigs,a_means,a_sigs = self.decoder(states,actions,z_sampled)
+
+        a_dist = Normal.Normal(a_means, a_sigs)
+        s_next_dist = Normal.Normal(s_next_means,s_next_sigs)
+        
+        exp_s_next_dist = self.decoder.get_expected_next_state_dist(states,z_sampled,T)
+
+        s_next_loss = - torch.sum(exp_s_next_dist.log_prob(sT))/(batch_size*T)
+        s_loss = - torch.sum(s_next_dist.log_prob(s_next))/(batch_size*T)
+        a_loss = - torch.sum(a_dist.log_prob(actions))/(batch_size*T)
+
+        kl_loss = torch.sum(KL.kl_divergence(z_post_dist, z_prior_dist))/(batch_size*T) # divide by T because all other losses we take mean over T dimension, effectively dividing by T
+
+        loss = s_loss + a_loss + s_next_loss + kl_loss
+
+        return loss, s_loss, a_loss, s_next_loss, kl_loss
+
+
+
+    def reparameterize(self, mean, std):
+        eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
+        return mean + std*eps
     
 
 class SkillModel(nn.Module):

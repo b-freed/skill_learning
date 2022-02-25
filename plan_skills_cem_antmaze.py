@@ -47,8 +47,14 @@ skill_seq_len = 10
 lr = 1e-4
 wd = .001
 state_dependent_prior = True
+state_dec_stop_grad = True
+beta = 1.0
+alpha = 1.0
+max_sig = None
+fixed_sig = 0.1
 n_iters = 50
-import glob
+a_dist = 'normal'
+# import glob
 '''
 if not state_dependent_prior:
   	filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
@@ -56,14 +62,16 @@ else:
   	filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
 '''
 # filename = 'maze2d_H'+str(H)+'_log_best.pth'
-filename = 'AntMaze_H20_l2reg_0.001_log_best.pth'
+# filename = 'AntMaze_H20_l2reg_0.001_log_best.pth'
+filename = 'AntMaze_H20_l2reg_0.01_a_1.0_b_1.0_sg_True_max_sig_None_fixed_sig_0.1_log_best.pth'#'AntMaze_H20_l2reg_0.001_a_1.0_b_0.01_sg_False_log_best.pth'
+
 
 PATH = 'checkpoints/'+filename
 
 if not state_dependent_prior:
   	skill_model = SkillModel(state_dim, a_dim, z_dim, h_dim).cuda()
 else:
-  	skill_model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim).cuda()
+	skill_model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,max_sig=max_sig,fixed_sig=fixed_sig).cuda()
 
 checkpoint = torch.load(PATH)
 skill_model.load_state_dict(checkpoint['model_state_dict'])
@@ -255,8 +263,8 @@ def run_skill_seq(env,s0,model):
 
 
 
-# cost_fn = lambda skill_seq: skill_model.get_expected_cost_for_cem(s0_torch, skill_seq, goal_seq)
-		
+cost_fn = lambda skill_seq: skill_model.get_expected_cost_for_cem(s0_torch, skill_seq, goal_seq)
+states,success = run_skills_iterative_replanning(env,skill_model,goal_seq)
 # skill_seq,_ = cem(torch.zeros((skill_seq_len,z_dim),device=device),torch.ones((skill_seq_len,z_dim),device=device),cost_fn,100,.5,n_iters)
 
 # skill_seq = skill_seq.unsqueeze(0)		
@@ -264,23 +272,24 @@ def run_skill_seq(env,s0,model):
 # s0 = env.reset()
 # run_skill_seq(env,s0,skill_model)
 
-success_list = []
-for i in range(10):
-	states,success = run_skills_iterative_replanning(env,skill_model,goal_seq)
-	success_list.append(success)
-	np.save('success_list',success_list)
-print('success_list: ', success_list)
-print('np.mean(success_list): ', np.mean(success_list))
-# plt.figure()
-# plt.scatter(states[:,0],states[:,1])
-# plt.scatter(goal_state[0],goal_state[1])
-# plt.axis('equal')
-# print('SAVING!')
-# plt.savefig('ant_iterative_replanning_actual_states')
+
+plt.figure()
+plt.scatter(states[:,0],states[:,1])
+plt.scatter(goal_state[0],goal_state[1])
+plt.axis('equal')
+print('SAVING!')
+plt.savefig('ant_iterative_replanning_actual_states')
 
 
 
+######## FOR RUNNING MANNY TRIALS OF ITERATIVE REPLANNING ########
 
 
-
+# success_list = []
+# for i in range(1):
+# 	states,success = run_skills_iterative_replanning(env,skill_model,goal_seq)
+# 	success_list.append(success)
+# 	np.save('success_list',success_list)
+# print('success_list: ', success_list)
+# print('np.mean(success_list): ', np.mean(success_list))
 

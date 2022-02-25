@@ -6,18 +6,21 @@ import torch.nn.functional as F
 from torch.utils.data import TensorDataset
 from torch.utils.data.dataloader import DataLoader
 import torch.distributions.normal as Normal
-from skill_model import SkillModel, SkillModelStateDependentPrior
+from skill_model import SkillModel, SkillModelStateDependentPrior, BilevelSkillModel
 import gym
 from mujoco_py import GlfwContext
 GlfwContext(offscreen=True)
 import d4rl
 import ipdb
 import h5py
+from utils import reparameterize
+
 
 def train(model,model_optimizer):
 	
 	losses = []
 	s_T_losses = []
+	s_losses = []
 	a_losses = []
 	kl_losses = []
 
@@ -26,7 +29,8 @@ def train(model,model_optimizer):
 		states = data[:,:,:model.state_dim]  # first state_dim elements are the state
 		actions = data[:,:,model.state_dim:]	 # rest are actions
 
-		loss_tot, s_T_loss, a_loss, kl_loss = model.get_losses(states, actions)
+		# loss,   s_loss, a_loss, s_T_loss, kl_loss
+		loss_tot, s_loss, a_loss, s_next_loss, kl_loss = model.get_losses(states, actions)
 
 		model_optimizer.zero_grad()
 		loss_tot.backward()
@@ -35,16 +39,19 @@ def train(model,model_optimizer):
 		# log losses
 
 		losses.append(loss_tot.item())
-		s_T_losses.append(s_T_loss.item())
+		s_losses.append(s_loss.item())
+		s_next_losses.append(s_next_loss.item())
 		a_losses.append(a_loss.item())
 		kl_losses.append(kl_loss.item())
 
-	return np.mean(losses), np.mean(s_T_losses), np.mean(a_losses), np.mean(kl_losses)
+	#              loss,            s_loss,            a_loss,            s_T_loss,            kl_loss
+	return np.mean(losses), np.mean(s_losses), np.mean(a_losses), np.mean(s_next_losses), np.mean(kl_losses)
 
 def test(model):
 	
 	losses = []
-	s_T_losses = []
+	s_next_losses = []
+	s_losses = []
 	a_losses = []
 	kl_losses = []
 
@@ -54,16 +61,18 @@ def test(model):
 			states = data[:,:,:model.state_dim]  # first state_dim elements are the state
 			actions = data[:,:,model.state_dim:]	 # rest are actions
 
-			loss_tot, s_T_loss, a_loss, kl_loss = model.get_losses(states, actions)
+			# loss,   s_loss, a_loss, s_T_loss, kl_loss
+			loss_tot, s_loss, a_loss, s_next_loss, kl_loss = model.get_losses(states, actions)
 
 			# log losses
 
 			losses.append(loss_tot.item())
-			s_T_losses.append(s_T_loss.item())
+			s_losses.append(s_loss.item())
+			s_next_losses.append(s_next_loss.item())
 			a_losses.append(a_loss.item())
 			kl_losses.append(kl_loss.item())
 
-	return np.mean(losses), np.mean(s_T_losses), np.mean(a_losses), np.mean(kl_losses)
+	return np.mean(losses), np.mean(s_losses), np.mean(a_losses), np.mean(s_T_losses), np.mean(kl_losses)
 
 
 # instantiating the environmnet, getting the dataset.
@@ -74,7 +83,7 @@ dataset = env.get_dataset()  # dictionary, with 'observations', 'rewards', 'acti
 #dataset_file = "datasets/maze2d-umaze-v1.hdf5"
 #dataset = h5py.File(dataset_file, "r")
 
-batch_size = 100
+batch_size = 10
 
 states = dataset['observations']
 N = states.shape[0]
@@ -86,13 +95,7 @@ a_dim = actions.shape[1]
 h_dim = 256
 z_dim = 256
 lr = 5e-5
-wd = 0.1
-state_dependent_prior = True
-state_dec_stop_grad = True
-beta = 1.0
-alpha = 1.0
-max_sig = None
-fixed_sig = 0.1
+wd = 0.0
 
 goals = dataset['infos/goal']
 H = 20
@@ -143,27 +146,23 @@ experiment = Experiment(api_key = '9mxH2vYX20hn9laEr0KtHLjAa', project_name = 's
 experiment.add_tag('AntMaze H_'+str(H)+' model')
 
 # First, instantiate a skill model
-if not state_dependent_prior:
-	model = SkillModel(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist).cuda()
-else:
-	model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,max_sig=max_sig,fixed_sig=fixed_sig).cuda()
+# if not state_dependent_prior:
+# 	model = SkillModel(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist).cuda()
+# else:
+# 	model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist,state_dec_stop_grad=state_dec_stop_grad,beta=beta).cuda()
+
+model = BilevelSkillModelV2(state_dim,a_dim,z_dim,h_dim).cuda()
 
 model_optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
 
 experiment.log_parameters({'lr':lr,
 							   'h_dim':h_dim,
-							   'state_dependent_prior':state_dependent_prior,
 							   'z_dim':z_dim,
 			  				   'H':H,
 			   				   'a_dist':a_dist,
 			  				   'a_dim':a_dim,
 			  				   'state_dim':state_dim,
-			  				   'l2_reg':wd,
-							   'state_dec_stop_grad':state_dec_stop_grad,
-							   'beta':beta,
-							   'alpha':alpha,
-							   'max_sig':max_sig,
-							   'fixed_sig':fixed_sig})
+			  				   'l2_reg':wd})
 
 # add chunks of data to a pytorch dataloader
 inputs = np.concatenate([obs_chunks, action_chunks],axis=-1) # array that is dataset_size x T x state_dim+action_dim
@@ -186,49 +185,53 @@ test_loader = DataLoader(
 	num_workers=0)
 
 min_test_loss = 10**10
-filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_sg_'+str(state_dec_stop_grad)+'_max_sig_'+str(max_sig)+'_fixed_sig_'+str(fixed_sig)+'_log'
 for i in range(n_epochs):
-	loss, s_T_loss, a_loss, kl_loss = train(model,model_optimizer)
+	loss, s_loss, a_loss, s_T_loss, kl_loss = train(model,model_optimizer)
 	
 	print("--------TRAIN---------")
 	
 	print('loss: ', loss)
+	print('s_loss', s_loss)
 	print('s_T_loss: ', s_T_loss)
 	print('a_loss: ', a_loss)
 	print('kl_loss: ', kl_loss)
 	print(i)
 	experiment.log_metric("loss", loss, step=i)
+	experiment.log_metric("s_loss", s_loss, step=i)
 	experiment.log_metric("s_T_loss", s_T_loss, step=i)
 	experiment.log_metric("a_loss", a_loss, step=i)
 	experiment.log_metric("kl_loss", kl_loss, step=i)
 	
-	test_loss, test_s_T_loss, test_a_loss, test_kl_loss = test(model)
+	#    loss,      s_loss,      a_loss,      s_T_loss,      kl_loss
+	test_loss, test_s_loss, test_a_loss, test_s_T_loss, test_kl_loss = test(model)
 	
 	print("--------TEST---------")
 	
 	print('test_loss: ', test_loss)
+	print('test_s_loss: ', test_s_loss)
 	print('test_s_T_loss: ', test_s_T_loss)
 	print('test_a_loss: ', test_a_loss)
 	print('test_kl_loss: ', test_kl_loss)
 	print(i)
 	experiment.log_metric("test_loss", test_loss, step=i)
+	experiment.log_metric("test_s_loss", test_s_loss, step=i)
 	experiment.log_metric("test_s_T_loss", test_s_T_loss, step=i)
 	experiment.log_metric("test_a_loss", test_a_loss, step=i)
 	experiment.log_metric("test_kl_loss", test_kl_loss, step=i)
 
 	if i % 10 == 0:
-		
+
+		filename = 'AntMaze_bilevel_H'+str(H)+'_l2reg_'+str(wd)+'_log.pth'
 			
-		checkpoint_path = 'checkpoints/'+ filename + '.pth'
+		checkpoint_path = 'checkpoints/'+ filename
 		torch.save({
 							'model_state_dict': model.state_dict(),
 							'model_optimizer_state_dict': model_optimizer.state_dict(),
 							}, checkpoint_path)
 	if test_loss < min_test_loss:
 		min_test_loss = test_loss
-
-		
+		filename = 'AntMaze_bilevel_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
 			
-		checkpoint_path = 'checkpoints/'+ filename + '_best.pth'
+		checkpoint_path = 'checkpoints/'+ filename
 		torch.save({'model_state_dict': model.state_dict(),
-			    'model_optimizer_state_dict': model_optimizer.state_dict()}, checkpoint_path)
+				'model_optimizer_state_dict': model_optimizer.state_dict()}, checkpoint_path)
