@@ -65,7 +65,7 @@ if __name__ == '__main__':
 
 	device = torch.device('cuda:0')
 	
-	env = 'antmaze-medium-diverse-v0'
+	env = 'maze2d-large-v1'
 	env = gym.make(env)
 	data = env.get_dataset()
 	
@@ -76,7 +76,7 @@ if __name__ == '__main__':
 	z_dim = 256
 	batch_size = 1
 	episodes = 10
-	wd = .001
+	wd = 0
 	state_dependent_prior = True
 	a_dist = 'normal'
 	colors = ['r','g','b']
@@ -84,9 +84,11 @@ if __name__ == '__main__':
 
 
 	if not state_dependent_prior:
-	 	filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
+	 	#filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
+		filename = 'Noisy1_maze2d_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
 	else:
-	 	filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
+	 	#filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
+		filename = 'Noisy1_maze2d_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
 	PATH = 'checkpoints/'+filename
 	
 	
