@@ -191,9 +191,9 @@ if __name__ == '__main__':
 		# states_actual,actions = run_skill_with_disturbance(skill_model_sdp, states[:,0:1,:],z,env,H)
 
 
-		plt.scatter(states_actual[:,0],states_actual[:,1],c=colors[i])
-		plt.scatter(states_actual[0,0],states_actual[0,1],c=colors[i])
-		plt.errorbar(sT_mean[0,0,0].detach().cpu().numpy(),sT_mean[0,0,1].detach().cpu().numpy(),xerr=sT_sig[0,0,0].detach().cpu().numpy(),yerr=sT_sig[0,0,1].detach().cpu().numpy(),c=colors[i])
+		plt.scatter(states_actual[:,0],states_actual[:,1])
+		plt.scatter(states_actual[0,0],states_actual[0,1])
+		plt.errorbar(sT_mean[0,0,0].detach().cpu().numpy(),sT_mean[0,0,1].detach().cpu().numpy(),xerr=sT_sig[0,0,0].detach().cpu().numpy(),yerr=sT_sig[0,0,1].detach().cpu().numpy())
 
 		actual_states.append(states_actual)
 		action_dist.append(actions)
