@@ -224,6 +224,8 @@ if __name__ == '__main__':
 
 	plt.figure()
 	plt.plot(min_dists)
+	plt.yaxis('Distance')
+	plt.title('Minimum distances of agent and final predicted goal')
 	plt.savefig('min_dists')
 
 	# plt.figure()
