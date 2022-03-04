@@ -64,12 +64,14 @@ if __name__ == '__main__':
 
 	device = torch.device('cuda:0')
 	
-	env = 'antmaze-medium-diverse-v0'
+	env = 'maze2d-large-v1'
+	# env = 'antmaze-medium-diverse-v0'
 	# env = 'kitchen-partial-v0'
 	env = gym.make(env)
 	data = env.get_dataset()
 	
-	H = 20
+	# H = 20
+	H = 40
 	state_dim = data['observations'].shape[1]
 	a_dim = data['actions'].shape[1]
 	h_dim = 256
@@ -96,7 +98,9 @@ if __name__ == '__main__':
 	# filename = 'Antmaze_H20_l2reg_0.001_stopgrad_log_best.pth'
 	# filename = 'AntMaze_H20_l2reg_0.001_a_10.0_b_1.0_log_best.pth'
 	# filename = 'AntMaze_H20_l2reg_0.001_a_1.0_b_0.01_sg_True_log_best.pth'
-	filename = 'AntMaze_H20_l2reg_0.001_a_1.0_b_1.0_sg_True_max_sig_None_fixed_sig_0.1_log_best.pth'#'AntMaze_H20_l2reg_0.001_a_1.0_b_0.01_sg_False_log_best.pth'
+	# filename = 'AntMaze_H20_l2reg_0.001_a_1.0_b_1.0_sg_True_max_sig_None_fixed_sig_0.1_log_best.pth'#'AntMaze_H20_l2reg_0.001_a_1.0_b_0.01_sg_False_log_best.pth'
+	# filename = 'Noisy2_maze2d_H20_l2reg_0_log_best.pth'
+	filename = 'maze2d_H40_log_best.pth'
 	PATH = 'checkpoints/'+filename
 	
 	
@@ -212,7 +216,8 @@ if __name__ == '__main__':
 			
 			plt.scatter(states_actual[:,0],states_actual[:,1],c=colors[j])
 			plt.scatter(states_actual[0,0],states_actual[0,1],c=colors[j])
-			plt.errorbar(sT_mean[0,0,0].detach().cpu().numpy(),sT_mean[0,0,1].detach().cpu().numpy(),xerr=sT_sig[0,0,0].detach().cpu().numpy(),yerr=sT_sig[0,0,1].detach().cpu().numpy(),c=colors[j])
+			# plt.errorbar(sT_mean[0,0,0].detach().cpu().numpy(),sT_mean[0,0,1].detach().cpu().numpy(),xerr=sT_sig[0,0,0].detach().cpu().numpy(),yerr=sT_sig[0,0,1].detach().cpu().numpy(),c=colors[j])
+			plt.scatter(sT_mean[0,0,0].detach().cpu().numpy(),sT_mean[0,0,1].detach().cpu().numpy(),c=colors[j],marker='x')
 
 		actual_states.append(states_actual)
 		action_dist.append(actions)

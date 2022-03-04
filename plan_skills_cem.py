@@ -40,7 +40,7 @@ h_dim = 256
 z_dim = 256
 batch_size = 500
 epochs = 300000
-skill_seq_len = 10
+skill_seq_len = 50
 lr = 1e-4
 wd = 0
 state_dependent_prior = True
@@ -51,7 +51,11 @@ if not state_dependent_prior:
 else:
   	filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
 '''
-filename = 'maze2d_H'+str(H)+'_log_best.pth'
+
+# filename = 'maze2d_H'+str(H)+'_log_best.pth'
+# filename = 'Noisy2_maze2d_H20_l2reg_0_log_best.pth'
+filename = 'Noisy2_cem_maze2d_H20_l2reg_0_log_best.pth'
+
 
 PATH = 'checkpoints/'+filename
 

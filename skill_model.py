@@ -343,7 +343,7 @@ class Prior(nn.Module):
 
 
 class SkillModelStateDependentPrior(nn.Module):
-    def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal',state_dec_stop_grad=False,beta=1.0,alpha=1.0,max_sig=None,fixed_sig=None):
+    def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal',state_dec_stop_grad=False,beta=1.0,alpha=1.0,max_sig=None,fixed_sig=None,ent_pen=0):
         super(SkillModelStateDependentPrior, self).__init__()
 
         self.state_dim = state_dim # state dimension
@@ -354,6 +354,10 @@ class SkillModelStateDependentPrior(nn.Module):
         self.prior   = Prior(state_dim,z_dim,h_dim)
         self.beta    = beta
         self.alpha   = alpha
+        self.ent_pen = ent_pen
+
+        if ent_pen != 0:
+            assert not state_dec_stop_grad
 
     def forward(self,states,actions):
         
@@ -394,6 +398,7 @@ class SkillModelStateDependentPrior(nn.Module):
         Distributions we need:
         '''
 
+
         s_T_mean, s_T_sig, a_means, a_sigs, z_post_means, z_post_sigs  = self.forward(states,actions)
 
         s_T_dist = Normal.Normal(s_T_mean, s_T_sig )
@@ -414,18 +419,19 @@ class SkillModelStateDependentPrior(nn.Module):
         # loss terms corresponding to -logP(s_T|s_0,z) and -logP(a_t|s_t,z)
         T = states.shape[1]
         s_T = states[:,-1:,:]  
-        s_T_loss = -torch.mean(torch.sum(s_T_dist.log_prob(s_T),dim=-1))/T # divide by T because all other losses we take mean over T dimension, effectively dividing by T
-        a_loss   = -torch.mean(torch.sum(a_dist.log_prob(actions),dim=-1)) 
+        s_T_loss = -torch.mean(torch.sum(s_T_dist.log_prob(s_T),   dim=-1))/T # divide by T because all other losses we take mean over T dimension, effectively dividing by T
+        a_loss   = -torch.mean(torch.sum(a_dist.log_prob(actions), dim=-1)) 
+        s_T_ent  = torch.mean(torch.sum(s_T_dist.entropy(),       dim=-1))/T
         # print('a_sigs: ', a_sigs)
         # print('a_dist.log_prob(actions)[0,:,:]: ',a_dist.log_prob(actions)[0,:,:])
         # loss term correpsonding ot kl loss between posterior and prior
         # kl_loss = torch.mean(torch.sum(F.kl_div(z_post_dist, z_prior_dist),dim=-1))
         kl_loss = torch.mean(torch.sum(KL.kl_divergence(z_post_dist, z_prior_dist), dim=-1))/T # divide by T because all other losses we take mean over T dimension, effectively dividing by T
 
-        loss_tot = self.alpha*s_T_loss + a_loss + self.beta*kl_loss
+        loss_tot = self.alpha*s_T_loss + a_loss + self.beta*kl_loss + self.ent_pen*s_T_ent
         # loss_tot = s_T_loss + kl_loss
 
-        return  loss_tot, s_T_loss, a_loss, kl_loss
+        return  loss_tot, s_T_loss, a_loss, kl_loss, s_T_ent
     
     def get_expected_cost(self, s0, skill_seq, goal_states):
         '''
@@ -496,14 +502,14 @@ class SkillModelStateDependentPrior(nn.Module):
             
             pred_states.append(s_i)
         
-        plt.figure()
-        pred_states = torch.cat(pred_states,1)
-        plt.plot(pred_states[:,:,0].T.detach().cpu().numpy(),pred_states[:,:,1].T.detach().cpu().numpy())
-        plt.scatter(s0[0,0,0].detach().cpu().numpy(),s0[0,0,1].detach().cpu().numpy(), label='init state')
-        plt.scatter(goal_state[0,0,0].detach().cpu().numpy(),goal_state[0,0,1].detach().cpu().numpy(),label='goal',s=300)
-        plt.legend()
-        plt.axis('square')
-        plt.savefig('pred_states_cem')
+        # plt.figure()
+        # pred_states = torch.cat(pred_states,1)
+        # plt.plot(pred_states[:,:,0].T.detach().cpu().numpy(),pred_states[:,:,1].T.detach().cpu().numpy())
+        # plt.scatter(s0[0,0,0].detach().cpu().numpy(),s0[0,0,1].detach().cpu().numpy(), label='init state')
+        # plt.scatter(goal_state[0,0,0].detach().cpu().numpy(),goal_state[0,0,1].detach().cpu().numpy(),label='goal',s=300)
+        # plt.legend()
+        # plt.axis('square')
+        # plt.savefig('pred_states_cem')
         #compute cost for sequence of states/skills
         # print('predicted final loc: ', s_i[:,:,:2])
         s_term = s_i
@@ -513,7 +519,7 @@ class SkillModelStateDependentPrior(nn.Module):
         
         return cost
 
-    def get_expected_cost_variable_length(self, s0, skill_seq, lengths, goal_state):
+    def get_expected_cost_variable_length(self, s0, skill_seq, lengths, goal_state, use_epsilons=True):
         '''
         s0 is initial state, batch_size x 1 x s_dim
         skill sequence is a batch_size x skill_seq_len x z_dim tensor that representents a skill_seq_len sequence of skills
@@ -531,14 +537,13 @@ class SkillModelStateDependentPrior(nn.Module):
             cost_i = (lengths == i)*torch.mean((s_i[:,:,:2] - goal_state[:,:,:2])**2,dim=-1).squeeze()
             costs += cost_i
             # z_i = skill_seq[:,i:i+1,:] # might need to reshape
-            mu_z, sigma_z = self.prior(s_i)
+            if use_epsilons:
+                mu_z, sigma_z = self.prior(s_i)
           
-            # ipdb.set_trace()
-            z_i = mu_z + sigma_z*skill_seq[:,i:i+1,:]
-            # ipdb.set_trace()
-            # converting z_i from 1x1xz_dim to batch_size x 1 x z_dim
-            # z_i = torch.cat(batch_size*[z_i],dim=0) # feel free to change this to tile
-            # use abstract dynamics model to predict mean and variance of state after executing z_i, conditioned on s_i
+                z_i = mu_z + sigma_z*skill_seq[:,i:i+1,:]
+            else:
+                z_i = skill_seq[:,i:i+1,:]
+            
             s_mean, s_sig = self.decoder.abstract_dynamics(s_i,z_i)
             
             # sample s_i+1 using reparameterize
@@ -552,6 +557,8 @@ class SkillModelStateDependentPrior(nn.Module):
         plt.figure()
         plt.scatter(s0[0,0,0].detach().cpu().numpy(),s0[0,0,1].detach().cpu().numpy(), label='init state')
         plt.scatter(goal_state[0,0,0].detach().cpu().numpy(),goal_state[0,0,1].detach().cpu().numpy(),label='goal',s=300)
+        plt.xlim([0,20])
+        plt.ylim([0,20])
         pred_states = torch.cat(pred_states,1)
         for i in range(batch_size):
             # ipdb.set_trace()
@@ -565,7 +572,7 @@ class SkillModelStateDependentPrior(nn.Module):
         # plt.axis('square')
         plt.savefig('pred_states_cem_variable_length')
         
-        
+        print('COSTS!!!!!!!!: ', costs)
         return costs
     
     def reparameterize(self, mean, std):

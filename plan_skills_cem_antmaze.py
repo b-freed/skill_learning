@@ -19,10 +19,11 @@ GlfwContext(offscreen=True)
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
 from matplotlib.patches import Ellipse
 import matplotlib.transforms as transforms
 from math import pi
-from cem import cem
+from cem import cem, cem_variable_length
 # from utils import make_video, save_frames_as_gif
 # from gym.wrappers.monitoring import video_recorder
 from utils import make_gif,make_video
@@ -38,12 +39,13 @@ data = env.get_dataset()
 # vid = video_recorder.VideoRecorder(env,path="recording")
 
 H = 20
+replan_freq = H
 state_dim = data['observations'].shape[1]
 a_dim = data['actions'].shape[1]
 h_dim = 256
 z_dim = 256
-batch_size = 100
-skill_seq_len = 10
+batch_size = 1000
+skill_seq_len = 20
 lr = 1e-4
 wd = .001
 state_dependent_prior = True
@@ -51,9 +53,12 @@ state_dec_stop_grad = True
 beta = 1.0
 alpha = 1.0
 max_sig = None
-fixed_sig = 0.1
-n_iters = 50
+fixed_sig = None
+n_iters = 10
 a_dist = 'normal'
+keep_frac = 0.01
+background_img = mpimg.imread('maze_medium.png')
+use_epsilon = True
 # import glob
 '''
 if not state_dependent_prior:
@@ -63,8 +68,8 @@ else:
 '''
 # filename = 'maze2d_H'+str(H)+'_log_best.pth'
 # filename = 'AntMaze_H20_l2reg_0.001_log_best.pth'
-filename = 'AntMaze_H20_l2reg_0.01_a_1.0_b_1.0_sg_True_max_sig_None_fixed_sig_0.1_log_best.pth'#'AntMaze_H20_l2reg_0.001_a_1.0_b_0.01_sg_False_log_best.pth'
-
+# filename = 'AntMaze_H20_l2reg_0.01_a_1.0_b_1.0_sg_True_max_sig_None_fixed_sig_0.1_log_best.pth'#'AntMaze_H20_l2reg_0.001_a_1.0_b_0.01_sg_False_log_best.pth'
+filename = 'AntMaze_H20_l2reg_0.001_log_best.pth'
 
 PATH = 'checkpoints/'+filename
 
@@ -130,7 +135,7 @@ goal_seq = torch.tensor(goal_state, device=device).reshape(1,1,-1)
 
 
 
-def run_skills_iterative_replanning(env,model,goals):
+def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq):
 	
 	s0 = env.reset()
 	state = s0
@@ -142,17 +147,47 @@ def run_skills_iterative_replanning(env,model,goals):
 	states = [s0]
 	frames = []
 	n=0
+	# success = True
+	l = skill_seq_len
 	while np.sum((state[:2] - goals.flatten().detach().cpu().numpy()[:2])**2) > 1.0:
 	# for i in range(2):
 		state_torch = torch.cat(batch_size*[torch.tensor(state,dtype=torch.float32).cuda().reshape((1,1,-1))])
-		# ipdb.set_trace()
-		cost_fn = lambda skill_seq: skill_model.get_expected_cost_for_cem(state_torch, skill_seq, goal_seq)
-		skill_seq,_ = cem(torch.zeros((skill_seq_len,z_dim),device=device),torch.ones((skill_seq_len,z_dim),device=device),cost_fn,batch_size,.5,n_iters)
-		skill = skill_seq[0,:].unsqueeze(0)
-		mu_z, sigma_z = model.prior(torch.tensor(state,dtype=torch.float32).cuda().reshape(1,1,-1))
-		z = mu_z + sigma_z*skill
 		
-		for j in range(H):
+		cost_fn = lambda skill_seq,lengths: skill_model.get_expected_cost_variable_length(state_torch, skill_seq, lengths, goal_seq, use_epsilons=use_epsilon)
+
+		# if n == 0:
+		skill_seq_mean = torch.zeros((skill_seq_len,z_dim),device=device)
+		skill_seq_std  = torch.ones( (skill_seq_len,z_dim),device=device)
+		p_lengths = (1/skill_seq_len) * torch.ones(skill_seq_len,device=device)
+		
+		# else:
+		# 	print('skill_seq_mean.shape: ', skill_seq_mean.shape)
+		# 	print('skill_seq_std.shape: ', skill_seq_std.shape)
+		# 	l = skill_seq_mean.shape[0]
+			
+		# 	skill_seq_mean = torch.cat([skill_seq_mean[1:,:],torch.zeros((skill_seq_len-l,z_dim),device=device)])
+		# 	skill_seq_std  = torch.cat([skill_seq_std[1:,:],torch.ones((skill_seq_len-l,z_dim),device=device)])
+		# 	# p_lengths = 1e-2** torch.ones(skill_seq_len,device=device)
+		# 	# p_lengths[l-1] = 1
+		# 	# p_lengths = p_lengths/torch.sum(p_lengths)
+		# 	p_lengths = (1/skill_seq_len) * torch.ones(skill_seq_len,device=device)
+
+		
+		skill_seq_mean,skill_seq_std = cem_variable_length(skill_seq_mean,skill_seq_std,p_lengths,cost_fn,batch_size,keep_frac,n_iters)
+
+		if skill_seq_mean.shape[0] == 0:
+			break
+		else:
+			skill = skill_seq_mean[0,:].unsqueeze(0)
+
+			
+		if use_epsilon:
+			mu_z, sigma_z = model.prior(torch.tensor(state,dtype=torch.float32).cuda().reshape(1,1,-1))
+			z = mu_z + sigma_z*skill
+		else:
+			z = skill
+		for j in range(replan_freq):
+		# for j in range(100):
 			frames.append(env.render(mode='rgb_array'))
 			# env.render()
 			# vid.capture_frame()
@@ -163,17 +198,19 @@ def run_skills_iterative_replanning(env,model,goals):
 			# plt.scatter(state[0],state[1], label='Trajectory',c='b')
 		n += 1
 
-		if n > 50:
-			return np.stack(states),False  # we did not succeed 
+		
 	
 
-		plt.figure()
+		fig = plt.figure()
+		# plt.imshow(background_img, extent = [-8,28,-8,28])
 		plt.scatter(np.stack(states)[:,0],np.stack(states)[:,1])
 		plt.scatter(goals.flatten().detach().cpu().numpy()[0],goals.flatten().detach().cpu().numpy()[1])
 		plt.axis('equal')
 		plt.savefig('ant_iterative_replanning_actual_states')
 	
-
+		if n > 50:
+			# success = False
+			break 
 	
 
 
@@ -191,7 +228,8 @@ def run_skills_iterative_replanning(env,model,goals):
 	print('MAKING VIDEO!')
 	make_video(frames,name='ant')
 
-	return np.stack(states),True
+	states = np.stack(states)
+	return states, np.min(np.sum((states[:,:2] - goals.flatten().detach().cpu().numpy()[:2])**2,axis=-1))
 
 
 		
@@ -220,6 +258,7 @@ def run_skill_seq(env,s0,model):
 		pred_sig = s_sig.squeeze().detach().cpu().numpy()
 		pred_states.append(pred_state)
 		pred_sigs.append(pred_sig)
+		
 		# run skill for H timesteps
 		for j in range(H):
 			action = model.decoder.ll_policy.numpy_policy(state,z)
@@ -263,8 +302,14 @@ def run_skill_seq(env,s0,model):
 
 
 
-cost_fn = lambda skill_seq: skill_model.get_expected_cost_for_cem(s0_torch, skill_seq, goal_seq)
-states,success = run_skills_iterative_replanning(env,skill_model,goal_seq)
+# cost_fn = lambda skill_seq: skill_model.get_expected_cost_for_cem(s0_torch, skill_seq, goal_seq)
+min_dists_list = []
+for i in range(100):
+	states,min_dist = run_skills_iterative_replanning(env,skill_model,goal_seq,use_epsilon,replan_freq)
+	min_dists_list.append(min_dist)
+	print('min_dists_list: ',min_dists_list)
+	np.save('min_dists_list',min_dists_list)
+
 # skill_seq,_ = cem(torch.zeros((skill_seq_len,z_dim),device=device),torch.ones((skill_seq_len,z_dim),device=device),cost_fn,100,.5,n_iters)
 
 # skill_seq = skill_seq.unsqueeze(0)		

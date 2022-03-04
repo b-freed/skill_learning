@@ -20,13 +20,14 @@ def train(model,model_optimizer):
 	s_T_losses = []
 	a_losses = []
 	kl_losses = []
+	s_T_ents = []
 
 	for batch_id, (data, targets) in enumerate(train_loader):
 		data, targets = data.cuda(), targets.cuda()
 		states = data[:,:,:model.state_dim]  # first state_dim elements are the state
 		actions = data[:,:,model.state_dim:]	 # rest are actions
 
-		loss_tot, s_T_loss, a_loss, kl_loss = model.get_losses(states, actions)
+		loss_tot, s_T_loss, a_loss, kl_loss, s_T_ent = model.get_losses(states, actions)
 
 		model_optimizer.zero_grad()
 		loss_tot.backward()
@@ -38,8 +39,9 @@ def train(model,model_optimizer):
 		s_T_losses.append(s_T_loss.item())
 		a_losses.append(a_loss.item())
 		kl_losses.append(kl_loss.item())
+		s_T_ents.append(s_T_ent.item())
 
-	return np.mean(losses), np.mean(s_T_losses), np.mean(a_losses), np.mean(kl_losses)
+	return np.mean(losses), np.mean(s_T_losses), np.mean(a_losses), np.mean(kl_losses), np.mean(s_T_ents)
 
 def test(model):
 	
@@ -47,6 +49,7 @@ def test(model):
 	s_T_losses = []
 	a_losses = []
 	kl_losses = []
+	s_T_ents = []
 
 	with torch.no_grad():
 		for batch_id, (data, targets) in enumerate(test_loader):
@@ -54,16 +57,17 @@ def test(model):
 			states = data[:,:,:model.state_dim]  # first state_dim elements are the state
 			actions = data[:,:,model.state_dim:]	 # rest are actions
 
-			loss_tot, s_T_loss, a_loss, kl_loss = model.get_losses(states, actions)
+			loss_tot, s_T_loss, a_loss, kl_loss, s_T_ent  = model.get_losses(states, actions)
 
 			# log losses
-
 			losses.append(loss_tot.item())
 			s_T_losses.append(s_T_loss.item())
 			a_losses.append(a_loss.item())
 			kl_losses.append(kl_loss.item())
+			s_T_ents.append(s_T_ent.item())
 
-	return np.mean(losses), np.mean(s_T_losses), np.mean(a_losses), np.mean(kl_losses)
+
+	return np.mean(losses), np.mean(s_T_losses), np.mean(a_losses), np.mean(kl_losses), np.mean(s_T_ents)
 
 
 # instantiating the environmnet, getting the dataset.
@@ -86,13 +90,14 @@ a_dim = actions.shape[1]
 h_dim = 256
 z_dim = 256
 lr = 5e-5
-wd = 0.1
+wd = 0.001
 state_dependent_prior = True
-state_dec_stop_grad = True
+state_dec_stop_grad = False
 beta = 1.0
 alpha = 1.0
+ent_pen = 1.0
 max_sig = None
-fixed_sig = 0.1
+fixed_sig = None
 
 goals = dataset['infos/goal']
 H = 20
@@ -146,7 +151,7 @@ experiment.add_tag('AntMaze H_'+str(H)+' model')
 if not state_dependent_prior:
 	model = SkillModel(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist).cuda()
 else:
-	model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,max_sig=max_sig,fixed_sig=fixed_sig).cuda()
+	model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,max_sig=max_sig,fixed_sig=fixed_sig,ent_pen=ent_pen).cuda()
 
 model_optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
 
@@ -163,7 +168,8 @@ experiment.log_parameters({'lr':lr,
 							   'beta':beta,
 							   'alpha':alpha,
 							   'max_sig':max_sig,
-							   'fixed_sig':fixed_sig})
+							   'fixed_sig':fixed_sig,
+							   'ent_pen':ent_pen})
 
 # add chunks of data to a pytorch dataloader
 inputs = np.concatenate([obs_chunks, action_chunks],axis=-1) # array that is dataset_size x T x state_dim+action_dim
@@ -186,9 +192,9 @@ test_loader = DataLoader(
 	num_workers=0)
 
 min_test_loss = 10**10
-filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_sg_'+str(state_dec_stop_grad)+'_max_sig_'+str(max_sig)+'_fixed_sig_'+str(fixed_sig)+'_log'
+filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_sg_'+str(state_dec_stop_grad)+'_max_sig_'+str(max_sig)+'_fixed_sig_'+str(fixed_sig)+'_ent_pen_'+str(ent_pen)+'_log'
 for i in range(n_epochs):
-	loss, s_T_loss, a_loss, kl_loss = train(model,model_optimizer)
+	loss, s_T_loss, a_loss, kl_loss, s_T_ent = train(model,model_optimizer)
 	
 	print("--------TRAIN---------")
 	
@@ -196,13 +202,16 @@ for i in range(n_epochs):
 	print('s_T_loss: ', s_T_loss)
 	print('a_loss: ', a_loss)
 	print('kl_loss: ', kl_loss)
+	print('s_T_ent: ', s_T_ent)
 	print(i)
 	experiment.log_metric("loss", loss, step=i)
 	experiment.log_metric("s_T_loss", s_T_loss, step=i)
 	experiment.log_metric("a_loss", a_loss, step=i)
 	experiment.log_metric("kl_loss", kl_loss, step=i)
-	
-	test_loss, test_s_T_loss, test_a_loss, test_kl_loss = test(model)
+	experiment.log_metric("s_T_ent", s_T_ent, step=i)
+
+
+	test_loss, test_s_T_loss, test_a_loss, test_kl_loss, test_s_T_ent = test(model)
 	
 	print("--------TEST---------")
 	
@@ -210,11 +219,14 @@ for i in range(n_epochs):
 	print('test_s_T_loss: ', test_s_T_loss)
 	print('test_a_loss: ', test_a_loss)
 	print('test_kl_loss: ', test_kl_loss)
+	print('test_s_T_ent: ', test_s_T_ent)
+
 	print(i)
 	experiment.log_metric("test_loss", test_loss, step=i)
 	experiment.log_metric("test_s_T_loss", test_s_T_loss, step=i)
 	experiment.log_metric("test_a_loss", test_a_loss, step=i)
 	experiment.log_metric("test_kl_loss", test_kl_loss, step=i)
+	experiment.log_metric("test_s_T_ent", test_s_T_ent, step=i)
 
 	if i % 10 == 0:
 		

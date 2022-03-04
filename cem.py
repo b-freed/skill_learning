@@ -90,6 +90,7 @@ def cem_iter_variable_length(x,lengths,cost_fn,frac_keep):
     x_topk = x[inds_keep,...]
     lengths_topk = lengths[inds_keep]
     cost_topk = torch.mean(costs[inds_keep])
+    cost = torch.mean(costs)
     # take mean and stand dev of new solution population
     x_mean = torch.mean(x_topk,dim=0)
     x_std  = torch.std( x_topk,dim=0)
@@ -98,17 +99,21 @@ def cem_iter_variable_length(x,lengths,cost_fn,frac_keep):
     # p_lengths += .001
     # p_lengths = p_lengths/torch.sum(p_lengths)
 
-    return x_mean,x_std,p_lengths,cost_topk
+    return x_mean,x_std,p_lengths,cost#cost_topk
 
 def cem_variable_length(x_mean,x_std,p_lengths,cost_fn,pop_size,frac_keep,n_iters):
 
     max_length = x_mean.shape[1]
+    # ipdb.set_trace()
+
     for i in range(n_iters):
         x_shape = [pop_size]+list(x_mean.shape)
         x = x_mean + x_std*torch.randn(x_shape,device=device)
         lengths = torch.multinomial(p_lengths, pop_size,replacement=True)# sample lengths from p_lengths
         x_mean,x_std,p_lengths,cost = cem_iter_variable_length(x,lengths,cost_fn,frac_keep)
         # ipdb.set_trace()
+        print('x_mean.shape: ', x_mean.shape)
+
 
         print('i: ',i)
         print('cost: ', cost)
