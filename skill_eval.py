@@ -85,10 +85,10 @@ if __name__ == '__main__':
 
 	if not state_dependent_prior:
 	 	#filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
-		filename = 'Noisy1_maze2d_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
+		filename = 'Noisy2_maze2d_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
 	else:
 	 	#filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
-		filename = 'Noisy1_maze2d_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
+		filename = 'Noisy2_maze2d_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
 	PATH = 'checkpoints/'+filename
 	
 	
@@ -226,7 +226,7 @@ if __name__ == '__main__':
 	plt.plot(min_dists)
 	plt.ylabel('Distance')
 	plt.title('Minimum distances of agent and final predicted goal')
-	plt.savefig('min_dists')
+	plt.savefig('min_dists_noisyx2')
 
 	# plt.figure()
 	# plt.plot(state_lls)
