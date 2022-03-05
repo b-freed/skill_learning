@@ -44,7 +44,7 @@ state_dim = data['observations'].shape[1]
 a_dim = data['actions'].shape[1]
 h_dim = 256
 z_dim = 256
-batch_size = 1000
+batch_size = 100
 skill_seq_len = 20
 lr = 1e-4
 wd = .001
@@ -53,11 +53,11 @@ state_dec_stop_grad = True
 beta = 1.0
 alpha = 1.0
 max_sig = None
-fixed_sig = None
-n_iters = 10
+fixed_sig = 0.0001
+n_iters = 100
 a_dist = 'normal'
-keep_frac = 0.01
-background_img = mpimg.imread('maze_medium.png')
+keep_frac = 0.1
+# background_img = mpimg.imread('maze_medium.png')
 use_epsilon = True
 # import glob
 '''
@@ -69,7 +69,9 @@ else:
 # filename = 'maze2d_H'+str(H)+'_log_best.pth'
 # filename = 'AntMaze_H20_l2reg_0.001_log_best.pth'
 # filename = 'AntMaze_H20_l2reg_0.01_a_1.0_b_1.0_sg_True_max_sig_None_fixed_sig_0.1_log_best.pth'#'AntMaze_H20_l2reg_0.001_a_1.0_b_0.01_sg_False_log_best.pth'
-filename = 'AntMaze_H20_l2reg_0.001_log_best.pth'
+# filename = 'AntMaze_H20_l2reg_0.001_log_best.pth'
+filename = 'AntMaze_H20_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
+
 
 PATH = 'checkpoints/'+filename
 

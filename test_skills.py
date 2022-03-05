@@ -64,14 +64,14 @@ if __name__ == '__main__':
 
 	device = torch.device('cuda:0')
 	
-	env = 'maze2d-large-v1'
-	# env = 'antmaze-medium-diverse-v0'
+	# env = 'maze2d-large-v1'
+	env = 'antmaze-medium-diverse-v0'
 	# env = 'kitchen-partial-v0'
 	env = gym.make(env)
 	data = env.get_dataset()
 	
-	# H = 20
-	H = 40
+	H = 20
+	# H = 40
 	state_dim = data['observations'].shape[1]
 	a_dim = data['actions'].shape[1]
 	h_dim = 256
@@ -100,7 +100,8 @@ if __name__ == '__main__':
 	# filename = 'AntMaze_H20_l2reg_0.001_a_1.0_b_0.01_sg_True_log_best.pth'
 	# filename = 'AntMaze_H20_l2reg_0.001_a_1.0_b_1.0_sg_True_max_sig_None_fixed_sig_0.1_log_best.pth'#'AntMaze_H20_l2reg_0.001_a_1.0_b_0.01_sg_False_log_best.pth'
 	# filename = 'Noisy2_maze2d_H20_l2reg_0_log_best.pth'
-	filename = 'maze2d_H40_log_best.pth'
+	# filename = 'maze2d_H40_log_best.pth'
+	filename = 'AntMaze_H20_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
 	PATH = 'checkpoints/'+filename
 	
 	

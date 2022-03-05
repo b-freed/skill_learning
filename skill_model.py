@@ -204,19 +204,19 @@ class Encoder(nn.Module):
     -Pass through bidirectional RNN
     -Pass output of bidirectional RNN through 2 linear layers, one to get mean of z and one to get stand dev (we're estimating one z ("skill") for entire episode)
     '''
-    def __init__(self,state_dim,a_dim,z_dim,h_dim):
+    def __init__(self,state_dim,a_dim,z_dim,h_dim,n_gru_layers=4):
         super(Encoder, self).__init__()
 
 
         self.state_dim = state_dim # state dimension
         self.a_dim = a_dim # action dimension
 
-        self.emb_layer  = nn.Sequential(nn.Linear(state_dim+a_dim,h_dim),nn.ReLU())
-        self.rnn        = nn.GRU(h_dim,h_dim,batch_first=True,bidirectional=False)
+        self.emb_layer  = nn.Sequential(nn.Linear(state_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
+        self.rnn        = nn.GRU(h_dim+a_dim,h_dim,batch_first=True,bidirectional=True,num_layers=n_gru_layers)
         #self.mean_layer = nn.Linear(h_dim,z_dim)
-        self.mean_layer = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,z_dim))
+        self.mean_layer = nn.Sequential(nn.Linear(2*h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,z_dim))
         #self.sig_layer  = nn.Sequential(nn.Linear(h_dim,z_dim),nn.Softplus())  # using softplus to ensure stand dev is positive
-        self.sig_layer  = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,z_dim),nn.Softplus())
+        self.sig_layer  = nn.Sequential(nn.Linear(2*h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,z_dim),nn.Softplus())
 
 
     def forward(self,states,actions):
@@ -232,17 +232,14 @@ class Encoder(nn.Module):
             z_sig:  batch_size x 1 x z_dim tensor indicating standard deviation of z distribution
         '''
 
-        # concatenate states and actions
-        s_a = torch.cat([states,actions],dim=-1)
-        # embedd states and actions
-        embed = self.emb_layer(s_a)
+        
+        s_emb = self.emb_layer(states)
         # through rnn
-        feats,hn = self.rnn(embed)
-        hn = hn.transpose(0,1) # use final hidden state, as this should be an encoding of all states and actions previously.
+        s_emb_a = torch.cat([s_emb,actions],dim=-1)
+        feats,_ = self.rnn(s_emb_a)
+        hn = feats[:,-1:,:]
+        # hn = hn.transpose(0,1) # use final hidden state, as this should be an encoding of all states and actions previously.
         # get z_mean and z_sig by passing rnn output through mean_layer and sig_layer
-        # z_mean = self.mean_layer(feats[:,-1:,:])
-        # z_sig = self.sig_layer(feats[:,-1:,:])
-
         z_mean = self.mean_layer(hn)
         z_sig = self.sig_layer(hn)
         

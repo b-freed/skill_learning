@@ -35,7 +35,7 @@ def run_skill(skill_model,s0,skill,env,H,render,pred_state):
 		state,_,_,_ = env.step(action)
 		
 		states.append(state)
-		if np.sum((state[:2] - pred_state[:2])**2) < .1:
+		if np.sum((state[:2] - pred_state[:2])**2) < .5:
 			break
 	  
 	return np.stack(states),np.stack(actions),frames
@@ -82,7 +82,7 @@ if __name__ == '__main__':
 	beta = 1.0
 	alpha = 1.0
 	max_sig = None
-	fixed_sig = 0.1
+	fixed_sig = None
 	a_dist = 'normal'
 	
 	colors = ['r','g','b']
@@ -97,7 +97,9 @@ if __name__ == '__main__':
 	# filename = 'AntMaze_H20_l2reg_0.001_a_10.0_b_1.0_log_best.pth'
 	# filename = 'AntMaze_H20_l2reg_0.001_a_1.0_b_0.01_sg_True_log_best.pth'
 	# filename = 'AntMaze_H20_l2reg_0.001_a_1.0_b_1.0_sg_True_max_sig_None_fixed_sig_0.1_log_best.pth'#'AntMaze_H20_l2reg_0.001_a_1.0_b_0.01_sg_False_log_best.pth'
-	filename = 'AntMaze_H20_l2reg_0.01_a_1.0_b_1.0_sg_True_max_sig_None_fixed_sig_0.1_log_best.pth'#'AntMaze_H20_l2reg_0.001_a_1.0_b_0.01_sg_False_log_best.pth'
+	# filename = 'AntMaze_H20_l2reg_0.01_a_1.0_b_1.0_sg_True_max_sig_None_fixed_sig_0.1_log_best.pth'#'AntMaze_H20_l2reg_0.001_a_1.0_b_0.01_sg_False_log_best.pth'
+	filename = 'AntMaze_H20_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
+
 
 	PATH = 'checkpoints/'+filename
 	
@@ -218,21 +220,22 @@ if __name__ == '__main__':
 		# plt.scatter(states_actual[0,0],states_actual[0,1],c=colors[j])
 		# plt.errorbar(sT_mean[0,0,0].detach().cpu().numpy(),sT_mean[0,0,1].detach().cpu().numpy(),xerr=sT_sig[0,0,0].detach().cpu().numpy(),yerr=sT_sig[0,0,1].detach().cpu().numpy(),c=colors[j])
 
-		plt.scatter(states_actual[:,0],states_actual[:,1])
-		plt.scatter(states_actual[0,0],states_actual[0,1])
-		plt.errorbar(sT_mean[0,0,0].detach().cpu().numpy(),sT_mean[0,0,1].detach().cpu().numpy(),xerr=sT_sig[0,0,0].detach().cpu().numpy(),yerr=sT_sig[0,0,1].detach().cpu().numpy())
+		plt.scatter(states_actual[:,0],states_actual[:,1],c='b')
+		plt.scatter(states_actual[0,0],states_actual[0,1],c='r')
+		plt.errorbar(sT_mean[0,0,0].detach().cpu().numpy(),sT_mean[0,0,1].detach().cpu().numpy(),xerr=sT_sig[0,0,0].detach().cpu().numpy(),yerr=sT_sig[0,0,1].detach().cpu().numpy(),c='g')
 
+		plt.legend(['Actual Trajectory','Initial State','Predicted Terminal State'])
+		plt.title('Skill Execution & Prediction (Skill-Dependent Prior) '+str(i))
+		plt.axis('square')
+		plt.savefig('Skill_Prediction_H'+str(H)+'_2'+'.png')
+		ipdb.set_trace()
 
 		actual_states.append(states_actual)
 		action_dist.append(actions)
 		pred_states_mean.append(sT_mean[0,0,:].detach().cpu().numpy())
 		
 	
-	plt.legend(['Actual Trajectory','Initial State','Predicted Terminal State'])
-	plt.title('Skill Execution & Prediction (Skill-Dependent Prior) '+str(i))
-	plt.axis('square')
-	# plt.savefig('Skill_Prediction_H'+str(H)+'_'+str(i)+'.png')
-	plt.savefig('Skill_Prediction_H'+str(H)+'_2'+'.png')
+	
 
 		
 		

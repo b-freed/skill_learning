@@ -22,8 +22,8 @@ def train(model,model_optimizer):
 	kl_losses = []
 	s_T_ents = []
 
-	for batch_id, (data, targets) in enumerate(train_loader):
-		data, targets = data.cuda(), targets.cuda()
+	for batch_id, data in enumerate(train_loader):
+		data = data.cuda()
 		states = data[:,:,:model.state_dim]  # first state_dim elements are the state
 		actions = data[:,:,model.state_dim:]	 # rest are actions
 
@@ -52,8 +52,8 @@ def test(model):
 	s_T_ents = []
 
 	with torch.no_grad():
-		for batch_id, (data, targets) in enumerate(test_loader):
-			data, targets = data.cuda(), targets.cuda()
+		for batch_id, data in enumerate(test_loader):
+			data = data.cuda()
 			states = data[:,:,:model.state_dim]  # first state_dim elements are the state
 			actions = data[:,:,model.state_dim:]	 # rest are actions
 
@@ -80,29 +80,23 @@ dataset = env.get_dataset()  # dictionary, with 'observations', 'rewards', 'acti
 
 batch_size = 100
 
-states = dataset['observations']
-N = states.shape[0]
 
-state_dim = states.shape[1]
-actions = dataset['actions']
-a_dim = actions.shape[1]
 
 h_dim = 256
 z_dim = 256
 lr = 5e-5
-wd = 0.001
+wd = 0.0
 state_dependent_prior = True
 state_dec_stop_grad = False
-beta = 1.0
+beta = 0.1
 alpha = 1.0
-ent_pen = 1.0
+ent_pen = 0.0
 max_sig = None
 fixed_sig = None
-
-goals = dataset['infos/goal']
 H = 20
-stride = 20
+stride = 1
 n_epochs = 50000
+test_split = .2
 a_dist = 'normal' # 'tanh_normal' or 'normal'
 
 # splitting up the dataset into subsequences in which we're going to a particular goal.  Every time the goal changes we make a new subsequence.
@@ -120,32 +114,59 @@ def chunks(obs,actions,goals,H,stride):
 	obs_chunks = []
 	action_chunks = []
 	targets = []
-	for i in range((N-1)//stride):
+	N = obs.shape[0]
+	for i in range(N//stride - H):
 		start_ind = i*stride
 		end_ind = start_ind + H
 		# If end_ind = 4000000, it goes out of bounds
 		# this way start_ind is from 0-3999980 and end_ind is from 20-3999999
-		if end_ind == N:
-			end_ind = N-1
+		# if end_ind == N:
+		# 	end_ind = N-1
 		
-		start_goal = goals[start_ind,:]
-		end_goal = goals[end_ind,:]
+		obs_chunk = obs[start_ind:end_ind,:]
+
+		action_chunk = actions[start_ind:end_ind,:]
 		
-		if start_goal[0] == end_goal[0] and start_goal[1] == end_goal[1]:
-		
-			obs_chunk = obs[start_ind:end_ind,:]
-			action_chunk = actions[start_ind:end_ind,:]
+		targets.append(goals[start_ind:end_ind,:])
+		obs_chunks.append(obs_chunk)
+		action_chunks.append(action_chunk)
 			
-			targets.append(goals[start_ind:end_ind,:])
-			obs_chunks.append(obs_chunk)
-			action_chunks.append(action_chunk)
-			
+	
 	return np.stack(obs_chunks),np.stack(action_chunks),np.stack(targets)
 
-obs_chunks, action_chunks, targets = chunks(states, actions, goals, H, stride)
+
+states = dataset['observations']
+actions = dataset['actions']
+goals = dataset['infos/goal']
+
+N = states.shape[0]
+
+state_dim = states.shape[1]
+a_dim = actions.shape[1]
+
+N_train = int((1-test_split)*N)
+N_test = N - N_train
+
+states_train  = states[:N_train,:]
+actions_train = actions[:N_train,:]
+goals_train = goals[:N_train,:]
+
+
+states_test  = states[N_train:,:]
+actions_test = actions[N_train:,:]
+goals_test   = goals[N_train:,:]
+
+assert states_train.shape[0] == N_train
+assert states_test.shape[0] == N_test
+
+obs_chunks_train, action_chunks_train, targets_train = chunks(states_train, actions_train, goals_train, H, stride)
+print('obs_chunks: ', obs_chunks_train)
+obs_chunks_test,  action_chunks_test,  targets_test  = chunks(states_test,  actions_test,  goals_test,  H, stride)
+
 
 experiment = Experiment(api_key = '9mxH2vYX20hn9laEr0KtHLjAa', project_name = 'skill-learning')
-experiment.add_tag('AntMaze H_'+str(H)+' model')
+experiment.add_tag('opal model')
+
 
 # First, instantiate a skill model
 if not state_dependent_prior:
@@ -172,22 +193,26 @@ experiment.log_parameters({'lr':lr,
 							   'ent_pen':ent_pen})
 
 # add chunks of data to a pytorch dataloader
-inputs = np.concatenate([obs_chunks, action_chunks],axis=-1) # array that is dataset_size x T x state_dim+action_dim
+inputs_train = torch.tensor(np.concatenate([obs_chunks_train, action_chunks_train],axis=-1),dtype=torch.float32) # array that is dataset_size x T x state_dim+action_dim
+inputs_test  = torch.tensor(np.concatenate([obs_chunks_test,  action_chunks_test], axis=-1),dtype=torch.float32) # array that is dataset_size x T x state_dim+action_dim
 
-dataset_size = len(inputs)
-train_data, test_data = torch.utils.data.random_split(inputs, [int(0.8*dataset_size), int(dataset_size-int(0.8*dataset_size))])
-train_targets, test_targets = torch.utils.data.random_split(targets, [int(0.8*dataset_size), int(dataset_size-int(0.8*dataset_size))])
 
-train_data = TensorDataset(torch.tensor(train_data, dtype=torch.float32), torch.tensor(train_targets, dtype=torch.float32))
-test_data = TensorDataset(torch.tensor(test_data, dtype=torch.float32), torch.tensor(test_targets, dtype=torch.float32))
+# dataset_size = len(inputs)
+# train_data, test_data = torch.utils.data.random_split(inputs, [int(0.8*dataset_size), int(dataset_size-int(0.8*dataset_size))])
+# train_targets, test_targets = torch.utils.data.random_split(targets, [int(0.8*dataset_size), int(dataset_size-int(0.8*dataset_size))])
+
+
+
+# train_data = TensorDataset(torch.tensor(inputs_train, dtype=torch.float32))
+# test_data  = TensorDataset(torch.tensor(inputs_test,  dtype=torch.float32))
 
 train_loader = DataLoader(
-	train_data,
+	inputs_train,
 	batch_size=batch_size,
 	num_workers=0)  # not really sure about num_workers...
 
 test_loader = DataLoader(
-	test_data,
+	inputs_test,
 	batch_size=batch_size,
 	num_workers=0)
 
