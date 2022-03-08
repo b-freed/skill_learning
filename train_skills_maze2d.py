@@ -72,8 +72,8 @@ def test(model):
 
 # instantiating the environmnet, getting the dataset.
 # the data is in a big dictionary, containing long sequences of obs, rew, actions, goals
-env = 'antmaze-medium-diverse-v0'  # maze whatever
-env = gym.make(env)
+env_name = 'antmaze-medium-diverse-v0'  # maze whatever
+env = gym.make(env_name)
 dataset = env.get_dataset()  # dictionary, with 'observations', 'rewards', 'actions', 'infos/goal'
 #dataset_file = "datasets/maze2d-umaze-v1.hdf5"
 #dataset = h5py.File(dataset_file, "r")
@@ -88,7 +88,7 @@ lr = 5e-5
 wd = 0.0
 state_dependent_prior = True
 state_dec_stop_grad = False
-beta = 0.1
+beta = 1.0
 alpha = 1.0
 ent_pen = 0.0
 max_sig = None
@@ -190,7 +190,8 @@ experiment.log_parameters({'lr':lr,
 							   'alpha':alpha,
 							   'max_sig':max_sig,
 							   'fixed_sig':fixed_sig,
-							   'ent_pen':ent_pen})
+							   'ent_pen':ent_pen,
+							   'env_name':env_name})
 
 # add chunks of data to a pytorch dataloader
 inputs_train = torch.tensor(np.concatenate([obs_chunks_train, action_chunks_train],axis=-1),dtype=torch.float32) # array that is dataset_size x T x state_dim+action_dim
