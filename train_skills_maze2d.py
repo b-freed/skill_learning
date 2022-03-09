@@ -185,6 +185,8 @@ else:
 
 model_optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
 
+filename = env_name+'_'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_sg_'+str(state_dec_stop_grad)+'_max_sig_'+str(max_sig)+'_fixed_sig_'+str(fixed_sig)+'_ent_pen_'+str(ent_pen)+'_log'
+
 experiment.log_parameters({'lr':lr,
 							   'h_dim':h_dim,
 							   'state_dependent_prior':state_dependent_prior,
@@ -200,7 +202,8 @@ experiment.log_parameters({'lr':lr,
 							   'max_sig':max_sig,
 							   'fixed_sig':fixed_sig,
 							   'ent_pen':ent_pen,
-							   'env_name':env_name})
+							   'env_name':env_name,
+							   'filename':filename})
 
 # add chunks of data to a pytorch dataloader
 inputs_train = torch.tensor(np.concatenate([obs_chunks_train, action_chunks_train],axis=-1),dtype=torch.float32) # array that is dataset_size x T x state_dim+action_dim
@@ -227,7 +230,6 @@ test_loader = DataLoader(
 	num_workers=0)
 
 min_test_loss = 10**10
-filename = env_name+'_'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_sg_'+str(state_dec_stop_grad)+'_max_sig_'+str(max_sig)+'_fixed_sig_'+str(fixed_sig)+'_ent_pen_'+str(ent_pen)+'_log'
 for i in range(n_epochs):
 	loss, s_T_loss, a_loss, kl_loss, s_T_ent = train(model,model_optimizer)
 	
