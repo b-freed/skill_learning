@@ -72,11 +72,20 @@ def test(model):
 
 # instantiating the environmnet, getting the dataset.
 # the data is in a big dictionary, containing long sequences of obs, rew, actions, goals
-env_name = 'antmaze-medium-diverse-v0'  # maze whatever
+# env_name = 'antmaze-medium-diverse-v0'  # maze whatever
+# env_name = 'maze2d-large-v1'
+env_name = 'antmaze-large-diverse-v0'
 env = gym.make(env_name)
-dataset = env.get_dataset()  # dictionary, with 'observations', 'rewards', 'actions', 'infos/goal'
+# dataset = env.get_dataset()  # dictionary, with 'observations', 'rewards', 'actions', 'infos/goal'
+dataset_file = None
 #dataset_file = "datasets/maze2d-umaze-v1.hdf5"
-#dataset = h5py.File(dataset_file, "r")
+# dataset_file = 'datasets/maze2d-large-v1-noisy-2.hdf5'
+
+if dataset_file is None:
+	dataset = env.get_dataset()
+else:
+	dataset = h5py.File(dataset_file, "r")
+
 
 batch_size = 100
 
@@ -93,7 +102,7 @@ alpha = 1.0
 ent_pen = 0.0
 max_sig = None
 fixed_sig = None
-H = 20
+H = 40
 stride = 1
 n_epochs = 50000
 test_split = .2
@@ -165,7 +174,7 @@ obs_chunks_test,  action_chunks_test,  targets_test  = chunks(states_test,  acti
 
 
 experiment = Experiment(api_key = '9mxH2vYX20hn9laEr0KtHLjAa', project_name = 'skill-learning')
-experiment.add_tag('opal model')
+# experiment.add_tag('noisy2')
 
 
 # First, instantiate a skill model
@@ -218,7 +227,7 @@ test_loader = DataLoader(
 	num_workers=0)
 
 min_test_loss = 10**10
-filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_sg_'+str(state_dec_stop_grad)+'_max_sig_'+str(max_sig)+'_fixed_sig_'+str(fixed_sig)+'_ent_pen_'+str(ent_pen)+'_log'
+filename = env_name+'_'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_sg_'+str(state_dec_stop_grad)+'_max_sig_'+str(max_sig)+'_fixed_sig_'+str(fixed_sig)+'_ent_pen_'+str(ent_pen)+'_log'
 for i in range(n_epochs):
 	loss, s_T_loss, a_loss, kl_loss, s_T_ent = train(model,model_optimizer)
 	
