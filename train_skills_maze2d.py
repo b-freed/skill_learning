@@ -72,9 +72,9 @@ def test(model):
 
 # instantiating the environmnet, getting the dataset.
 # the data is in a big dictionary, containing long sequences of obs, rew, actions, goals
-# env_name = 'antmaze-medium-diverse-v0'  # maze whatever
+env_name = 'antmaze-medium-diverse-v0'  # maze whatever
 # env_name = 'maze2d-large-v1'
-env_name = 'antmaze-large-diverse-v0'
+# env_name = 'antmaze-large-diverse-v0'
 env = gym.make(env_name)
 # dataset = env.get_dataset()  # dictionary, with 'observations', 'rewards', 'actions', 'infos/goal'
 dataset_file = None

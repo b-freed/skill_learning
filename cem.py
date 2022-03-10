@@ -58,15 +58,15 @@ def cem(x_mean,x_std,cost_fn,pop_size,frac_keep,n_iters):
         x_shape = [pop_size]+list(x_mean.shape)
         x = x_mean + x_std*torch.randn(x_shape,device=device)
         x_mean,x_std,cost = cem_iter(x,cost_fn,frac_keep)
-        print('i: ',i)
-        print('cost: ', cost)
+        # print('i: ',i)
+        # print('cost: ', cost)
 
 
     return x_mean,x_std
 
 
 
-def cem_iter_variable_length(x,lengths,cost_fn,frac_keep):
+def cem_iter_variable_length(x,lengths,cost_fn,frac_keep,l2_pen):
     '''
     INPUTS:
         x: N x _ tensor of initial solution candidates
@@ -81,8 +81,9 @@ def cem_iter_variable_length(x,lengths,cost_fn,frac_keep):
 
      # evaluate solution candidates, get sorted inds
     costs = cost_fn(x,lengths)
-    inds = torch.argsort(costs)
-
+    l2_cost = l2_pen*torch.mean(torch.mean(x**2,dim=-1),dim=-1) 
+    # print('l2_cost.shape: ', l2_cost.shape)
+    costs += l2_cost
     inds = torch.argsort(costs)
     # figure out which inds to keep
     inds_keep = inds[:k]
@@ -101,23 +102,31 @@ def cem_iter_variable_length(x,lengths,cost_fn,frac_keep):
 
     return x_mean,x_std,p_lengths,cost#cost_topk
 
-def cem_variable_length(x_mean,x_std,p_lengths,cost_fn,pop_size,frac_keep,n_iters):
+def cem_variable_length(x_mean,x_std,p_lengths,cost_fn,pop_size,frac_keep,n_iters,max_ep=None,l2_pen=0):
 
     max_length = x_mean.shape[1]
     # ipdb.set_trace()
 
     for i in range(n_iters):
         x_shape = [pop_size]+list(x_mean.shape)
-        x = x_mean + x_std*torch.randn(x_shape,device=device)
+        epsilon = torch.randn(x_shape,device=device)
+        if max_ep is not None:
+            epsilon[epsilon >  max_ep]  =  max_ep
+            epsilon[epsilon < -max_ep] = -max_ep
+        x = x_mean + x_std*epsilon
         lengths = torch.multinomial(p_lengths, pop_size,replacement=True)# sample lengths from p_lengths
-        x_mean,x_std,p_lengths,cost = cem_iter_variable_length(x,lengths,cost_fn,frac_keep)
+        x_mean,x_std,p_lengths,cost = cem_iter_variable_length(x,lengths,cost_fn,frac_keep,l2_pen)
         # ipdb.set_trace()
-        print('x_mean.shape: ', x_mean.shape)
 
-
-        print('i: ',i)
-        print('cost: ', cost)
+        # p_lengths += 1/len(p_lengths)
+        # p_lengths = p_lengths/torch.sum(p_lengths)
+       
+        # print('i: ',i)
+        # print('cost: ', cost)
+    
     length = torch.argmax(p_lengths)
+    
+    
     # x_mean,x_std = x_mean[:length+1],x_std[:length+1]
     x_mean,x_std = x_mean[:length],x_std[:length]
     # ipdb.set_trace()
@@ -125,8 +134,7 @@ def cem_variable_length(x_mean,x_std,p_lengths,cost_fn,pop_size,frac_keep,n_iter
 
 
 def get_length_probs(lengths,max_length):
-    counts = torch.stack([torch.sum(lengths == i) for i in range(max_length)])
-
+    counts = torch.stack([torch.sum(lengths == i) for i in range(max_length+1)])
     p_lengths = counts / torch.sum(counts)
 
     return p_lengths

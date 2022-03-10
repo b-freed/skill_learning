@@ -30,6 +30,7 @@ from utils import make_gif,make_video
 
 device = torch.device('cuda:0')
 
+# env = 'antmaze-large-diverse-v0'
 env = 'antmaze-medium-diverse-v0'
 # env = 'maze2d-large-v1'
 env_name = env
@@ -53,12 +54,16 @@ state_dec_stop_grad = True
 beta = 1.0
 alpha = 1.0
 max_sig = None
-fixed_sig = 0.0001
-n_iters = 100
+fixed_sig = 0.0
+n_iters = 50
+# n_iters = 100
+# n_iters = 20
 a_dist = 'normal'
 keep_frac = 0.1
 # background_img = mpimg.imread('maze_medium.png')
 use_epsilon = True
+max_ep = None
+cem_l2_pen = 100.0
 # import glob
 '''
 if not state_dependent_prior:
@@ -70,8 +75,11 @@ else:
 # filename = 'AntMaze_H20_l2reg_0.001_log_best.pth'
 # filename = 'AntMaze_H20_l2reg_0.01_a_1.0_b_1.0_sg_True_max_sig_None_fixed_sig_0.1_log_best.pth'#'AntMaze_H20_l2reg_0.001_a_1.0_b_0.01_sg_False_log_best.pth'
 # filename = 'AntMaze_H20_l2reg_0.001_log_best.pth'
-filename = 'AntMaze_H20_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
-
+# filename = 'AntMaze_H20_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
+# filename = 'AntMaze_H20_l2reg_0.0_a_1.0_b_0.1_sg_True_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
+# filename = 'AntMaze_large_H20_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
+# filename = 'antmaze-large-diverse-v0_40_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
+filename = 'antmaze-medium-diverse-v0_10_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
 
 PATH = 'checkpoints/'+filename
 
@@ -149,6 +157,8 @@ def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq):
 	states = [s0]
 	frames = []
 	n=0
+	timeout = False
+	out_of_skills = False
 	# success = True
 	l = skill_seq_len
 	while np.sum((state[:2] - goals.flatten().detach().cpu().numpy()[:2])**2) > 1.0:
@@ -160,7 +170,8 @@ def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq):
 		# if n == 0:
 		skill_seq_mean = torch.zeros((skill_seq_len,z_dim),device=device)
 		skill_seq_std  = torch.ones( (skill_seq_len,z_dim),device=device)
-		p_lengths = (1/skill_seq_len) * torch.ones(skill_seq_len,device=device)
+		p_lengths = (1/(skill_seq_len)) * torch.ones(skill_seq_len+1,device=device)
+		p_lengths[0] = 0.0
 		
 		# else:
 		# 	print('skill_seq_mean.shape: ', skill_seq_mean.shape)
@@ -175,10 +186,15 @@ def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq):
 		# 	p_lengths = (1/skill_seq_len) * torch.ones(skill_seq_len,device=device)
 
 		
-		skill_seq_mean,skill_seq_std = cem_variable_length(skill_seq_mean,skill_seq_std,p_lengths,cost_fn,batch_size,keep_frac,n_iters)
+		skill_seq_mean,skill_seq_std = cem_variable_length(skill_seq_mean,skill_seq_std,p_lengths,cost_fn,batch_size,keep_frac,n_iters,max_ep=max_ep,l2_pen=cem_l2_pen)
+
+
 
 		if skill_seq_mean.shape[0] == 0:
-			break
+
+			print('OUT OF SKILLS!!!')
+			# out_of_skills = True
+			# break
 		else:
 			skill = skill_seq_mean[0,:].unsqueeze(0)
 
@@ -198,6 +214,8 @@ def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq):
 			states.append(state)
 			# skill_seq_states.append(state)
 			# plt.scatter(state[0],state[1], label='Trajectory',c='b')
+			if np.sum((state[:2] - goals.flatten().detach().cpu().numpy()[:2])**2) <= 1.0:
+				break
 		n += 1
 
 		
@@ -208,10 +226,10 @@ def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq):
 		plt.scatter(np.stack(states)[:,0],np.stack(states)[:,1])
 		plt.scatter(goals.flatten().detach().cpu().numpy()[0],goals.flatten().detach().cpu().numpy()[1])
 		plt.axis('equal')
-		plt.savefig('ant_iterative_replanning_actual_states')
+		plt.savefig('ant_iterative_replanning_actual_states_niters'+str(n_iters)+'_l2pen_'+str(cem_l2_pen)+'.png')
 	
-		if n > 50:
-			# success = False
+		if n > 50*H/replan_freq:
+			print('TIMEOUT!!!!!!!!!!!!!!')
 			break 
 	
 
@@ -310,7 +328,7 @@ for i in range(100):
 	states,min_dist = run_skills_iterative_replanning(env,skill_model,goal_seq,use_epsilon,replan_freq)
 	min_dists_list.append(min_dist)
 	print('min_dists_list: ',min_dists_list)
-	np.save('min_dists_list',min_dists_list)
+	np.save('min_dists_list_n_iters'+str(n_iters)+'_l2pen_'+str(cem_l2_pen),min_dists_list)
 
 # skill_seq,_ = cem(torch.zeros((skill_seq_len,z_dim),device=device),torch.ones((skill_seq_len,z_dim),device=device),cost_fn,100,.5,n_iters)
 
@@ -320,12 +338,12 @@ for i in range(100):
 # run_skill_seq(env,s0,skill_model)
 
 
-plt.figure()
-plt.scatter(states[:,0],states[:,1])
-plt.scatter(goal_state[0],goal_state[1])
-plt.axis('equal')
-print('SAVING!')
-plt.savefig('ant_iterative_replanning_actual_states')
+# plt.figure()
+# plt.scatter(states[:,0],states[:,1])
+# plt.scatter(goal_state[0],goal_state[1])
+# plt.axis('equal')
+# print('SAVING!')
+# plt.savefig('ant_iterative_replanning_actual_states_n_iters'+str(n_iters)+'_l2pen_'+str(cem_l2_pen))
 
 
 
