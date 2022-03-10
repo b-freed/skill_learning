@@ -252,7 +252,7 @@ class S0STEncoder(nn.Module):
     Instead of taking entire trajectory, this encoder only takes s0 and sT.
     '''
     def __init__(self,state_dim,a_dim,z_dim,h_dim,n_gru_layers=4):
-        super(Encoder, self).__init__()
+        super(S0STEncoder, self).__init__()
 
 
         self.state_dim = state_dim # state dimension
@@ -295,9 +295,9 @@ class S0STEncoder(nn.Module):
 
 
         s0 = states[:,:1,:]
-        s0_emb = s0_emb_layer(s0)
+        s0_emb = self.s0_emb_layer(s0)
         sT = states[:,-1:,:]
-        sT_emb = sT_emb_layer(sT)
+        sT_emb = self.sT_emb_layer(sT)
         s0_sT_emb = torch.cat([s0_emb,sT_emb],dim=-1)
         z_mean = self.mean_layer(s0_sT_emb)
         z_sig = self.sig_layer(s0_sT_emb)
@@ -634,6 +634,8 @@ class SkillModelStateDependentPrior(nn.Module):
     def reparameterize(self, mean, std):
         eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
         return mean + std*eps
+
+
 
 class DecoderWithLLDynamics(nn.Module):
     def __init__(self,state_dim,a_dim,z_dim,h_dim,ff=False):
