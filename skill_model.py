@@ -532,7 +532,43 @@ class SkillModelStateDependentPrior(nn.Module):
         
         return cost, torch.cat(pred_states,dim=1)
     
-    def get_expected_cost_for_cem(self, s0, skill_seq, goal_state):
+    # def get_expected_cost_for_cem(self, s0, skill_seq, goal_state):
+    #     '''
+    #     s0 is initial state, batch_size x 1 x s_dim
+    #     skill sequence is a batch_size x skill_seq_len x z_dim tensor that representents a skill_seq_len sequence of skills
+    #     '''
+    #     # tile s0 along batch dimension
+    #     batch_size = s0.shape[0]
+    #     goal_state = torch.cat(batch_size * [goal_state],dim=0)
+    #     s_i = s0
+        
+    #     skill_seq_len = skill_seq.shape[1]
+    #     pred_states = [s_i]
+    #     for i in range(skill_seq_len):
+    #         # z_i = skill_seq[:,i:i+1,:] # might need to reshape
+    #         mu_z, sigma_z = self.prior(s_i)
+          
+
+    #         z_i = mu_z + sigma_z*skill_seq[:,i:i+1,:]
+           
+    #         # converting z_i from 1x1xz_dim to batch_size x 1 x z_dim
+    #         # use abstract dynamics model to predict mean and variance of state after executing z_i, conditioned on s_i
+    #         s_mean, s_sig = self.decoder.abstract_dynamics(s_i,z_i)
+            
+    #         # sample s_i+1 using reparameterize
+    #         s_sampled = self.reparameterize(s_mean, s_sig)
+    #         s_i = s_sampled
+            
+    #         pred_states.append(s_i)
+        
+    #     #compute cost for sequence of states/skills
+    #     s_term = s_i
+    #     cost = torch.mean((s_term[:,:,:2] - goal_state[:,:,:2])**2,dim=-1).squeeze()
+        
+        
+    #     return cost
+
+    def get_expected_cost_for_cem(self, s0, skill_seq, goal_state, use_epsilons=True, plot=False):
         '''
         s0 is initial state, batch_size x 1 x s_dim
         skill sequence is a batch_size x skill_seq_len x z_dim tensor that representents a skill_seq_len sequence of skills
@@ -545,42 +581,66 @@ class SkillModelStateDependentPrior(nn.Module):
         
         skill_seq_len = skill_seq.shape[1]
         pred_states = [s_i]
+        # costs = torch.zeros(batch_size,device=s0.device)
+        costs = [torch.mean((s_i[:,:,:2] - goal_state[:,:,:2])**2,dim=-1).squeeze()]
+        # costs = (lengths == 0)*torch.mean((s_i[:,:,:2] - goal_state[:,:,:2])**2,dim=-1).squeeze()
         for i in range(skill_seq_len):
+            
             # z_i = skill_seq[:,i:i+1,:] # might need to reshape
-            mu_z, sigma_z = self.prior(s_i)
-          
-
-            z_i = mu_z + sigma_z*skill_seq[:,i:i+1,:]
-            # ipdb.set_trace()
-            # converting z_i from 1x1xz_dim to batch_size x 1 x z_dim
-            # z_i = torch.cat(batch_size*[z_i],dim=0) # feel free to change this to tile
-            # use abstract dynamics model to predict mean and variance of state after executing z_i, conditioned on s_i
+            if use_epsilons:
+                mu_z, sigma_z = self.prior(s_i)
+                
+                z_i = mu_z + sigma_z*skill_seq[:,i:i+1,:]
+            else:
+                z_i = skill_seq[:,i:i+1,:]
+            
             s_mean, s_sig = self.decoder.abstract_dynamics(s_i,z_i)
             
             # sample s_i+1 using reparameterize
-            s_sampled = self.reparameterize(s_mean, s_sig)
+            s_sampled = s_mean
+            # s_sampled = self.reparameterize(s_mean, s_sig)
             s_i = s_sampled
+
+            cost_i = torch.mean((s_i[:,:,:2] - goal_state[:,:,:2])**2,dim=-1).squeeze()
+            costs.append(cost_i)
             
             pred_states.append(s_i)
         
-        # plt.figure()
-        # pred_states = torch.cat(pred_states,1)
-        # plt.plot(pred_states[:,:,0].T.detach().cpu().numpy(),pred_states[:,:,1].T.detach().cpu().numpy())
-        # plt.scatter(s0[0,0,0].detach().cpu().numpy(),s0[0,0,1].detach().cpu().numpy(), label='init state')
-        # plt.scatter(goal_state[0,0,0].detach().cpu().numpy(),goal_state[0,0,1].detach().cpu().numpy(),label='goal',s=300)
-        # plt.legend()
-        # plt.axis('square')
-        # plt.savefig('pred_states_cem')
-        #compute cost for sequence of states/skills
-        # print('predicted final loc: ', s_i[:,:,:2])
-        s_term = s_i
-        cost = torch.mean((s_term[:,:,:2] - goal_state[:,:,:2])**2,dim=-1).squeeze()
-        # ipdb.set_trace()
-        
-        
-        return cost
+        costs = torch.stack(costs,dim=1)  # should be a batch_size x T or batch_size x T 
+        costs,_ = torch.min(costs,dim=1)  # should be of size batch_size
+        # print('costs: ', costs)
+        # print('costs.shape: ', costs.shape)
 
-    def get_expected_cost_variable_length(self, s0, skill_seq, lengths, goal_state, use_epsilons=True, plot=False):
+        if plot:
+            plt.figure()
+            plt.scatter(s0[0,0,0].detach().cpu().numpy(),s0[0,0,1].detach().cpu().numpy(), label='init state')
+            plt.scatter(goal_state[0,0,0].detach().cpu().numpy(),goal_state[0,0,1].detach().cpu().numpy(),label='goal',s=300)
+            # plt.xlim([0,25])
+            # plt.ylim([0,25])
+            pred_states = torch.cat(pred_states,1)
+            
+            plt.plot(pred_states[:,:,0].T.detach().cpu().numpy(),pred_states[:,:,1].T.detach().cpu().numpy())
+                
+            plt.savefig('pred_states_cem')
+
+
+            # plt.figure()
+            # plt.scatter(s0[0,0,0].detach().cpu().numpy(),s0[0,0,1].detach().cpu().numpy(), label='init state')
+            # plt.scatter(goal_state[0,0,0].detach().cpu().numpy(),goal_state[0,0,1].detach().cpu().numpy(),label='goal',s=300)
+            # # plt.xlim([0,25])
+            # # plt.ylim([0,25])
+            # # pred_states = torch.cat(pred_states,1)
+            # for i in range(batch_size):
+            #     # ipdb.set_trace()
+            #     plt.plot(pred_states[i,:,0].detach().cpu().numpy(),pred_states[i,:,1].detach().cpu().numpy())
+                
+            # plt.savefig('pred_states_cem_variable_length_FULL_SEQ')
+        
+        
+        return costs
+    
+
+    def get_expected_cost_variable_length(self, s0, skill_seq, lengths, goal_state, use_epsilons=True, plot=True):
         '''
         s0 is initial state, batch_size x 1 x s_dim
         skill sequence is a batch_size x skill_seq_len x z_dim tensor that representents a skill_seq_len sequence of skills
@@ -629,6 +689,19 @@ class SkillModelStateDependentPrior(nn.Module):
                 plt.plot(pred_states[i,:lengths[i].item()+1,0].detach().cpu().numpy(),pred_states[i,:lengths[i].item()+1,1].detach().cpu().numpy())
                 
             plt.savefig('pred_states_cem_variable_length')
+
+
+            plt.figure()
+            plt.scatter(s0[0,0,0].detach().cpu().numpy(),s0[0,0,1].detach().cpu().numpy(), label='init state')
+            plt.scatter(goal_state[0,0,0].detach().cpu().numpy(),goal_state[0,0,1].detach().cpu().numpy(),label='goal',s=300)
+            # plt.xlim([0,25])
+            # plt.ylim([0,25])
+            # pred_states = torch.cat(pred_states,1)
+            for i in range(batch_size):
+                # ipdb.set_trace()
+                plt.plot(pred_states[i,:,0].detach().cpu().numpy(),pred_states[i,:,1].detach().cpu().numpy())
+                
+            plt.savefig('pred_states_cem_variable_length_FULL_SEQ')
         return costs
     
     def reparameterize(self, mean, std):

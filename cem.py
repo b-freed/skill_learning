@@ -24,7 +24,7 @@ from math import pi
 device = torch.device('cuda:0')
 
 
-def cem_iter(x,cost_fn,frac_keep):
+def cem_iter(x,cost_fn,frac_keep,l2_pen):
     '''
     INPUTS:
         x: N x _ tensor of initial solution candidates
@@ -39,6 +39,8 @@ def cem_iter(x,cost_fn,frac_keep):
     
     # evaluate solution candidates, get sorted inds
     costs = cost_fn(x)
+    l2_cost = l2_pen*torch.mean(torch.mean(x**2,dim=-1),dim=-1) 
+    costs += l2_cost
     inds = torch.argsort(costs)
     # figure out which inds to keep
     inds_keep = inds[:k]
@@ -52,12 +54,12 @@ def cem_iter(x,cost_fn,frac_keep):
 
     return x_mean,x_std,cost_topk
 
-def cem(x_mean,x_std,cost_fn,pop_size,frac_keep,n_iters):
+def cem(x_mean,x_std,cost_fn,pop_size,frac_keep,n_iters,l2_pen):
 
     for i in range(n_iters):
         x_shape = [pop_size]+list(x_mean.shape)
         x = x_mean + x_std*torch.randn(x_shape,device=device)
-        x_mean,x_std,cost = cem_iter(x,cost_fn,frac_keep)
+        x_mean,x_std,cost = cem_iter(x,cost_fn,frac_keep,l2_pen)
         # print('i: ',i)
         # print('cost: ', cost)
 

@@ -63,7 +63,10 @@ keep_frac = 0.1
 # background_img = mpimg.imread('maze_medium.png')
 use_epsilon = True
 max_ep = None
-cem_l2_pen = 100.0
+cem_l2_pen = 0
+render = False
+variable_length = False
+max_replans = 100
 # import glob
 '''
 if not state_dependent_prior:
@@ -75,11 +78,11 @@ else:
 # filename = 'AntMaze_H20_l2reg_0.001_log_best.pth'
 # filename = 'AntMaze_H20_l2reg_0.01_a_1.0_b_1.0_sg_True_max_sig_None_fixed_sig_0.1_log_best.pth'#'AntMaze_H20_l2reg_0.001_a_1.0_b_0.01_sg_False_log_best.pth'
 # filename = 'AntMaze_H20_l2reg_0.001_log_best.pth'
-# filename = 'AntMaze_H20_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
+filename = 'AntMaze_H20_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
 # filename = 'AntMaze_H20_l2reg_0.0_a_1.0_b_0.1_sg_True_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
 # filename = 'AntMaze_large_H20_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
 # filename = 'antmaze-large-diverse-v0_40_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
-filename = 'antmaze-medium-diverse-v0_10_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
+# filename = 'antmaze-medium-diverse-v0_10_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
 
 PATH = 'checkpoints/'+filename
 
@@ -145,7 +148,7 @@ goal_seq = torch.tensor(goal_state, device=device).reshape(1,1,-1)
 
 
 
-def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq):
+def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq,variable_length):
 	
 	s0 = env.reset()
 	state = s0
@@ -165,28 +168,24 @@ def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq):
 	# for i in range(2):
 		state_torch = torch.cat(batch_size*[torch.tensor(state,dtype=torch.float32).cuda().reshape((1,1,-1))])
 		
-		cost_fn = lambda skill_seq,lengths: skill_model.get_expected_cost_variable_length(state_torch, skill_seq, lengths, goal_seq, use_epsilons=use_epsilon)
-
-		# if n == 0:
-		skill_seq_mean = torch.zeros((skill_seq_len,z_dim),device=device)
-		skill_seq_std  = torch.ones( (skill_seq_len,z_dim),device=device)
-		p_lengths = (1/(skill_seq_len)) * torch.ones(skill_seq_len+1,device=device)
-		p_lengths[0] = 0.0
+		if variable_length:
+			cost_fn = lambda skill_seq,lengths: skill_model.get_expected_cost_variable_length(state_torch, skill_seq, lengths, goal_seq, use_epsilons=use_epsilon)
+			skill_seq_mean = torch.zeros((skill_seq_len,z_dim),device=device)
+			skill_seq_std  = torch.ones( (skill_seq_len,z_dim),device=device)
+			p_lengths = (1/(skill_seq_len)) * torch.ones(skill_seq_len+1,device=device)
+			p_lengths[0] = 0.0
 		
-		# else:
-		# 	print('skill_seq_mean.shape: ', skill_seq_mean.shape)
-		# 	print('skill_seq_std.shape: ', skill_seq_std.shape)
-		# 	l = skill_seq_mean.shape[0]
+		
+			skill_seq_mean,skill_seq_std = cem_variable_length(skill_seq_mean,skill_seq_std,p_lengths,cost_fn,batch_size,keep_frac,n_iters,max_ep=max_ep,l2_pen=cem_l2_pen)
+
+		else:
+			cost_fn = lambda skill_seq: skill_model.get_expected_cost_for_cem(state_torch, skill_seq, goal_seq, use_epsilons=use_epsilon)
+			skill_seq_mean = torch.zeros((skill_seq_len,z_dim),device=device)
+			skill_seq_std  = torch.ones( (skill_seq_len,z_dim),device=device)
 			
-		# 	skill_seq_mean = torch.cat([skill_seq_mean[1:,:],torch.zeros((skill_seq_len-l,z_dim),device=device)])
-		# 	skill_seq_std  = torch.cat([skill_seq_std[1:,:],torch.ones((skill_seq_len-l,z_dim),device=device)])
-		# 	# p_lengths = 1e-2** torch.ones(skill_seq_len,device=device)
-		# 	# p_lengths[l-1] = 1
-		# 	# p_lengths = p_lengths/torch.sum(p_lengths)
-		# 	p_lengths = (1/skill_seq_len) * torch.ones(skill_seq_len,device=device)
-
 		
-		skill_seq_mean,skill_seq_std = cem_variable_length(skill_seq_mean,skill_seq_std,p_lengths,cost_fn,batch_size,keep_frac,n_iters,max_ep=max_ep,l2_pen=cem_l2_pen)
+			# 								           x_mean,        x_std,cost_fn,  pop_size,frac_keep,n_iters,l2_pen
+			skill_seq_mean,skill_seq_std = cem(skill_seq_mean,skill_seq_std,cost_fn,batch_size,keep_frac,n_iters,l2_pen=cem_l2_pen)
 
 
 
@@ -206,16 +205,24 @@ def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq):
 			z = skill
 		for j in range(replan_freq):
 		# for j in range(100):
-			frames.append(env.render(mode='rgb_array'))
+			if render:
+				frames.append(env.render(mode='rgb_array'))
 			# env.render()
 			# vid.capture_frame()
 			action = model.decoder.ll_policy.numpy_policy(state,z)
-			state,_,_,_ = env.step(action)
+			state,_,done,_ = env.step(action)
+			# print('state: ', state)
 			states.append(state)
+			
 			# skill_seq_states.append(state)
 			# plt.scatter(state[0],state[1], label='Trajectory',c='b')
 			if np.sum((state[:2] - goals.flatten().detach().cpu().numpy()[:2])**2) <= 1.0:
 				break
+			if done:
+				print('DOOOOOOOOONE!!!!!!!!!!!!!!')
+				print('state: ', state)
+			# 	print('n: ',n)
+				# break
 		n += 1
 
 		
@@ -228,7 +235,7 @@ def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq):
 		plt.axis('equal')
 		plt.savefig('ant_iterative_replanning_actual_states_niters'+str(n_iters)+'_l2pen_'+str(cem_l2_pen)+'.png')
 	
-		if n > 50*H/replan_freq:
+		if n > max_replans*H/replan_freq:
 			print('TIMEOUT!!!!!!!!!!!!!!')
 			break 
 	
@@ -245,8 +252,9 @@ def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq):
 	# 	plt.savefig('ant'+str())
 	env.close()
 	# make_gif(frames,name='ant')
-	print('MAKING VIDEO!')
-	make_video(frames,name='ant')
+	if render:
+		print('MAKING VIDEO!')
+		make_video(frames,name='ant')
 
 	states = np.stack(states)
 	return states, np.min(np.sum((states[:,:2] - goals.flatten().detach().cpu().numpy()[:2])**2,axis=-1))
@@ -325,7 +333,7 @@ def run_skill_seq(env,s0,model):
 # cost_fn = lambda skill_seq: skill_model.get_expected_cost_for_cem(s0_torch, skill_seq, goal_seq)
 min_dists_list = []
 for i in range(100):
-	states,min_dist = run_skills_iterative_replanning(env,skill_model,goal_seq,use_epsilon,replan_freq)
+	states,min_dist = run_skills_iterative_replanning(env,skill_model,goal_seq,use_epsilon,replan_freq,variable_length)
 	min_dists_list.append(min_dist)
 	print('min_dists_list: ',min_dists_list)
 	np.save('min_dists_list_n_iters'+str(n_iters)+'_l2pen_'+str(cem_l2_pen),min_dists_list)
