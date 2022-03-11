@@ -395,6 +395,57 @@ class Prior(nn.Module):
         z_sig  = self.sig_layer(feats)
 
         return z_mean, z_sig
+
+class TerminalStateDependentPrior(nn.Module):
+    '''
+    Decoder module.
+    Decoder takes states, actions, and a sampled z and outputs parameters of P(s_T|s_0,z) and P(a_t|s_t,z) for all t in {0,...,T}
+    P(s_T|s_0,z) is our "abstract dynamics model", because it predicts the resulting state transition over T timesteps given a skill 
+    (so similar to regular dynamics model, but in skill space and also temporally extended)
+    P(a_t|s_t,z) is our "low-level policy", so this is the feedback policy the agent runs while executing skill described by z.
+    We can try the following architecture:
+    -embed z
+    -Pass into fully connected network to get "state T features"
+    '''
+    def __init__(self,state_dim,z_dim,h_dim):
+
+        super(TerminalStateDependentPrior,self).__init__()
+
+        print('INITING TERMINAL STATE DEP')
+        
+        self.state_dim = state_dim
+        self.z_dim = z_dim
+
+        self.s0_emb_layer = nn.Sequential(nn.Linear(state_dim,h_dim),nn.ReLU())
+        self.sT_emb_layer = nn.Sequential(nn.Linear(state_dim,h_dim),nn.ReLU())
+
+        self.layers = nn.Sequential(nn.Linear(2*h_dim,h_dim),nn.ReLU())
+        #self.mean_layer = nn.Linear(h_dim,z_dim)
+        self.mean_layer = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,z_dim))
+        #self.sig_layer  = nn.Sequential(nn.Linear(h_dim,z_dim),nn.Softplus())
+        self.sig_layer  = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,z_dim),nn.Softplus())
+        
+    def forward(self,s0,sT):
+
+        '''
+        INPUTS: 
+            states: batch_size x T x state_dim state sequence tensor
+            
+        OUTPUTS:
+            z_mean: batch_size x 1 x state_dim tensor of z means
+            z_sig:  batch_size x 1 x state_dim tensor of z standard devs
+            
+        '''
+        # feats = self.layers(s0)
+        s0_emb = self.s0_emb_layer(s0)
+        sT_emb = self.sT_emb_layer(s0)
+        s0_sT_emb = torch.cat([s0_emb,sT_emb],dim=-1)
+        feats = self.layers(s0_sT_emb)
+        # get mean and stand dev of action distribution
+        z_mean = self.mean_layer(feats)
+        z_sig  = self.sig_layer(feats)
+
+        return z_mean, z_sig
         
 
 
@@ -447,8 +498,6 @@ class SkillModelStateDependentPrior(nn.Module):
 
 
         return s_T_mean, s_T_sig, a_means, a_sigs, z_post_means, z_post_sigs
-
-        
 
     def get_losses(self,states,actions):
         '''
@@ -531,44 +580,8 @@ class SkillModelStateDependentPrior(nn.Module):
         
         
         return cost, torch.cat(pred_states,dim=1)
-    
-    # def get_expected_cost_for_cem(self, s0, skill_seq, goal_state):
-    #     '''
-    #     s0 is initial state, batch_size x 1 x s_dim
-    #     skill sequence is a batch_size x skill_seq_len x z_dim tensor that representents a skill_seq_len sequence of skills
-    #     '''
-    #     # tile s0 along batch dimension
-    #     batch_size = s0.shape[0]
-    #     goal_state = torch.cat(batch_size * [goal_state],dim=0)
-    #     s_i = s0
-        
-    #     skill_seq_len = skill_seq.shape[1]
-    #     pred_states = [s_i]
-    #     for i in range(skill_seq_len):
-    #         # z_i = skill_seq[:,i:i+1,:] # might need to reshape
-    #         mu_z, sigma_z = self.prior(s_i)
-          
 
-    #         z_i = mu_z + sigma_z*skill_seq[:,i:i+1,:]
-           
-    #         # converting z_i from 1x1xz_dim to batch_size x 1 x z_dim
-    #         # use abstract dynamics model to predict mean and variance of state after executing z_i, conditioned on s_i
-    #         s_mean, s_sig = self.decoder.abstract_dynamics(s_i,z_i)
-            
-    #         # sample s_i+1 using reparameterize
-    #         s_sampled = self.reparameterize(s_mean, s_sig)
-    #         s_i = s_sampled
-            
-    #         pred_states.append(s_i)
-        
-    #     #compute cost for sequence of states/skills
-    #     s_term = s_i
-    #     cost = torch.mean((s_term[:,:,:2] - goal_state[:,:,:2])**2,dim=-1).squeeze()
-        
-        
-    #     return cost
-
-    def get_expected_cost_for_cem(self, s0, skill_seq, goal_state, use_epsilons=True, plot=False):
+    def get_expected_cost_for_cem(self, s0, skill_seq, goal_state, use_epsilons=True, plot=True):
         '''
         s0 is initial state, batch_size x 1 x s_dim
         skill sequence is a batch_size x skill_seq_len x z_dim tensor that representents a skill_seq_len sequence of skills
@@ -639,7 +652,6 @@ class SkillModelStateDependentPrior(nn.Module):
         
         return costs
     
-
     def get_expected_cost_variable_length(self, s0, skill_seq, lengths, goal_state, use_epsilons=True, plot=True):
         '''
         s0 is initial state, batch_size x 1 x s_dim
@@ -707,6 +719,103 @@ class SkillModelStateDependentPrior(nn.Module):
     def reparameterize(self, mean, std):
         eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
         return mean + std*eps
+
+class SkillModelTerminalStateDependentPrior(SkillModelStateDependentPrior):
+    def __init__(self,state_dim,a_dim,z_dim,h_dim,state_dec_stop_grad=False,beta=1.0,alpha=1.0,fixed_sig=None):
+        super(SkillModelTerminalStateDependentPrior, self).__init__(state_dim,a_dim,z_dim,h_dim,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,fixed_sig=fixed_sig)
+
+        self.prior = TerminalStateDependentPrior(state_dim,z_dim,h_dim)
+        # self.prior = Prior(state_dim,z_dim,h_dim)
+
+    def get_losses(self,states,actions):
+        # get state output distributions, 
+        s_T_mean, s_T_sig, a_means, a_sigs, z_post_means, z_post_sigs  = self.forward(states,actions)
+        s_T_dist = Normal.Normal(s_T_mean, s_T_sig )
+        a_dist = Normal.Normal(a_means, a_sigs)
+        z_post_dist = Normal.Normal(z_post_means, z_post_sigs)
+        
+        z_prior_means,z_prior_sigs = self.prior(states[:,0:1,:],states[:,-1:,:]) 
+        z_prior_dist = Normal.Normal(z_prior_means, z_prior_sigs)
+
+
+
+        # loss terms corresponding to -logP(s_T|s_0,z) and -logP(a_t|s_t,z)
+        T = states.shape[1]
+        s_T = states[:,-1:,:]  
+        s_T_loss = -torch.mean(torch.sum(s_T_dist.log_prob(s_T),   dim=-1))/T # divide by T because all other losses we take mean over T dimension, effectively dividing by T
+        a_loss   = -torch.mean(torch.sum(a_dist.log_prob(actions), dim=-1)) 
+        s_T_ent  = torch.mean(torch.sum(s_T_dist.entropy(),       dim=-1))/T
+        # print('a_sigs: ', a_sigs)
+        # print('a_dist.log_prob(actions)[0,:,:]: ',a_dist.log_prob(actions)[0,:,:])
+        # loss term correpsonding ot kl loss between posterior and prior
+        # kl_loss = torch.mean(torch.sum(F.kl_div(z_post_dist, z_prior_dist),dim=-1))
+        kl_loss = torch.mean(torch.sum(KL.kl_divergence(z_post_dist, z_prior_dist), dim=-1))/T # divide by T because all other losses we take mean over T dimension, effectively dividing by T
+
+        # z_post_dist_detached = Normal.Normal(z_post_means.detach(),z_post_sigs.detach())
+        # z_prior_means_non_term_state_dep = self.prior(state_dim)
+
+        loss_tot = self.alpha*s_T_loss + a_loss + self.beta*kl_loss
+        # loss_tot = s_T_loss + kl_loss
+
+        return  loss_tot, s_T_loss, a_loss, kl_loss, s_T_ent
+
+    
+    def get_expected_cost_for_cem(self, s0, skill_seq, sT_seq, goal_state, use_epsilons=True, plot=False):
+        '''
+        s0 is initial state, batch_size x 1 x s_dim
+        skill sequence is a batch_size x skill_seq_len x z_dim tensor that representents a skill_seq_len sequence of skills
+        '''
+        # tile s0 along batch dimension
+        #s0_tiled = s0.tile([1,batch_size,1])
+        batch_size = s0.shape[0]
+        goal_state = torch.cat(batch_size * [goal_state],dim=0)
+        s_i = s0
+        
+        skill_seq_len = skill_seq.shape[1]
+        pred_states = [s_i]
+        # costs = torch.zeros(batch_size,device=s0.device)
+        costs = [torch.mean((s_i[:,:,:2] - goal_state[:,:,:2])**2,dim=-1).squeeze()]
+        # costs = (lengths == 0)*torch.mean((s_i[:,:,:2] - goal_state[:,:,:2])**2,dim=-1).squeeze()
+        for i in range(skill_seq_len):
+            
+            # z_i = skill_seq[:,i:i+1,:] # might need to reshape
+            if use_epsilons:
+                mu_z, sigma_z = self.prior(s_i,sT_seq[:,i:i+1,:])
+                
+                z_i = mu_z + sigma_z*skill_seq[:,i:i+1,:]
+            else:
+                z_i = skill_seq[:,i:i+1,:]
+            
+            s_mean, s_sig = self.decoder.abstract_dynamics(s_i,z_i)
+            
+            # sample s_i+1 using reparameterize
+            s_sampled = s_mean
+            # s_sampled = self.reparameterize(s_mean, s_sig)
+            s_i = s_sampled
+
+            cost_i = torch.mean((s_i[:,:,:2] - goal_state[:,:,:2])**2,dim=-1).squeeze()
+            costs.append(cost_i)
+            
+            pred_states.append(s_i)
+        
+        costs = torch.stack(costs,dim=1)  # should be a batch_size x T or batch_size x T 
+        costs,_ = torch.min(costs,dim=1)  # should be of size batch_size
+        # print('costs: ', costs)
+        # print('costs.shape: ', costs.shape)
+
+        if plot:
+            plt.figure()
+            plt.scatter(s0[0,0,0].detach().cpu().numpy(),s0[0,0,1].detach().cpu().numpy(), label='init state')
+            plt.scatter(goal_state[0,0,0].detach().cpu().numpy(),goal_state[0,0,1].detach().cpu().numpy(),label='goal',s=300)
+            # plt.xlim([0,25])
+            # plt.ylim([0,25])
+            pred_states = torch.cat(pred_states,1)
+            
+            plt.plot(pred_states[:,:,0].T.detach().cpu().numpy(),pred_states[:,:,1].T.detach().cpu().numpy())
+                
+            plt.savefig('pred_states_cem')
+        
+        return costs
 
 
 
