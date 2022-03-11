@@ -30,8 +30,8 @@ from utils import make_gif,make_video
 
 device = torch.device('cuda:0')
 
-# env = 'antmaze-large-diverse-v0'
-env = 'antmaze-medium-diverse-v0'
+env = 'antmaze-large-diverse-v0'
+# env = 'antmaze-medium-diverse-v0'
 # env = 'maze2d-large-v1'
 env_name = env
 env = gym.make(env)
@@ -39,7 +39,7 @@ data = env.get_dataset()
 
 # vid = video_recorder.VideoRecorder(env,path="recording")
 
-H = 20
+H = 40
 replan_freq = H
 state_dim = data['observations'].shape[1]
 a_dim = data['actions'].shape[1]
@@ -63,10 +63,11 @@ keep_frac = 0.1
 # background_img = mpimg.imread('maze_medium.png')
 use_epsilon = True
 max_ep = None
-cem_l2_pen = 0
-render = False
-variable_length = False
-max_replans = 100
+cem_l2_pen = 0.0
+render = True
+variable_length = True
+max_replans = 50
+plan_length_cost = 0
 # import glob
 '''
 if not state_dependent_prior:
@@ -78,10 +79,10 @@ else:
 # filename = 'AntMaze_H20_l2reg_0.001_log_best.pth'
 # filename = 'AntMaze_H20_l2reg_0.01_a_1.0_b_1.0_sg_True_max_sig_None_fixed_sig_0.1_log_best.pth'#'AntMaze_H20_l2reg_0.001_a_1.0_b_0.01_sg_False_log_best.pth'
 # filename = 'AntMaze_H20_l2reg_0.001_log_best.pth'
-filename = 'AntMaze_H20_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
+# filename = 'AntMaze_H20_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
 # filename = 'AntMaze_H20_l2reg_0.0_a_1.0_b_0.1_sg_True_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
 # filename = 'AntMaze_large_H20_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
-# filename = 'antmaze-large-diverse-v0_40_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
+filename = 'antmaze-large-diverse-v0_40_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
 # filename = 'antmaze-medium-diverse-v0_10_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
 
 PATH = 'checkpoints/'+filename
@@ -148,7 +149,7 @@ goal_seq = torch.tensor(goal_state, device=device).reshape(1,1,-1)
 
 
 
-def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq,variable_length):
+def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq,variable_length,ep_num):
 	
 	s0 = env.reset()
 	state = s0
@@ -161,7 +162,6 @@ def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq,vari
 	frames = []
 	n=0
 	timeout = False
-	out_of_skills = False
 	# success = True
 	l = skill_seq_len
 	while np.sum((state[:2] - goals.flatten().detach().cpu().numpy()[:2])**2) > 1.0:
@@ -179,7 +179,7 @@ def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq,vari
 			skill_seq_mean,skill_seq_std = cem_variable_length(skill_seq_mean,skill_seq_std,p_lengths,cost_fn,batch_size,keep_frac,n_iters,max_ep=max_ep,l2_pen=cem_l2_pen)
 
 		else:
-			cost_fn = lambda skill_seq: skill_model.get_expected_cost_for_cem(state_torch, skill_seq, goal_seq, use_epsilons=use_epsilon)
+			cost_fn = lambda skill_seq: skill_model.get_expected_cost_for_cem(state_torch, skill_seq, goal_seq, use_epsilons=use_epsilon,length_cost=plan_length_cost)
 			skill_seq_mean = torch.zeros((skill_seq_len,z_dim),device=device)
 			skill_seq_std  = torch.ones( (skill_seq_len,z_dim),device=device)
 			
@@ -237,6 +237,7 @@ def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq,vari
 	
 		if n > max_replans*H/replan_freq:
 			print('TIMEOUT!!!!!!!!!!!!!!')
+			timeout = True
 			break 
 	
 
@@ -252,9 +253,17 @@ def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq,vari
 	# 	plt.savefig('ant'+str())
 	env.close()
 	# make_gif(frames,name='ant')
-	if render:
+	if render or timeout:
 		print('MAKING VIDEO!')
-		make_video(frames,name='ant')
+		# if timeout: 
+		# 	print('making timout vid')
+		# 	make_video(frames,name='failed_ant_'+str(j))
+		# else:
+		# 	make_video(frames,name='ant')
+		make_video(frames,name='ant'+str(ep_num))
+		# make_video(frames,name='yant')
+		# make_video(frames,name='yant')
+
 
 	states = np.stack(states)
 	return states, np.min(np.sum((states[:,:2] - goals.flatten().detach().cpu().numpy()[:2])**2,axis=-1))
@@ -333,7 +342,7 @@ def run_skill_seq(env,s0,model):
 # cost_fn = lambda skill_seq: skill_model.get_expected_cost_for_cem(s0_torch, skill_seq, goal_seq)
 min_dists_list = []
 for i in range(100):
-	states,min_dist = run_skills_iterative_replanning(env,skill_model,goal_seq,use_epsilon,replan_freq,variable_length)
+	states,min_dist = run_skills_iterative_replanning(env,skill_model,goal_seq,use_epsilon,replan_freq,variable_length,i)
 	min_dists_list.append(min_dist)
 	print('min_dists_list: ',min_dists_list)
 	np.save('min_dists_list_n_iters'+str(n_iters)+'_l2pen_'+str(cem_l2_pen),min_dists_list)
