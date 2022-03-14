@@ -1,0 +1,36 @@
+# Normal stuff
+numpy==1.22.2
+torch==1.10
+matplotlib==3.4
+
+# For MuJoCo
+glfw>=1.4.0
+numpy>=1.11
+Cython>=0.27.2
+imageio>=2.1.2
+cffi>=1.10
+fasteners~=0.15
+
+imagehash>=3.4
+ipdb
+Pillow>=4.0.0
+pycparser>=2.17.0
+pytest>=3.0.5
+pytest-instafail==0.3.0
+sphinx
+sphinx_rtd_theme
+numpydoc
+
+git+https://github.com/openai/mujoco-py@f1312cceeeebbba17e78d5d77fbffa091eed9a3a#egg=mujoco-py
+gym==0.21.0
+
+# For Rendering Openai gym/Mujoco envs
+pyglet
+
+# For tracking with comet
+comet_ml
+
+# For d4rl
+git+https://github.com/Thomasw219/d4rl@1cda341e9e8177507183e0f1f19c27d1fa73c9a8#egg=d4rl
+
+opencv-python
