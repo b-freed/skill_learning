@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 import matplotlib.transforms as transforms
 from math import pi
-from mppi import reset, update
+from mppi import MPPI
 from utils import make_gif
 import cv2
 
