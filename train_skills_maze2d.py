@@ -68,7 +68,7 @@ def test(model):
 
 # instantiating the environmnet, getting the dataset.
 # the data is in a big dictionary, containing long sequences of obs, rew, actions, goals
-env = 'antmaze-medium-diverse-v0'  # maze whatever
+env = 'maze2d-large-dense-v1'  # maze whatever
 env = gym.make(env)
 dataset = env.get_dataset()  # dictionary, with 'observations', 'rewards', 'actions', 'infos/goal'
 #dataset_file = "datasets/maze2d-umaze-v1.hdf5"
@@ -85,7 +85,7 @@ a_dim = actions.shape[1]
 
 h_dim = 256
 z_dim = 256
-lr = 5e-5
+lr = 5e-4
 wd = 0.1
 state_dependent_prior = True
 state_dec_stop_grad = True
@@ -139,8 +139,8 @@ def chunks(obs,actions,goals,H,stride):
 
 obs_chunks, action_chunks, targets = chunks(states, actions, goals, H, stride)
 
-experiment = Experiment(api_key = '9mxH2vYX20hn9laEr0KtHLjAa', project_name = 'skill-learning')
-experiment.add_tag('AntMaze H_'+str(H)+' model')
+experiment = Experiment(api_key = 'e1Xmlzbz1cCLgwe0G8m7G58ns', project_name = 'skill-learning', workspace='thomasw219')
+experiment.add_tag('Maze2d H_'+str(H)+' model')
 
 # First, instantiate a skill model
 if not state_dependent_prior:
@@ -186,7 +186,7 @@ test_loader = DataLoader(
 	num_workers=0)
 
 min_test_loss = 10**10
-filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_sg_'+str(state_dec_stop_grad)+'_max_sig_'+str(max_sig)+'_fixed_sig_'+str(fixed_sig)+'_log'
+filename = 'Maze2d_large_H'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_sg_'+str(state_dec_stop_grad)+'_max_sig_'+str(max_sig)+'_fixed_sig_'+str(fixed_sig)+'_log'
 for i in range(n_epochs):
 	loss, s_T_loss, a_loss, kl_loss = train(model,model_optimizer)
 	
@@ -197,7 +197,7 @@ for i in range(n_epochs):
 	print('a_loss: ', a_loss)
 	print('kl_loss: ', kl_loss)
 	print(i)
-	experiment.log_metric("loss", loss, step=i)
+	experiment.log_metric("train_loss", loss, step=i)
 	experiment.log_metric("s_T_loss", s_T_loss, step=i)
 	experiment.log_metric("a_loss", a_loss, step=i)
 	experiment.log_metric("kl_loss", kl_loss, step=i)

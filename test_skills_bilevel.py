@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch.utils.data import TensorDataset
 from torch.utils.data.dataloader import DataLoader
 import torch.distributions.normal as Normal
-from skill_model import SkillModel, SkillModelStateDependentPrior, BilevelSkillModel
+from skill_model import SkillModel, SkillModelStateDependentPrior, BilevelSkillModelV2
 import ipdb
 import d4rl
 import gym
@@ -62,7 +62,7 @@ if __name__ == '__main__':
 
 	device = torch.device('cuda:0')
 	
-	env = 'antmaze-medium-diverse-v0'
+	env = 'maze2d-large-dense-v1'
 	# env = 'kitchen-partial-v0'
 	env = gym.make(env)
 	data = env.get_dataset()
@@ -73,10 +73,10 @@ if __name__ == '__main__':
 	h_dim = 256
 	z_dim = 256
 	batch_size = 1
-	episodes = 20
+	episodes = 10
 	wd = .0
 	state_dependent_prior = True
-	n_skills = 3
+	n_skills = 2
 	colors = ['r','g','b']
 
 
@@ -88,7 +88,7 @@ if __name__ == '__main__':
 	# # filename = 'Franka_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
 	# PATH = 'checkpoints/'+filename
 	
-	filename = 'AntMaze_bilevel_H20_l2reg_0.0_log_best.pth'
+	filename = 'Maze2d_bilevel_H20_l2reg_0.0_log_best.pth'
 	PATH = 'checkpoints/'+filename
 
 
@@ -97,7 +97,7 @@ if __name__ == '__main__':
 	# else:
 	# 	skill_model_sdp = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim).cuda()
 
-	skill_model_sdp = BilevelSkillModel(state_dim,a_dim,z_dim,h_dim).cuda()
+	skill_model_sdp = BilevelSkillModelV2(state_dim,a_dim,z_dim,h_dim).cuda()
 
 		
 	checkpoint = torch.load(PATH)
@@ -213,20 +213,20 @@ if __name__ == '__main__':
 		state = torch.reshape(torch.tensor(state,dtype=torch.float32).cuda(), (1,1,state_dim))
 		#actions = torch.tensor(actions,dtype=torch.float32).cuda()
 
-		if not state_dependent_prior:
-			z_mean = torch.zeros((1,1,z_dim), device=device)
-			z_sig = torch.ones((1,1,z_dim), device=device)
-		else:
-			z_mean,z_sig = skill_model_sdp.prior(state)
-
-		z = skill_model_sdp.reparameterize(z_mean,z_sig)
+		
 
 		for i in range(episodes):
-			initial_state = env.reset()
-			state = initial_state
+			state = torch.reshape(torch.tensor(state,dtype=torch.float32).cuda(), (1,1,state_dim))
 			print('i: ', i)
 
-			state = torch.reshape(torch.tensor(state,dtype=torch.float32).cuda(), (1,1,state_dim))
+			if not state_dependent_prior:
+				z_mean = torch.zeros((1,1,z_dim), device=device)
+				z_sig = torch.ones((1,1,z_dim), device=device)
+			else:
+				z_mean,z_sig = skill_model_sdp.prior(state)
+
+			z = skill_model_sdp.reparameterize(z_mean,z_sig)
+
 			#actions = torch.tensor(actions,dtype=torch.float32).cuda()
 			
 			# if not state_dependent_prior:
@@ -257,8 +257,9 @@ if __name__ == '__main__':
 			# states_actual,actions = run_skill_with_disturbance(skill_model_sdp, states[:,0:1,:],z,env,H)
 			
 			
-			plt.scatter(states_actual[:,0],states_actual[:,1],c=colors[j])
-			plt.scatter(states_actual[0,0],states_actual[0,1],c=colors[j])
+			plt.scatter(states_actual[:,0],states_actual[:,1],color=colors[0])
+			plt.scatter(states_actual[0,0],states_actual[0,1],color=colors[1])
+			plt.scatter(states_actual[-1,0],states_actual[-1,1],color=colors[2])
 
 		actual_states.append(states_actual)
 		action_dist.append(actions)

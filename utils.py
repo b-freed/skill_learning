@@ -58,7 +58,7 @@ def make_video(frames,name):
     writer.close()
 
 def reparameterize(mean, std):
-    eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
+    eps = torch.normal(torch.zeros_like(mean), torch.ones_like(mean))
     return mean + std*eps
 
 def stable_weighted_log_sum_exp(x,w,sum_dim):
