@@ -24,7 +24,7 @@ from math import pi
 device = torch.device('cuda:0')
 
 
-def mppi_update(self, skill_seq_mean, s0, model, env, T, N, lam=0.1, eps=0.2):
+def mppi_update(self, skill_seq_mean, model, cost_fn, T, N, lam=0.1, eps=0.2):
 	#a = torch.zeros(T, model.a_dim).to(device)
 	eps = Normal(torch.zeros(N, model.z_dim).to(device),
                             (torch.ones(N, model.z_dim)*eps).to(device))
@@ -33,8 +33,8 @@ def mppi_update(self, skill_seq_mean, s0, model, env, T, N, lam=0.1, eps=0.2):
 		skill_seq_mean[:-1] = skill_seq_mean[1:].clone()
 		skill_seq_mean[-1].zero_()
 
-		s0 = torch.FloatTensor(s0).unsqueeze(0).to(device)
-		s = s0.repeat(N, 1)
+		#s0 = torch.FloatTensor(s0).unsqueeze(0).to(device)
+		#s = s0.repeat(N, 1)
 
 		sk, dz, log_prob = [], [], []
 		eta = None
@@ -47,7 +47,7 @@ def mppi_update(self, skill_seq_mean, s0, model, env, T, N, lam=0.1, eps=0.2):
 			# else:
 			#     eta = gamma*eta + ((1-gamma**2)**0.5) * eps
 			v = skill_seq_mean[t].expand_as(eta) + eta
-			s, rew,_,_ = env.step(v)
+			rew, x = cost_fn(v)
 			log_prob.append(eps.log_prob(eta).sum(1))
 			dz.append(eta)
 			sk.append(rew.squeeze())
