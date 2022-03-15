@@ -569,10 +569,10 @@ class SkillModelStateDependentPrior(nn.Module):
         
         #compute cost for sequence of states/skills
         costs = torch.stack(costs,dim=1)
-        costs,_ = torch.min(costs,dim=1)
+        cost = torch.min(costs,dim=1)
         # print('predicted final loc: ', s_i[:,:,:2])
         
-        return costs, s_i[:,:,:2]
+        return cost, s_i[:,:,:2]
 
 
     def get_expected_cost_for_cem(self, s0, skill_seq, goal_state, use_epsilons=True, plot=False):
