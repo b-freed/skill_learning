@@ -47,7 +47,7 @@ def mppi_update(self, skill_seq_mean, s0, model, cost_fn, T, N, lam=0.1, eps=0.2
 			# else:
 			#     eta = gamma*eta + ((1-gamma**2)**0.5) * eps
 			v = skill_seq_mean[t].expand_as(eta) + eta
-			s,_,rew = model.decoder.abstract_dynamics(s,v)
+			rew,s = cost_fn(s,v)
 			log_prob.append(eps.log_prob(eta).sum(1))
 			dz.append(eta)
 			sk.append(rew.squeeze())
