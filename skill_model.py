@@ -28,6 +28,7 @@ class AbstractDynamics(nn.Module):
         self.mean_layer = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,state_dim))
         #self.sig_layer  = nn.Sequential(nn.Linear(h_dim,state_dim),nn.Softplus())
         self.sig_layer  = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,state_dim),nn.Softplus())
+        self.reward_fun = nn.Sequential(nn.Linear(state_dim+z_dim, h_dim), nn.ReLU(),nn.Linear(h_dim, h_dim), nn.ReLU(),nn.Linear(h_dim, 1))
 
     def forward(self,s0,z):
 
@@ -49,8 +50,9 @@ class AbstractDynamics(nn.Module):
         # get mean and stand dev of action distribution
         sT_mean = self.mean_layer(feats)
         sT_sig  = self.sig_layer(feats)
+        
 
-        return sT_mean,sT_sig
+        return sT_mean,sT_sig, self.reward_fun(torch.cat([sT_mean, z], axis=1))
 
 
 class LowLevelPolicy(nn.Module):
