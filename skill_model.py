@@ -28,7 +28,6 @@ class AbstractDynamics(nn.Module):
         self.mean_layer = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,state_dim))
         #self.sig_layer  = nn.Sequential(nn.Linear(h_dim,state_dim),nn.Softplus())
         self.sig_layer  = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,state_dim),nn.Softplus())
-        self.reward_fun = nn.Sequential(nn.Linear(state_dim+z_dim, h_dim), nn.ReLU(),nn.Linear(h_dim, h_dim), nn.ReLU(),nn.Linear(h_dim, 1))
 
     def forward(self,s0,z):
 
@@ -52,7 +51,7 @@ class AbstractDynamics(nn.Module):
         sT_sig  = self.sig_layer(feats)
         
 
-        return sT_mean,sT_sig, self.reward_fun(torch.cat([sT_mean, z], axis=1))
+        return sT_mean,sT_sig
 
 
 class LowLevelPolicy(nn.Module):
@@ -535,42 +534,22 @@ class SkillModelStateDependentPrior(nn.Module):
         return cost, torch.cat(pred_states,dim=1)
     
     
-    def step_mppi(self, s0, skill_seq, goal_states):
+    def step_mppi(self, s, skill, goal_states):
         '''
         s0 is initial state  # batch_size x 1 x s_dim
         skill sequence is a 1 x skill_seq_len x z_dim tensor that representents a skill_seq_len sequence of skills
         '''
         
-        batch_size = s0.shape[0]
+        batch_size = s.shape[0]
         goal_state = torch.cat(batch_size * [goal_states],dim=0)
-        s_i = s0
         
-        skill_seq_len = skill_seq.shape[1]
-        pred_states = [s_i]
-        costs = [torch.mean((s_i[:,:,:2] - goal_state[:,:,:2])**2,dim=-1).squeeze()]
-        for i in range(skill_seq_len):
-            mu_z, sigma_z = self.prior(s_i)
-          
-
-            z_i = mu_z + sigma_z*torch.cat(batch_size*[skill_seq[:,i:i+1,:]],dim=0)
-            # use abstract dynamics model to predict mean and variance of state after executing z_i, conditioned on s_i
-            s_mean, s_sig = self.decoder.abstract_dynamics(s_i,z_i)
-            
-            # sample s_i+1 using reparameterize
-            s_sampled = s_mean
-            s_i = s_sampled
-            
-            cost_i = torch.mean((s_i[:,:,:2] - goal_state[:,:,:2])**2,dim=-1).squeeze()
-            costs.append(cost_i)
-            
-            pred_states.append(s_i)
+        skill_len = skill.shape[1]
         
-        #compute cost for sequence of states/skills
-        costs = torch.stack(costs,dim=1)
-        cost = torch.min(costs,dim=1)
-        # print('predicted final loc: ', s_i[:,:,:2])
+        s_mean, s_sig = self.decoder.abstract_dynamics(s,skill)
         
-        return cost, s_i[:,:,:2]
+        cost = torch.mean((s_mean[:,:,:2] - goal_state[:,:,:2])**2,dim=-1).squeeze()
+        
+        return cost, s_mean
 
 
     def get_expected_cost_for_cem(self, s0, skill_seq, goal_state, use_epsilons=True, plot=False):
