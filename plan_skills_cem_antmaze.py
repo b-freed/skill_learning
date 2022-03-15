@@ -39,24 +39,24 @@ data = env.get_dataset()
 
 # vid = video_recorder.VideoRecorder(env,path="recording")
 
-H = 40
+H = 5
 replan_freq = H
 state_dim = data['observations'].shape[1]
 a_dim = data['actions'].shape[1]
 h_dim = 256
 z_dim = 256
 batch_size = 100
-skill_seq_len = 20
+skill_seq_len = 100
 lr = 1e-4
 wd = .001
 state_dependent_prior = True
 state_dec_stop_grad = True
 beta = 1.0
 alpha = 1.0
+ent_pen = 0
 max_sig = None
 fixed_sig = 0.0
-n_iters = 50
-# n_iters = 100
+n_iters = 100
 # n_iters = 20
 a_dist = 'normal'
 keep_frac = 0.1
@@ -64,10 +64,14 @@ keep_frac = 0.1
 use_epsilon = True
 max_ep = None
 cem_l2_pen = 0.0
-render = True
-variable_length = True
+render = False
+variable_length = False
 max_replans = 50
-plan_length_cost = 0
+plan_length_cost = 0.0
+encoder_type = 'state_action_sequence'
+term_state_dependent_prior = False
+# start_ind = 937278
+
 # import glob
 '''
 if not state_dependent_prior:
@@ -82,16 +86,21 @@ else:
 # filename = 'AntMaze_H20_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
 # filename = 'AntMaze_H20_l2reg_0.0_a_1.0_b_0.1_sg_True_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
 # filename = 'AntMaze_large_H20_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
-filename = 'antmaze-large-diverse-v0_40_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
+# filename = 'antmaze-large-diverse-v0_40_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
 # filename = 'antmaze-medium-diverse-v0_10_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
+# filename = 'antmaze-large-diverse-v0_20_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
+# filename = 'antmaze-large-diverse-v0_enc_type_state_sequence_H20_l2reg_0.0_a_1.0_b_0.1_sg_True_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
+filename = 'antmaze-large-diverse-v0_5_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
 
 PATH = 'checkpoints/'+filename
 
-if not state_dependent_prior:
-  	skill_model = SkillModel(state_dim, a_dim, z_dim, h_dim).cuda()
-else:
-	skill_model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,max_sig=max_sig,fixed_sig=fixed_sig).cuda()
 
+if term_state_dependent_prior:
+	skill_model = SkillModelTerminalStateDependentPrior(state_dim,a_dim,z_dim,h_dim,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,fixed_sig=fixed_sig).cuda()
+elif state_dependent_prior:
+	skill_model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,max_sig=max_sig,fixed_sig=fixed_sig,ent_pen=ent_pen,encoder_type=encoder_type).cuda()
+else:
+	skill_model = SkillModel(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist).cuda()
 checkpoint = torch.load(PATH)
 skill_model.load_state_dict(checkpoint['model_state_dict'])
 

@@ -51,10 +51,18 @@ if not state_dependent_prior:
 else:
   	filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
 '''
+if term_state_dependent_prior:
+	model = SkillModelTerminalStateDependentPrior(state_dim,a_dim,z_dim,h_dim,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,fixed_sig=fixed_sig).cuda()
+elif state_dependent_prior:
+	model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,max_sig=max_sig,fixed_sig=fixed_sig,ent_pen=ent_pen,encoder_type=encoder_type).cuda()
+
+else:
+	model = SkillModel(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist).cuda()
 
 # filename = 'maze2d_H'+str(H)+'_log_best.pth'
 # filename = 'Noisy2_maze2d_H20_l2reg_0_log_best.pth'
-filename = 'Noisy2_cem_maze2d_H20_l2reg_0_log_best.pth'
+# filename = 'Noisy2_cem_maze2d_H20_l2reg_0_log_best.pth'
+# filename = 'maze2d-large-v1_tsdp_H40_l2reg_0.0_a_1.0_b_1.0_sg_True_max_sig_None_fixed_sig_None_log_best.pth'
 
 
 PATH = 'checkpoints/'+filename

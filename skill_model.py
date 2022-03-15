@@ -52,6 +52,39 @@ class AbstractDynamics(nn.Module):
 
         return sT_mean,sT_sig
 
+# class DeadReckonStateDecoder(nn.Module):
+
+#     def __init__(self,state_dim,a_dim,z_dim,h_dim,n_gru_layers=4):
+
+#         self.state_dim = state_dim # state dimension
+#         self.a_dim = a_dim # action dimension
+
+#         self.s_emb_layer  = nn.Sequential(nn.Linear(state_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
+#         self.a_emb_layer  = nn.Sequential(nn.Linear(a_dim,    h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
+#         self.rnn        = nn.GRU(2*h_dim,h_dim,batch_first=True,bidirectional=True,num_layers=n_gru_layers)
+#         #self.mean_layer = nn.Linear(h_dim,z_dim)
+#         self.mean_layer = nn.Sequential(nn.Linear(2*h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,z_dim))
+#         #self.sig_layer  = nn.Sequential(nn.Linear(h_dim,z_dim),nn.Softplus())  # using softplus to ensure stand dev is positive
+#         self.sig_layer  = nn.Sequential(nn.Linear(2*h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,z_dim),nn.Softplus())
+
+#     def forward(self,s0,actions):
+
+#         s0_emb = self.s_emb_layer(s0)
+#         s0_emb_tiled = 
+#         a_emb = self.a_emb_layer(actions)
+#         emb = torch.cat([s0_emb_tiled,a_emb],dim=-1)
+#         feats,_ = self.rnn(s_emb_a)
+#         hn = feats[:,-1:,:]
+#         # hn = hn.transpose(0,1) # use final hidden state, as this should be an encoding of all states and actions previously.
+#         # get z_mean and z_sig by passing rnn output through mean_layer and sig_layer
+#         sT_mean = self.mean_layer(hn)
+#         sT_sig = self.sig_layer(hn)
+        
+#         return sT_mean, sT_sig
+
+
+
+
 
 class LowLevelPolicy(nn.Module):
     '''
@@ -237,6 +270,48 @@ class Encoder(nn.Module):
         # through rnn
         s_emb_a = torch.cat([s_emb,actions],dim=-1)
         feats,_ = self.rnn(s_emb_a)
+        hn = feats[:,-1:,:]
+        # hn = hn.transpose(0,1) # use final hidden state, as this should be an encoding of all states and actions previously.
+        # get z_mean and z_sig by passing rnn output through mean_layer and sig_layer
+        z_mean = self.mean_layer(hn)
+        z_sig = self.sig_layer(hn)
+        
+        return z_mean, z_sig
+
+class StateSeqEncoder(nn.Module):
+
+    def __init__(self,state_dim,a_dim,z_dim,h_dim,n_gru_layers=4):
+        super(StateSeqEncoder, self).__init__()
+
+        print('BUILDING STATE SEQ ENCODER!!!')
+        self.state_dim = state_dim # state dimension
+        self.a_dim = a_dim # action dimension
+
+        self.emb_layer  = nn.Sequential(nn.Linear(state_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
+        self.rnn        = nn.GRU(h_dim,h_dim,batch_first=True,bidirectional=True,num_layers=n_gru_layers)
+        #self.mean_layer = nn.Linear(h_dim,z_dim)
+        self.mean_layer = nn.Sequential(nn.Linear(2*h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,z_dim))
+        #self.sig_layer  = nn.Sequential(nn.Linear(h_dim,z_dim),nn.Softplus())  # using softplus to ensure stand dev is positive
+        self.sig_layer  = nn.Sequential(nn.Linear(2*h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,z_dim),nn.Softplus())
+
+
+    def forward(self,states,actions):
+
+        '''
+        Takes a sequence of states and actions, and infers the distribution over latent skill variable, z
+        
+        INPUTS:
+            states: batch_size x T x state_dim state sequence tensor
+            actions: batch_size x T x a_dim action sequence tensor (we don't use these, just to keep consistent with other encoders)
+        OUTPUTS:
+            z_mean: batch_size x 1 x z_dim tensor indicating mean of z distribution
+            z_sig:  batch_size x 1 x z_dim tensor indicating standard deviation of z distribution
+        '''
+
+        
+        s_emb = self.emb_layer(states)
+        # through rnn
+        feats,_ = self.rnn(s_emb)
         hn = feats[:,-1:,:]
         # hn = hn.transpose(0,1) # use final hidden state, as this should be an encoding of all states and actions previously.
         # get z_mean and z_sig by passing rnn output through mean_layer and sig_layer
@@ -449,18 +524,23 @@ class TerminalStateDependentPrior(nn.Module):
         
 
 
-
 class SkillModelStateDependentPrior(nn.Module):
-    def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal',state_dec_stop_grad=False,beta=1.0,alpha=1.0,max_sig=None,fixed_sig=None,ent_pen=0,s0sT_encoder=False):
+    def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal',state_dec_stop_grad=False,beta=1.0,alpha=1.0,max_sig=None,fixed_sig=None,ent_pen=0,encoder_type='state_action_sequence'):
         super(SkillModelStateDependentPrior, self).__init__()
 
         self.state_dim = state_dim # state dimension
         self.a_dim = a_dim # action dimension
 
         
-        self.encoder = Encoder(state_dim,a_dim,z_dim,h_dim)
-        if s0sT_encoder:
+        if encoder_type == 'state_action_sequence':
+            self.encoder = Encoder(state_dim,a_dim,z_dim,h_dim)
+        elif encoder_type == 's0sT':
             self.encoder = S0STEncoder(state_dim,a_dim,z_dim,h_dim)
+        elif encoder_type == 'state_sequence':
+            self.encoder = StateSeqEncoder(state_dim,a_dim,z_dim,h_dim)
+        else:
+            print('INVALID ENCODER TYPE!!!!')
+            assert False
 
         self.decoder = Decoder(state_dim,a_dim,z_dim,h_dim, a_dist, state_dec_stop_grad,max_sig=max_sig,fixed_sig=fixed_sig)
         self.prior   = Prior(state_dim,z_dim,h_dim)
@@ -581,7 +661,7 @@ class SkillModelStateDependentPrior(nn.Module):
         
         return cost, torch.cat(pred_states,dim=1)
 
-    def get_expected_cost_for_cem(self, s0, skill_seq, goal_state, use_epsilons=True, plot=True):
+    def get_expected_cost_for_cem(self, s0, skill_seq, goal_state, use_epsilons=True, plot=True, length_cost=0):
         '''
         s0 is initial state, batch_size x 1 x s_dim
         skill sequence is a batch_size x skill_seq_len x z_dim tensor that representents a skill_seq_len sequence of skills
@@ -614,7 +694,7 @@ class SkillModelStateDependentPrior(nn.Module):
             # s_sampled = self.reparameterize(s_mean, s_sig)
             s_i = s_sampled
 
-            cost_i = torch.mean((s_i[:,:,:2] - goal_state[:,:,:2])**2,dim=-1).squeeze()
+            cost_i = torch.mean((s_i[:,:,:2] - goal_state[:,:,:2])**2,dim=-1).squeeze() + (i+1)*length_cost
             costs.append(cost_i)
             
             pred_states.append(s_i)
@@ -719,6 +799,17 @@ class SkillModelStateDependentPrior(nn.Module):
     def reparameterize(self, mean, std):
         eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
         return mean + std*eps
+
+# class SkillModelTermStateKL(SkillModelStateDependentPrior):
+#     def __init__(self,state_dim,a_dim,z_dim,h_dim,state_dec_stop_grad=False,beta=1.0,alpha=1.0,fixed_sig=None):
+#         super(SkillModelTerminalStateDependentPrior, self).__init__(state_dim,a_dim,z_dim,h_dim,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,fixed_sig=fixed_sig)
+
+#         self.s0_sT_encoder = 
+
+#     def 
+
+
+
 
 class SkillModelTerminalStateDependentPrior(SkillModelStateDependentPrior):
     def __init__(self,state_dim,a_dim,z_dim,h_dim,state_dec_stop_grad=False,beta=1.0,alpha=1.0,fixed_sig=None):

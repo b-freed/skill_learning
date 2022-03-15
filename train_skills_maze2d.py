@@ -73,8 +73,8 @@ def test(model):
 # instantiating the environmnet, getting the dataset.
 # the data is in a big dictionary, containing long sequences of obs, rew, actions, goals
 # env_name = 'antmaze-medium-diverse-v0'  
-env_name = 'maze2d-large-v1'
-# env_name = 'antmaze-large-diverse-v0'
+# env_name = 'maze2d-large-v1'
+env_name = 'antmaze-large-diverse-v0'
 env = gym.make(env_name)
 
 # dataset_file = None
@@ -94,9 +94,9 @@ z_dim = 256
 lr = 5e-5
 wd = 0.0
 state_dependent_prior = True
-term_state_dependent_prior = True
+term_state_dependent_prior = False
 state_dec_stop_grad = True
-beta = 1.0
+beta = 0.1
 alpha = 1.0
 ent_pen = 0.0
 max_sig = None
@@ -106,11 +106,8 @@ stride = 1
 n_epochs = 50000
 test_split = .2
 a_dist = 'normal' # 'tanh_normal' or 'normal'
-s0sT_encoder = True  # this variable decides if we pass entire trajectory into encoder, or ONLY initial and terminal states
+encoder_type = 'state_sequence'
 
-# splitting up the dataset into subsequences in which we're going to a particular goal.  Every time the goal changes we make a new subsequence.
-# chunks might not all be same length, might have to split long chunks down into sub-chunks, discarding leftover chunks that are shorter than our chunck length.
-# so if I have a chunk that's 125 long, I can split into 6 x 20 sub chunks, discard last 5
 			
 def chunks(obs,actions,goals,H,stride):
 	'''
@@ -181,40 +178,38 @@ experiment = Experiment(api_key = '9mxH2vYX20hn9laEr0KtHLjAa', project_name = 's
 if term_state_dependent_prior:
 	model = SkillModelTerminalStateDependentPrior(state_dim,a_dim,z_dim,h_dim,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,fixed_sig=fixed_sig).cuda()
 elif state_dependent_prior:
-	model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,max_sig=max_sig,fixed_sig=fixed_sig,ent_pen=ent_pen,s0sT_encoder=s0sT_encoder).cuda()
+	model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,max_sig=max_sig,fixed_sig=fixed_sig,ent_pen=ent_pen,encoder_type=encoder_type).cuda()
 
 else:
 	model = SkillModel(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist).cuda()
 	
 model_optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
 
-filename = env_name+'_H'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_sg_'+str(state_dec_stop_grad)+'_max_sig_'+str(max_sig)+'_fixed_sig_'+str(fixed_sig)+'_ent_pen_'+str(ent_pen)+'_log'
-if s0sT_encoder:
-	filename = env_name+'_H'+str(H)+'_s0sT_enc'+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_sg_'+str(state_dec_stop_grad)+'_max_sig_'+str(max_sig)+'_fixed_sig_'+str(fixed_sig)+'_ent_pen_'+str(ent_pen)+'_log'
+filename = env_name+'_enc_type_'+str(encoder_type)+'_H'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_sg_'+str(state_dec_stop_grad)+'_max_sig_'+str(max_sig)+'_fixed_sig_'+str(fixed_sig)+'_ent_pen_'+str(ent_pen)+'_log'
 
 if term_state_dependent_prior:
 	filename = env_name+'_tsdp'+'_H'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_sg_'+str(state_dec_stop_grad)+'_max_sig_'+str(max_sig)+'_fixed_sig_'+str(fixed_sig)+'_log'
 
 
 experiment.log_parameters({'lr':lr,
-							   'h_dim':h_dim,
-							   'state_dependent_prior':state_dependent_prior,
-							   'term_state_dependent_prior':term_state_dependent_prior,
-							   'z_dim':z_dim,
-			  				   'H':H,
-			   				   'a_dist':a_dist,
-			  				   'a_dim':a_dim,
-			  				   'state_dim':state_dim,
-			  				   'l2_reg':wd,
-							   'state_dec_stop_grad':state_dec_stop_grad,
-							   'beta':beta,
-							   'alpha':alpha,
-							   'max_sig':max_sig,
-							   'fixed_sig':fixed_sig,
-							   'ent_pen':ent_pen,
-							   'env_name':env_name,
-							   'filename':filename,
-							   's0sT_encoder':s0sT_encoder})
+							'h_dim':h_dim,
+							'state_dependent_prior':state_dependent_prior,
+							'term_state_dependent_prior':term_state_dependent_prior,
+							'z_dim':z_dim,
+							'H':H,
+							'a_dist':a_dist,
+							'a_dim':a_dim,
+							'state_dim':state_dim,
+							'l2_reg':wd,
+							'state_dec_stop_grad':state_dec_stop_grad,
+							'beta':beta,
+							'alpha':alpha,
+							'max_sig':max_sig,
+							'fixed_sig':fixed_sig,
+							'ent_pen':ent_pen,
+							'env_name':env_name,
+							'filename':filename,
+							'encoder_type':encoder_type})
 
 # add chunks of data to a pytorch dataloader
 inputs_train = torch.tensor(np.concatenate([obs_chunks_train, action_chunks_train],axis=-1),dtype=torch.float32) # array that is dataset_size x T x state_dim+action_dim
