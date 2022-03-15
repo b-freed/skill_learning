@@ -24,19 +24,19 @@ from math import pi
 device = torch.device('cuda:0')
 
 
-def mppi_update(self, state, model, env, T, N, lam=0.1, eps=0.2):
-	a = torch.zeros(T, model.a_dim).to(device)
-	eps = Normal(torch.zeros(N, model.a_dim).to(device),
-                            (torch.ones(N, model.a_dim)*eps).to(device))
+def mppi_update(self, skill_seq_mean, s0, model, env, T, N, lam=0.1, eps=0.2):
+	#a = torch.zeros(T, model.a_dim).to(device)
+	eps = Normal(torch.zeros(N, model.z_dim).to(device),
+                            (torch.ones(N, model.z_dim)*eps).to(device))
 
 	with torch.no_grad():
-		a[:-1] = a[1:].clone()
-		a[-1].zero_()
+		skill_seq_mean[:-1] = skill_seq_mean[1:].clone()
+		skill_seq_mean[-1].zero_()
 
-		s0 = torch.FloatTensor(state).unsqueeze(0).to(device)
+		s0 = torch.FloatTensor(s0).unsqueeze(0).to(device)
 		s = s0.repeat(N, 1)
 
-		sk, da, log_prob = [], [], []
+		sk, dz, log_prob = [], [], []
 		eta = None
 		gamma = 0.5
 	    	for t in range(T):
@@ -46,10 +46,10 @@ def mppi_update(self, state, model, env, T, N, lam=0.1, eps=0.2):
 			#     eta = eps
 			# else:
 			#     eta = gamma*eta + ((1-gamma**2)**0.5) * eps
-			v = a[t].expand_as(eta) + eta
+			v = skill_seq_mean[t].expand_as(eta) + eta
 			s, rew,_,_ = env.step(v)
 			log_prob.append(eps.log_prob(eta).sum(1))
-			da.append(eta)
+			dz.append(eta)
 			sk.append(rew.squeeze())
 
 		sk = torch.stack(sk)
@@ -61,10 +61,10 @@ def mppi_update(self, state, model, env, T, N, lam=0.1, eps=0.2):
 		w = torch.exp(sk.div(lam)) + 1e-5
 		w.div_(torch.sum(w, dim=1, keepdim=True))
 	    	for t in range(T):
-			a[t] = a[t] + torch.mv(da[t].T, w[t])
+			skill_seq_mean[t] = skill_seq_mean[t] + torch.mv(dz[t].T, w[t])
 	
 		
-		return a[0].reshape([model.a_dim,]).cpu().clone().numpy()
+		return skill_seq_mean[0].cpu().clone().numpy()
 	
 			
 			
