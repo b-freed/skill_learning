@@ -174,10 +174,9 @@ def run_skill_seq(env,skill_seq,s0,model):
 # run_skill_seq(env,s0,skill_model)
 
 
-cost_fn = lambda skill_seq,lengths: skill_model.get_expected_cost_variable_length(s0_torch, skill_seq, lengths, goal_seq)
+cost_fn = lambda skill_seq: skill_model.get_expected_cost(s0_torch, skill_seq, goal_seq)
 skill_seq_mean = torch.zeros((skill_seq_len,z_dim),device=device)
 skill_seq_std  = torch.ones( (skill_seq_len,z_dim),device=device)
-p_lengths = (1/skill_seq_len) * torch.ones(skill_seq_len,device=device)
-skill_seq,_ = cem_variable_length(skill_seq_mean,skill_seq_std,p_lengths,cost_fn,batch_size,.5,n_iters)
+skill_seq = mppi_update(skill_seq_mean,skill_model,cost_fn,n_iters,skill_seq_len)
 skill_seq = skill_seq.unsqueeze(0)		
 run_skill_seq(env,skill_seq,s0,skill_model)
