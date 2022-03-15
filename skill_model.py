@@ -538,8 +538,7 @@ class SkillModelStateDependentPrior(nn.Module):
         s0 is initial state  # batch_size x 1 x s_dim
         skill sequence is a 1 x skill_seq_len x z_dim tensor that representents a skill_seq_len sequence of skills
         '''
-        # tile s0 along batch dimension
-        #s0_tiled = s0.tile([1,batch_size,1])
+        
         batch_size = s0.shape[0]
         goal_state = torch.cat(batch_size * [goal_states],dim=0)
         s_i = s0
@@ -548,13 +547,10 @@ class SkillModelStateDependentPrior(nn.Module):
         pred_states = [s_i]
         costs = [torch.mean((s_i[:,:,:2] - goal_state[:,:,:2])**2,dim=-1).squeeze()]
         for i in range(skill_seq_len):
-            # z_i = skill_seq[:,i:i+1,:] # might need to reshape
             mu_z, sigma_z = self.prior(s_i)
           
 
             z_i = mu_z + sigma_z*torch.cat(batch_size*[skill_seq[:,i:i+1,:]],dim=0)
-            # converting z_i from 1x1xz_dim to batch_size x 1 x z_dim
-            # z_i = torch.cat(batch_size*[z_i],dim=0) # feel free to change this to tile
             # use abstract dynamics model to predict mean and variance of state after executing z_i, conditioned on s_i
             s_mean, s_sig = self.decoder.abstract_dynamics(s_i,z_i)
             
