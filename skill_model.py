@@ -543,14 +543,20 @@ class SkillModelStateDependentPrior(nn.Module):
         batch_size = s.shape[0]
         goal_state = torch.cat(batch_size * [goal_states],dim=0)
         s_i = s
-        
+        min_dist = 0
         skill_seq_len = skill_seq.shape[1]
         pred_states = [s_i]
         costs = [torch.mean((s_i[:,:,:2] - goal_state[:,:,:2])**2,dim=-1).squeeze()]
         for i in range(skill_seq_len):
             s_mean, s_sig = self.decoder.abstract_dynamics(s_i,skill_seq[:,i:i+1,:])
+            
+            min_dist += np.sum((s_mean[:,:,:2] - goal_state[:,:,:2])**2)
+            
+            if i == skill_seq_len-1:
+                cost_i = -min_dist 
+            else:
+                cost_i = 0
         
-            cost_i = torch.mean((s_mean[:,:,:2] - goal_state[:,:,:2])**2,dim=-1).squeeze()
             costs.append(cost_i)
             s_i = s_mean
             
