@@ -534,7 +534,7 @@ class SkillModelStateDependentPrior(nn.Module):
         return cost, torch.cat(pred_states,dim=1)
     
     
-    def step_mppi(self, s, skill_seq, goal_states):
+    def cost_for_mppi(self, s, goal_states):
         '''
         s0 is initial state  # batch_size x 1 x s_dim
         skill sequence is a 1 x skill_seq_len x z_dim tensor that representents a skill_seq_len sequence of skills
@@ -542,30 +542,18 @@ class SkillModelStateDependentPrior(nn.Module):
         
         batch_size = s.shape[0]
         goal_state = torch.cat(batch_size * [goal_states],dim=0)
-        s_i = s
-        min_dist = 0
-        skill_seq_len = skill_seq.shape[1]
-        pred_states = [s_i]
-        costs = [torch.mean((s_i[:,:,:2] - goal_state[:,:,:2])**2,dim=-1).squeeze()]
-        for i in range(skill_seq_len):
-            s_mean, s_sig = self.decoder.abstract_dynamics(s_i,skill_seq[:,i:i+1,:])
+        costs = []
+        for i in range(len(s)):
             
-            min_dist += np.sum((s_mean[:,:,:2] - goal_state[:,:,:2])**2)
-            
-            if i == skill_seq_len-1:
-                cost_i = -min_dist 
-            else:
+            if i != len(s)-1:
                 cost_i = 0
-        
-            costs.append(cost_i)
-            s_i = s_mean
+            else:
+                cost_i = torch.mean((s[i,:,:2] - goal_state[i,:,:2])**2,dim=-1).squeeze()
             
-            pred_states.append(s_i)
+            costs.append(cost_i)
         
         costs = torch.stack(costs,dim=1)
-        cost = torch.min(costs,dim=1)
-        
-        return cost, s_mean
+        return costs, s_mean
 
 
     def get_expected_cost_for_cem(self, s0, skill_seq, goal_state, use_epsilons=True, plot=False):
