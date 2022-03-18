@@ -177,7 +177,7 @@ def run_skill_seq(env,s0,model, skill_seq):
 cost_fn = lambda s: skill_model.cost_for_mppi(s, goal_seq)
 skill_seq_mean = torch.zeros((skill_seq_len,z_dim),device=device)
 skill_seq_std  = torch.ones( (skill_seq_len,z_dim),device=device)
-skill_seq = mppi_update(skill_seq_mean, s0_torch, skill_model, cost_fn, batch_size, skill_seq_len, z_dim)
+skill_seq = mppi_update(skill_seq_mean, s0_torch, skill_model, cost_fn, batch_size, skill_seq_len, z_dim, True, goal_seq)
 skill_seq = skill_seq.unsqueeze(0)
 #skill_seq = skill_seq.tile([batch_size,1,1])
 run_skill_seq(env,s0_torch,skill_model, skill_seq)
