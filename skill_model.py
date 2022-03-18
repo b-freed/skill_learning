@@ -546,14 +546,17 @@ class SkillModelStateDependentPrior(nn.Module):
         for i in range(len(s)):
             
             if i != len(s)-1:
-                cost_i = 0
+                cost_i = (torch.mean((s[i,:2] - goal_state[i,:2])**2,dim=-1).squeeze())*0
             else:
-                cost_i = torch.mean((s[i,:,:2] - goal_state[i,:,:2])**2,dim=-1).squeeze()
+                cost_i = torch.mean((s[i,:2] - goal_state[i,:2])**2,dim=-1).squeeze()
             
+            cost_i = torch.reshape(cost_i, (-1,1))
+            cost_i = torch.tensor(cost_i, dtype=torch.float32)
             costs.append(cost_i)
         
+        
         costs = torch.stack(costs,dim=1)
-        return costs, s_mean
+        return costs
 
 
     def get_expected_cost_for_cem(self, s0, skill_seq, goal_state, use_epsilons=True, plot=False):
