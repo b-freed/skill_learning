@@ -52,6 +52,103 @@ class AbstractDynamics(nn.Module):
 
         return sT_mean,sT_sig
 
+class AutoregressiveStateDecoder(nn.Module):
+    def __init__(self,state_dim,z_dim,h_dim):
+        super(AutoregressiveStateDecoder,self).__init__()
+
+        self.state_dim = state_dim
+        
+        self.emb_layer  = nn.Sequential(nn.Linear(3*state_dim+z_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU()) 
+        self.mean_layer = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,1))
+        self.sig_layer  = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,1),nn.Softplus())
+
+
+        
+
+    def forward(self,sT,s0,z):
+        '''
+        returns the log probability of the terminal state sT given the initial state s0 and skill z
+
+        INPUTS:
+            sT: batch_size x 1 x state_dim terminal state
+            s0: batch_size x 1 x state_dim initial state
+            z:  batch_size x 1 x z_dim skill vector
+
+        OUTPUTS:
+            log_probs: batch_size x 1 x state_dim tensor of log probabilities for each element
+        '''
+        batch_size = s0.shape[0]
+
+        # tile s0, z, and sT along 1st dimension, state_dim times
+        s0_tiled = torch.cat(self.state_dim*[s0],dim=1) # should be batch_size x state_dim x state_dim
+        z_tiled  = torch.cat(self.state_dim*[z], dim=1) # should be batch_size x state_dim x z_dim
+        sT_tiled = torch.cat(self.state_dim*[sT],dim=1) # should be batch_size x state_dim x state_dim
+
+        # Generate one hot vectors using identity 
+        onehots = torch.stack(batch_size*[torch.eye(self.state_dim,device=torch.device('cuda:0'))],dim=0) # batch_size x state_dim x state_dim
+
+        # Mask out future elements of sT (so element-wise multiplication with a matrix with zeros on and below diagonal)
+        mask = torch.tril(torch.ones((self.state_dim,self.state_dim),device=torch.device('cuda:0')),diagonal=-1)
+
+        sT_tiled_masked = sT_tiled * mask
+
+        # Concatentate
+        inp = torch.cat([s0_tiled,sT_tiled_masked,onehots,z_tiled],dim=-1)
+
+        # pass thru layers to get mean and sig
+        emb = self.emb_layer(inp)
+        sT_mean, sT_sig = self.mean_layer(emb),self.sig_layer(emb) # should be batch_size x state_dim x 1
+        
+        # get rid of last singleton dimension, add one back in for the 1st dimension
+        sT_mean = sT_mean.squeeze().unsqueeze(1)
+        sT_sig  = sT_sig.squeeze().unsqueeze(1)
+
+        return sT_mean, sT_sig
+
+    def sample_from_sT_dist(self,s0,z,temp=1.0):
+        '''
+        Given an initial state s0 and skill z, sample from predicted terminal state distribution
+
+        INPUTS:
+            s0: batch_size x 1 x state_dim
+            z:  batch_size x 1 x z_dim
+
+        OUTPUTS:
+            sT: batch_size x 1 x state_dim
+        '''
+        # if self.state_decoder_type is not 'autoregressive':
+        #     raise NotImplementedError
+
+        # tile s0, z, and sT along 1st dimension, state_dim times
+        # s0_tiled = torch.cat(self.state_dim*[s0],dim=1) # should be batch_size x state_dim x state_dim
+        # z_tiled  = torch.cat(self.state_dim*[z], dim=1) # should be batch_size x state_dim x z_dim
+        # sT_tiled = torch.cat(self.state_dim*[sT],dim=1) # should be batch_size x state_dim x state_dim
+
+        batch_size = s0.shape[0]
+        sT_lessthan_i = torch.zeros((batch_size,1,self.state_dim),device=torch.device('cuda:0'))
+        for i in range(self.state_dim):
+            onehot = self.get_onehot(i,batch_size)
+            # concatenate s0, sT[<i], onehot, z
+            inp = torch.cat([s0,sT_lessthan_i,onehot,z],dim=-1)
+            emb = self.emb_layer(inp)
+            sT_i_mean, sT_i_sig = self.mean_layer(emb),self.sig_layer(emb) # should be batch_size x state_dim x 1
+            
+            sT_i = reparameterize(sT_i_mean,temp*sT_i_sig)
+            sT_lessthan_i[:,:,i:i+1] = sT_i
+
+        return sT_lessthan_i
+
+    def get_onehot(self,i,batch_size):
+
+        onehot = torch.zeros((batch_size,1,self.state_dim),device=torch.device('cuda:0'))
+        onehot[:,:,i] = 1
+
+        return onehot
+    
+
+
+
+
 # class DeadReckonStateDecoder(nn.Module):
 
 #     def __init__(self,state_dim,a_dim,z_dim,h_dim,n_gru_layers=4):
@@ -392,7 +489,7 @@ class Decoder(nn.Module):
     -embed z
     -Pass into fully connected network to get "state T features"
     '''
-    def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist,state_dec_stop_grad, max_sig, fixed_sig):
+    def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist,state_dec_stop_grad, max_sig, fixed_sig, state_decoder_type):
 
         super(Decoder,self).__init__()
         
@@ -400,12 +497,20 @@ class Decoder(nn.Module):
         self.a_dim = a_dim
         self.z_dim = z_dim
 
-        self.abstract_dynamics = AbstractDynamics(state_dim,z_dim,h_dim)
+        if state_decoder_type == 'mlp':
+            self.abstract_dynamics = AbstractDynamics(state_dim,z_dim,h_dim)
+        elif state_decoder_type == 'autoregressive':
+            self.abstract_dynamics = AutoregressiveStateDecoder(state_dim,z_dim,h_dim)
+        else:
+            print('PICK VALID STATE DECODER TYPE!!!')
+            assert False
         self.ll_policy = LowLevelPolicy(state_dim,a_dim,z_dim,h_dim, a_dist, max_sig = max_sig, fixed_sig=fixed_sig)
         self.emb_layer  = nn.Linear(state_dim+z_dim,h_dim)
         self.fc = nn.Sequential(nn.Linear(state_dim+z_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
 
         self.state_dec_stop_grad = state_dec_stop_grad
+
+        self.state_decoder_type = state_decoder_type
         
     def forward(self,states,z):
 
@@ -421,12 +526,30 @@ class Decoder(nn.Module):
         '''
         
         s_0 = states[:,0:1,:]
-        z_detached = z.detach()
-        sT_mean,sT_sig = self.abstract_dynamics(s_0,z_detached)
+        s_T = states[:,-1:,:]
         a_mean,a_sig   = self.ll_policy(states,z)
+
+        if self.state_dec_stop_grad:
+            z = z.detach()
+        
+        
+        if self.state_decoder_type == 'autoregressive':
+            z_detached = z.detach()
+            sT_mean,sT_sig = self.abstract_dynamics(s_T,s_0,z)
+        elif self.state_decoder_type == 'mlp':
+            sT_mean,sT_sig = self.abstract_dynamics(s_0,z)
+        else:
+            print('PICK VALID STATE DECODER TYPE!!!')
+            assert False
+        
 
 
         return sT_mean,sT_sig,a_mean,a_sig
+
+    
+
+
+        
 
 
 class Prior(nn.Module):
@@ -525,7 +648,7 @@ class TerminalStateDependentPrior(nn.Module):
 
 
 class SkillModelStateDependentPrior(nn.Module):
-    def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal',state_dec_stop_grad=False,beta=1.0,alpha=1.0,max_sig=None,fixed_sig=None,ent_pen=0,encoder_type='state_action_sequence'):
+    def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal',state_dec_stop_grad=False,beta=1.0,alpha=1.0,max_sig=None,fixed_sig=None,ent_pen=0,encoder_type='state_action_sequence',state_decoder_type='mlp'):
         super(SkillModelStateDependentPrior, self).__init__()
 
         self.state_dim = state_dim # state dimension
@@ -542,7 +665,7 @@ class SkillModelStateDependentPrior(nn.Module):
             print('INVALID ENCODER TYPE!!!!')
             assert False
 
-        self.decoder = Decoder(state_dim,a_dim,z_dim,h_dim, a_dist, state_dec_stop_grad,max_sig=max_sig,fixed_sig=fixed_sig)
+        self.decoder = Decoder(state_dim,a_dim,z_dim,h_dim, a_dist, state_dec_stop_grad,max_sig=max_sig,fixed_sig=fixed_sig,state_decoder_type=state_decoder_type)
         self.prior   = Prior(state_dim,z_dim,h_dim)
         self.beta    = beta
         self.alpha   = alpha
@@ -622,6 +745,9 @@ class SkillModelStateDependentPrior(nn.Module):
         # loss_tot = s_T_loss + kl_loss
 
         return  loss_tot, s_T_loss, a_loss, kl_loss, s_T_ent
+    
+    
+        
     
     def get_expected_cost(self, s0, skill_seq, goal_states):
         '''
@@ -732,7 +858,7 @@ class SkillModelStateDependentPrior(nn.Module):
         
         return costs
     
-    def get_expected_cost_variable_length(self, s0, skill_seq, lengths, goal_state, use_epsilons=True, plot=True):
+    def get_expected_cost_variable_length(self, s0, skill_seq, lengths, goal_state, use_epsilons=True, plot=False):
         '''
         s0 is initial state, batch_size x 1 x s_dim
         skill sequence is a batch_size x skill_seq_len x z_dim tensor that representents a skill_seq_len sequence of skills
@@ -800,13 +926,6 @@ class SkillModelStateDependentPrior(nn.Module):
         eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
         return mean + std*eps
 
-# class SkillModelTermStateKL(SkillModelStateDependentPrior):
-#     def __init__(self,state_dim,a_dim,z_dim,h_dim,state_dec_stop_grad=False,beta=1.0,alpha=1.0,fixed_sig=None):
-#         super(SkillModelTerminalStateDependentPrior, self).__init__(state_dim,a_dim,z_dim,h_dim,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,fixed_sig=fixed_sig)
-
-#         self.s0_sT_encoder = 
-
-#     def 
 
 
 
@@ -908,7 +1027,14 @@ class SkillModelTerminalStateDependentPrior(SkillModelStateDependentPrior):
         
         return costs
 
+class SkillPolicy(nn.Module):
+    def __init__(self,state_dim,z_dim,h_dim):
+        super(SkillPolicy,self).__init__()
+        self.layers = nn.Sequential(nn.Linear(state_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,z_dim))
 
+    def forward(self,state):
+
+        return self.layers(state)
 
 class DecoderWithLLDynamics(nn.Module):
     def __init__(self,state_dim,a_dim,z_dim,h_dim,ff=False):

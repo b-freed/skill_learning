@@ -39,14 +39,14 @@ data = env.get_dataset()
 
 # vid = video_recorder.VideoRecorder(env,path="recording")
 
-H = 5
+H = 20
 replan_freq = H
 state_dim = data['observations'].shape[1]
 a_dim = data['actions'].shape[1]
 h_dim = 256
 z_dim = 256
 batch_size = 100
-skill_seq_len = 100
+skill_seq_len = 200
 lr = 1e-4
 wd = .001
 state_dependent_prior = True
@@ -56,8 +56,8 @@ alpha = 1.0
 ent_pen = 0
 max_sig = None
 fixed_sig = 0.0
-n_iters = 100
-# n_iters = 20
+# n_iters = 100
+n_iters = 20
 a_dist = 'normal'
 keep_frac = 0.1
 # background_img = mpimg.imread('maze_medium.png')
@@ -68,7 +68,7 @@ render = False
 variable_length = False
 max_replans = 50
 plan_length_cost = 0.0
-encoder_type = 'state_action_sequence'
+encoder_type = 'state_sequence'
 term_state_dependent_prior = False
 # start_ind = 937278
 
@@ -89,8 +89,9 @@ else:
 # filename = 'antmaze-large-diverse-v0_40_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
 # filename = 'antmaze-medium-diverse-v0_10_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
 # filename = 'antmaze-large-diverse-v0_20_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
-# filename = 'antmaze-large-diverse-v0_enc_type_state_sequence_H20_l2reg_0.0_a_1.0_b_0.1_sg_True_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
-filename = 'antmaze-large-diverse-v0_5_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
+filename = 'antmaze-large-diverse-v0_enc_type_state_sequence_H20_l2reg_0.0_a_1.0_b_0.1_sg_True_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
+# filename = 'antmaze-large-diverse-v0_5_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
+# filename = 'antmaze-large-diverse-v0_5_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
 
 PATH = 'checkpoints/'+filename
 

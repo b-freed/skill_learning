@@ -77,9 +77,9 @@ def test(model):
 env_name = 'antmaze-large-diverse-v0'
 env = gym.make(env_name)
 
-# dataset_file = None
+dataset_file = None
 #dataset_file = "datasets/maze2d-umaze-v1.hdf5"
-dataset_file = 'datasets/maze2d-large-v1-noisy-2.hdf5'
+# dataset_file = 'datasets/maze2d-large-v1-noisy-2.hdf5'
 
 if dataset_file is None:
 	dataset = env.get_dataset()
@@ -92,7 +92,7 @@ batch_size = 100
 h_dim = 256
 z_dim = 256
 lr = 5e-5
-wd = 0.0
+wd = 0.001
 state_dependent_prior = True
 term_state_dependent_prior = False
 state_dec_stop_grad = True
@@ -101,13 +101,13 @@ alpha = 1.0
 ent_pen = 0.0
 max_sig = None
 fixed_sig = None
-H = 40
+H = 20
 stride = 1
 n_epochs = 50000
 test_split = .2
 a_dist = 'normal' # 'tanh_normal' or 'normal'
-encoder_type = 'state_sequence'
-
+encoder_type = 'state_action_sequence' #'state_sequence'
+state_decoder_type = 'autoregressive'
 			
 def chunks(obs,actions,goals,H,stride):
 	'''
@@ -178,14 +178,16 @@ experiment = Experiment(api_key = '9mxH2vYX20hn9laEr0KtHLjAa', project_name = 's
 if term_state_dependent_prior:
 	model = SkillModelTerminalStateDependentPrior(state_dim,a_dim,z_dim,h_dim,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,fixed_sig=fixed_sig).cuda()
 elif state_dependent_prior:
-	model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,max_sig=max_sig,fixed_sig=fixed_sig,ent_pen=ent_pen,encoder_type=encoder_type).cuda()
+	model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,max_sig=max_sig,fixed_sig=fixed_sig,ent_pen=ent_pen,encoder_type=encoder_type,state_decoder_type=state_decoder_type).cuda()
 
 else:
 	model = SkillModel(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist).cuda()
 	
 model_optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
 
-filename = env_name+'_enc_type_'+str(encoder_type)+'_H'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_sg_'+str(state_dec_stop_grad)+'_max_sig_'+str(max_sig)+'_fixed_sig_'+str(fixed_sig)+'_ent_pen_'+str(ent_pen)+'_log'
+filename = env_name+'_enc_type_'+str(encoder_type)+'state_dec_'+str(state_decoder_type)+'_H_'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_sg_'+str(state_dec_stop_grad)+'_max_sig_'+str(max_sig)+'_fixed_sig_'+str(fixed_sig)+'_ent_pen_'+str(ent_pen)+'_log'
+
+
 
 if term_state_dependent_prior:
 	filename = env_name+'_tsdp'+'_H'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_sg_'+str(state_dec_stop_grad)+'_max_sig_'+str(max_sig)+'_fixed_sig_'+str(fixed_sig)+'_log'
@@ -209,7 +211,8 @@ experiment.log_parameters({'lr':lr,
 							'ent_pen':ent_pen,
 							'env_name':env_name,
 							'filename':filename,
-							'encoder_type':encoder_type})
+							'encoder_type':encoder_type,
+							'state_decoder_type':state_decoder_type})
 
 # add chunks of data to a pytorch dataloader
 inputs_train = torch.tensor(np.concatenate([obs_chunks_train, action_chunks_train],axis=-1),dtype=torch.float32) # array that is dataset_size x T x state_dim+action_dim

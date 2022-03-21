@@ -30,8 +30,8 @@ from utils import make_gif,make_video, reparameterize
 
 device = torch.device('cuda:0')
 
-env = 'antmaze-medium-diverse-v0'
-# env = 'maze2d-large-v1'
+# env = 'antmaze-medium-diverse-v0'
+env = 'maze2d-large-v1'
 env_name = env
 env = gym.make(env)
 data = env.get_dataset()
@@ -65,6 +65,7 @@ use_epsilon = True
 # filename = 'AntMaze_H20_l2reg_0.001_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_1.0_log_best.pth'
 # filename = 'AntMaze_H20_l2reg_0.001_log_best.pth'
 # filename = 'AntMaze_H20_l2reg_0.001_a_1.0_b_0.1_sg_True_log.pth'
+filename = 'maze2d-large-v1_tsdp_H40_l2reg_0.0_a_1.0_b_1.0_sg_True_max_sig_None_fixed_sig_None_log_best.pth'
 
 PATH = 'checkpoints/'+filename
 
