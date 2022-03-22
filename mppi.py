@@ -36,7 +36,7 @@ def mppi_update(skill_seq_mean, s0, model, cost_fn, batch_size, T, z_dim, plot, 
 		#skill_seq_mean = skill_seq_mean.tile([batch_size,1,1])
 		s = s0.repeat(batch_size, 1)
 
-		sk, dz, log_prob, pred_states = [], [], [], [s0]
+		sk, dz, log_prob, pred_states = [], [], [], [s]
 		eta = None
 		gamma = 0.5
 		for t in range(T):
@@ -77,7 +77,12 @@ def mppi_update(skill_seq_mean, s0, model, cost_fn, batch_size, T, z_dim, plot, 
 			#pred_states = torch.cat(pred_states,1)
 
 			plt.plot(pred_states[:,:,0].T.detach().cpu().numpy(),pred_states[:,:,1].T.detach().cpu().numpy())
+			plt.legend()
 				
-			plt.savefig('pred_states_cem')
+			plt.savefig('pred_states_mppi')
 
 		return skill_seq_mean
+	
+			
+			
+    
