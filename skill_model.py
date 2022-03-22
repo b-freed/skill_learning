@@ -551,8 +551,7 @@ class SkillModelStateDependentPrior(nn.Module):
                 cost_i = torch.mean((s[i,:2] - goal_state[i,:2])**2,dim=-1).squeeze()
             
             cost_i = torch.reshape(cost_i, (-1,1))
-            cost_i = torch.tensor(cost_i, dtype=torch.float32)
-            costs.append(cost_i)
+            costs.append(cost_i.float())
         
         
         costs = torch.stack(costs,dim=1)
