@@ -38,7 +38,7 @@ a_dim = data['actions'].shape[1]
 h_dim = 256
 z_dim = 256
 batch_size = 100
-skill_seq_len = 100
+skill_seq_len = 200
 lr = 1e-4
 wd = 0.001
 state_dependent_prior = True
@@ -49,7 +49,7 @@ max_sig = None
 fixed_sig = None
 use_epsilon = True
 ent_pen = 0.0
-n_iters = 100
+n_iters = 20
 a_dist = 'normal'
 render = False
 max_replans = 50
@@ -129,13 +129,15 @@ def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq,ep_n
 	l = skill_seq_len
 	while np.sum((state[:2] - goals.flatten().detach().cpu().numpy()[:2])**2) > 1.0:
 	# for i in range(2):
-		state_torch = torch.tensor(state,dtype=torch.float32).cuda()
+		state_torch = torch.tensor(s0,dtype=torch.float32).cuda()
 		cost_fn = lambda s: skill_model.cost_for_mppi(s, goal_seq)
 		skill_seq_mean = torch.zeros((skill_seq_len,z_dim),device=device)
 		skill_seq_std  = torch.ones( (skill_seq_len,z_dim),device=device)
 
 
-		skill_seq_mean = mppi_update(skill_seq_mean, state_torch, skill_model, cost_fn, batch_size, skill_seq_len, z_dim, True, goal_seq)
+		for k in range(n_iters):
+			skill_seq_mean = mppi_update(skill_seq_mean, state_torch, skill_model, cost_fn, batch_size, skill_seq_len, z_dim, True, goal_seq)
+			print('No. of times updated:', k)
 
 
 
@@ -174,6 +176,7 @@ def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq,ep_n
 			# 	print('n: ',n)
 				# break
 		n += 1
+		print('n:',n)
 
 		
 	
@@ -183,7 +186,7 @@ def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq,ep_n
 		plt.scatter(np.stack(states)[:,0],np.stack(states)[:,1])
 		plt.scatter(goals.flatten().detach().cpu().numpy()[0],goals.flatten().detach().cpu().numpy()[1])
 		plt.axis('equal')
-		plt.savefig('ant_iterative_replanning_actual_states_niters'+str(n_iters)+'.png')
+		plt.savefig('ant_iterative_replanning_actual_states_niters'+str(n_iters)+'_epnum_'+str(ep_num)+'.png')
 	
 		if n > max_replans*H/replan_freq:
 			print('TIMEOUT!!!!!!!!!!!!!!')
@@ -302,7 +305,7 @@ run_skill_seq(env,s0_torch,skill_model, skill_seq)
 '''
 
 min_dists_list = []
-for i in range(100):
+for i in range(10):
 	states,min_dist = run_skills_iterative_replanning(env,skill_model,goal_seq,use_epsilon,replan_freq,i)
 	min_dists_list.append(min_dist)
 	print('min_dists_list: ',min_dists_list)
