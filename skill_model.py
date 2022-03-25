@@ -542,15 +542,17 @@ class SkillModelStateDependentPrior(nn.Module):
         
         batch_size = s.shape[0]
         goal_state = torch.cat(batch_size * [goal_states],dim=0)
+        s = s[:,None,:]
         costs = []
         for i in range(len(s)):
             
             if i != len(s)-1:
-                cost_i = (torch.mean((s[i,:2] - goal_state[i,:2])**2,dim=-1).squeeze())*0
+                cost_i = (torch.mean((s[i,:,:2] - goal_state[i,:,:2])**2,dim=-1).squeeze())*0
             else:
-                cost_i = torch.mean((s[i,:2] - goal_state[i,:2])**2,dim=-1).squeeze()
+                cost_i = torch.mean((s[i,:,:2] - goal_state[i,:,:2])**2,dim=-1).squeeze()
             
-            cost_i = torch.reshape(cost_i, (-1,1))
+            cost_i = torch.reshape(cost_i, (-1,1),)
+            #cost_i = torch.tensor(cost_i, dtype=torch.float32)
             costs.append(cost_i.float())
         
         
