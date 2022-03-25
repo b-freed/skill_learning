@@ -71,7 +71,7 @@ def mppi_update(skill_seq_mean, s0, model, cost_fn, batch_size, T, z_dim, plot, 
 		if plot:
 			plt.figure()
 			plt.scatter(s0[0].detach().cpu().numpy(),s0[1].detach().cpu().numpy(), label='init state')
-			plt.scatter(goal_state[0,0,0].detach().cpu().numpy(),goal_state[0,0,1].detach().cpu().numpy(),label='goal',s=300)
+			plt.scatter(goal_state[0,0,0].detach().cpu().numpy(),goal_state[0,0,1].detach().cpu().numpy(),label='goal')
 			# plt.xlim([0,25])
 			# plt.ylim([0,25])
 			#pred_states = torch.cat(pred_states,1)
@@ -82,7 +82,3 @@ def mppi_update(skill_seq_mean, s0, model, cost_fn, batch_size, T, z_dim, plot, 
 			plt.savefig('pred_states_mppi')
 
 		return skill_seq_mean
-	
-			
-			
-    
