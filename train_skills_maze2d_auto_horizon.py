@@ -24,13 +24,25 @@ def train(model, model_optimizer):
 	kl_losses = []
 	s_T_ents = []
 
-	for batch_id, data in enumerate(train_loader):
-		data = data.cuda()
-		states = data[:,:,:model.state_dim]  # first state_dim elements are the state
-		actions = data[:,:,model.state_dim:]	 # rest are actions
+	model.train()
 
-		loss_tot, s_T_loss, a_loss, kl_loss, s_T_ent = model.get_losses(states, actions)
+	for batch_id, data_ in enumerate(train_loader):
+		data_ = data_.to(hp.device)
+		loss_tot, s_T_loss, a_loss, kl_loss, s_T_ent = 0, 0, 0, 0, 0
 
+		for H in range(hp.H_min, hp.H_max+1):
+			data = data_[:, :H, ...]
+			states = data[:,:,:model.state_dim] # first state_dim elements are the state
+			actions = data[:,:,model.state_dim:] # rest are actions
+
+			loss_tot_, s_T_loss_, a_loss_, kl_loss_, s_T_ent_ = model.get_losses(states, actions)
+
+			loss_tot += loss_tot_
+			s_T_loss += s_T_loss_
+			a_loss += a_loss_
+			kl_loss += kl_loss_
+			s_T_ent += s_T_ent_
+			
 		model_optimizer.zero_grad()
 		loss_tot.backward()
 		model_optimizer.step()
@@ -45,6 +57,7 @@ def train(model, model_optimizer):
 
 	return np.mean(losses), np.mean(s_T_losses), np.mean(a_losses), np.mean(kl_losses), np.mean(s_T_ents)
 
+
 def test(model):
 	
 	losses = []
@@ -53,13 +66,25 @@ def test(model):
 	kl_losses = []
 	s_T_ents = []
 
-	with torch.no_grad():
-		for batch_id, data in enumerate(test_loader):
-			data = data.cuda()
-			states = data[:,:,:model.state_dim]  # first state_dim elements are the state
-			actions = data[:,:,model.state_dim:]	 # rest are actions
+	model.eval()
 
-			loss_tot, s_T_loss, a_loss, kl_loss, s_T_ent  = model.get_losses(states, actions)
+	with torch.no_grad():
+		for batch_id, data_ in enumerate(train_loader):
+			data_ = data_.to(hp.device)
+			loss_tot, s_T_loss, a_loss, kl_loss, s_T_ent = 0, 0, 0, 0, 0
+
+			for H in range(hp.H_min, hp.H_max+1):
+				data = data_[:, :H, ...]
+				states = data[:,:,:model.state_dim] # first state_dim elements are the state
+				actions = data[:,:,model.state_dim:] # rest are actions
+
+				loss_tot_, s_T_loss_, a_loss_, kl_loss_, s_T_ent_ = model.get_losses(states, actions)
+
+				loss_tot += loss_tot_
+				s_T_loss += s_T_loss_
+				a_loss += a_loss_
+				kl_loss += kl_loss_
+				s_T_ent += s_T_ent_
 
 			# log losses
 			losses.append(loss_tot.item())
@@ -67,7 +92,6 @@ def test(model):
 			a_losses.append(a_loss.item())
 			kl_losses.append(kl_loss.item())
 			s_T_ents.append(s_T_ent.item())
-
 
 	return np.mean(losses), np.mean(s_T_losses), np.mean(a_losses), np.mean(kl_losses), np.mean(s_T_ents)
 
@@ -87,7 +111,8 @@ class HyperParams:
         self.ent_pen = 0.0
         self.max_sig = None
         self.fixed_sig = None
-        self.H = 20
+        self.H_min = 20
+        self.H_max = 20
         self.stride = 1
         self.n_epochs = 50000
         self.test_split = .2
@@ -97,41 +122,39 @@ class HyperParams:
         self.env_name = 'antmaze-large-diverse-v0'
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         if self.term_state_dependent_prior:
-            self.filename = f'{self.env_name}_tsdp_H{self.H}_l2reg_{self.wd}_a_{self.alpha}_b_{self.beta}_sg_{self.state_dec_stop_grad}_max_sig_{self.max_sig}_fixed_sig_{self.fixed_sig}_log'
+            self.filename = f'{self.env_name}_tsdp_H{self.H_max}_l2reg_{self.wd}_a_{self.alpha}_b_{self.beta}_sg_{self.state_dec_stop_grad}_max_sig_{self.max_sig}_fixed_sig_{self.fixed_sig}_log'
         else:
-            self.filename = f'{self.env_name}_enc_type_{self.encoder_type}_state_dec_{self.state_decoder_type}_H_{self.H}_l2reg_{self.wd}_a_{self.alpha}_b_{self.beta}_sg_{self.state_dec_stop_grad}_max_sig_{self.max_sig}_fixed_sig_{self.fixed_sig}_ent_pen_{self.ent_pen}_log'
+            self.filename = f'{self.env_name}_enc_type_{self.encoder_type}_state_dec_{self.state_decoder_type}_H_{self.H_max}_l2reg_{self.wd}_a_{self.alpha}_b_{self.beta}_sg_{self.state_dec_stop_grad}_max_sig_{self.max_sig}_fixed_sig_{self.fixed_sig}_ent_pen_{self.ent_pen}_log'
 
 
 hp = HyperParams()
 
-dataset = utils.create_dataset_padded(utils.create_dataset_raw, hp.env_name)
+# dataset = utils.create_dataset_padded(utils.create_dataset_raw, hp.env_name)
+dataset_ = utils.create_dataset_raw(hp.env_name)
 
-states = dataset['observations']
-actions = dataset['actions']
-goals = dataset['infos/goal']
+states = dataset_['observations']
+actions = dataset_['actions']
+goals = dataset_['infos/goal']
 
-N_episodes = states.shape[0]
-state_dim = states.shape[-1]
-a_dim = actions.shape[-1]
+N_episodes = len(states)
+state_dim = states[0].shape[-1]
+a_dim = actions[0].shape[-1]
 
 N_train = int((1 - hp.test_split) * N_episodes)
 N_test = N_episodes - N_train
 
-states_train  = states[:N_train, ...]
-actions_train = actions[:N_train, ...]
-goals_train = goals[:N_train, ...]
+states_train  = states[:N_train]
+actions_train = actions[:N_train]
+goals_train = goals[:N_train]
 
-states_test  = states[N_train:,:]
-actions_test = actions[N_train:,:]
-goals_test   = goals[N_train:,:]
-
-assert states_train.shape[0] == actions_train.shape[0] == goals_train.shape[0] == N_train
-assert states_test.shape[0] == actions_test.shape[0] == goals_test.shape[0] == N_test
+states_test  = states[N_train:]
+actions_test = actions[N_train:]
+goals_test   = goals[N_train:]
 
 # obs_chunks_train, action_chunks_train, targets_train = chunks(states_train, actions_train, goals_train, H, stride)
 # obs_chunks_test,  action_chunks_test,  targets_test  = chunks(states_test,  actions_test,  goals_test,  H, stride)
 
-experiment = Experiment(api_key = '9mxH2vYX20hn9laEr0KtHLjAa', project_name = 'skill-learning')
+experiment = Experiment(api_key = 'Wlh5wstMNYkxV0yWRxN7JXZRu', project_name = 'other')
 # experiment.add_tag('noisy2')
 
 # First, instantiate a skill model
@@ -147,9 +170,10 @@ model_optimizer = torch.optim.Adam(model.parameters(), lr=hp.lr, weight_decay=hp
 experiment.log_parameters(hp.__dict__)
 
 # add chunks of data to a pytorch dataloader
-inputs_train = torch.tensor(np.concatenate([obs_chunks_train, action_chunks_train],axis=-1),dtype=torch.float32) # array that is dataset_size x T x state_dim+action_dim
-inputs_test  = torch.tensor(np.concatenate([obs_chunks_test,  action_chunks_test], axis=-1),dtype=torch.float32) # array that is dataset_size x T x state_dim+action_dim
-
+inputs_train_ = utils.create_dataset_auto_horizon(states_train, actions_train, hp.H_max)
+inputs_test_ = utils.create_dataset_auto_horizon(states_test, actions_test, hp.H_max)
+inputs_train = torch.from_numpy(inputs_train_) # dim: (N_train, H, state_dim)
+inputs_test  = torch.from_numpy(inputs_test_) # dim: (N_test, H, state_dim)
 
 train_loader = DataLoader(
 	inputs_train,
@@ -162,6 +186,9 @@ test_loader = DataLoader(
 	num_workers=0)
 
 min_test_loss = 10**10
+
+# TODO: Decide on something solid. rn doing skill learning for [H_min, H_max] time steps.
+
 for i in range(hp.n_epochs):
 	loss, s_T_loss, a_loss, kl_loss, s_T_ent = train(model,model_optimizer)
 	
@@ -178,7 +205,6 @@ for i in range(hp.n_epochs):
 	experiment.log_metric("a_loss", a_loss, step=i)
 	experiment.log_metric("kl_loss", kl_loss, step=i)
 	experiment.log_metric("s_T_ent", s_T_ent, step=i)
-
 
 	test_loss, test_s_T_loss, test_a_loss, test_kl_loss, test_s_T_ent = test(model)
 	
@@ -198,18 +224,12 @@ for i in range(hp.n_epochs):
 	experiment.log_metric("test_s_T_ent", test_s_T_ent, step=i)
 
 	if i % 10 == 0:
-		
-			
 		checkpoint_path = 'checkpoints/'+ hp.filename + '.pth'
-		torch.save({
-							'model_state_dict': model.state_dict(),
-							'model_optimizer_state_dict': model_optimizer.state_dict(),
-							}, checkpoint_path)
+		torch.save({'model_state_dict': model.state_dict(),
+                    'model_optimizer_state_dict': model_optimizer.state_dict()}, checkpoint_path)
+
 	if test_loss < min_test_loss:
 		min_test_loss = test_loss
-
-		
-			
 		checkpoint_path = 'checkpoints/'+ hp.filename + '_best.pth'
 		torch.save({'model_state_dict': model.state_dict(),
-			    'model_optimizer_state_dict': model_optimizer.state_dict()}, checkpoint_path)
+			        'model_optimizer_state_dict': model_optimizer.state_dict()}, checkpoint_path)

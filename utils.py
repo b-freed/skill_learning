@@ -129,3 +129,13 @@ def create_dataset_padded(raw_data_creator, *data_args):
             data_padded[key][i, ...] = np.pad(value[i], padding_pattern)
     
     return data_padded
+
+
+def create_dataset_auto_horizon(obs, actions, H):
+    data = []
+    for o_, h_ in zip(obs, actions):
+        preserved_data = len(o_) - len(o_)%H
+        o = np.stack(np.split(o_[:preserved_data], preserved_data//H))
+        h = np.stack(np.split(h_[:preserved_data], preserved_data//H))
+        data.append(np.concatenate([o, h], axis=-1))
+    return np.concatenate(data)

@@ -251,6 +251,86 @@ class LowLevelPolicy(nn.Module):
         eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
         return mean + std*eps
 
+class LowLevelPolicyWithTermination(nn.Module):
+    r'''        
+    P(a_t|s_t,z) is our "low-level policy", so this is the feedback policy the agent runs while executing skill described by z.
+    \beta(b_t|s_t,z) is our "skill termination model", it spits 0 and 1 corresponding to continuing and terminating a skill respectively.
+    Low-level policy and terminal model share the same encoding model that converts s_t and z into a hidden state. 
+    See Encoder and Decoder for more description
+    '''
+    def __init__(self, state_dim, a_dim, z_dim, h_dim, a_dist, max_sig=None, fixed_sig=None, termination_threshold=0.5):
+
+        super(LowLevelPolicyWithTermination,self).__init__()
+        
+        self.layers = nn.Sequential(nn.Linear(state_dim+z_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
+
+        self.mean_action_layer = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,a_dim))
+        self.sig_action_layer  = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,a_dim))
+
+        self.mean_termination_layer = nn.Sequential(nn.Linear(h_dim,h_dim), nn.ReLU(), nn.Linear(h_dim, 1), nn.Sigmoid())
+        self.sig_termination_layer  = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim, 1))
+
+        self.a_dist = a_dist
+        self.a_dim = a_dim
+        self.max_sig = max_sig
+        self.fixed_sig = fixed_sig
+        self.termination_threshold = termination_threshold
+
+    def forward(self,state,z):
+        '''
+        INPUTS:
+            state: batch_size x t x state_dim tensor of states 
+            z:     batch_size x 1 x z_dim tensor of states
+        OUTPUTS:
+            a_mean: batch_size x t x a_dim tensor of action means for each t in {0.,,,.T}
+            a_sig:  batch_size x t x a_dim tensor of action standard devs for each t in {0.,,,.T}
+            b_mean: batch_size x t x 1 tensor of termination means for each t in {0.,,,.t}
+            b_sig:  batch_size x t x 1 tensor of termination standard devs for each t in {0.,,,.t}
+        '''
+
+        # tile z along time axis so dimension matches state
+        z_tiled = z.tile([1,state.shape[-2],1]) #not sure about this 
+
+        # Concat state and z_tiled
+        state_z = torch.cat([state,z_tiled],dim=-1)
+        
+        # pass z and state through layers
+        feats = self.layers(state_z)
+        
+        # get mean and stand dev of action distribution
+        a_mean = self.mean_action_layer(feats)
+        
+        b_mean = (self.mean_termination_layer(feats) > self.termination_threshold)
+        b_sig = self.mean_termination_layer(feats)
+        
+        if self.max_sig is None:
+            a_sig  = nn.Softplus()(self.sig_action_layer(feats))
+        else:
+            a_sig = self.max_sig * nn.Sigmoid()(self.sig_action_layer(feats))
+
+        if self.fixed_sig is not None:
+            a_sig = self.fixed_sig*torch.ones_like(a_sig)
+
+        return a_mean, a_sig, b_mean, b_sig
+    
+    def numpy_policy(self, state, z):
+        '''
+        maps state as a numpy array and z as a pytorch tensor to a numpy action
+        '''
+        state = torch.reshape(torch.tensor(state,device=torch.device('cuda:0'),dtype=torch.float32),(1,1,-1))
+        
+        a_mean,a_sig = self.forward(state,z)
+        action = self.reparameterize(a_mean,a_sig)
+        if self.a_dist == 'tanh_normal':
+            action = nn.Tanh()(action)
+        action = action.detach().cpu().numpy()
+        
+        return action.reshape([self.a_dim,])
+     
+    def reparameterize(self, mean, std):
+        eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
+        return mean + std*eps
+
 class LowLevelDynamicsFF(nn.Module):
 
     def __init__(self,s_dim,a_dim,h_dim):
@@ -504,6 +584,7 @@ class Decoder(nn.Module):
         else:
             print('PICK VALID STATE DECODER TYPE!!!')
             assert False
+        # self.ll_policy = LowLevelPolicyWithTermination(state_dim,a_dim,z_dim,h_dim, a_dist, max_sig = max_sig, fixed_sig=fixed_sig)
         self.ll_policy = LowLevelPolicy(state_dim,a_dim,z_dim,h_dim, a_dist, max_sig = max_sig, fixed_sig=fixed_sig)
         self.emb_layer  = nn.Linear(state_dim+z_dim,h_dim)
         self.fc = nn.Sequential(nn.Linear(state_dim+z_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
@@ -528,10 +609,10 @@ class Decoder(nn.Module):
         s_0 = states[:,0:1,:]
         s_T = states[:,-1:,:]
         a_mean,a_sig   = self.ll_policy(states,z)
+        # a_mean, a_sig, b_mean, b_sig = self.ll_policy(states,z)
 
         if self.state_dec_stop_grad:
             z = z.detach()
-        
         
         if self.state_decoder_type == 'autoregressive':
             z_detached = z.detach()
@@ -542,14 +623,7 @@ class Decoder(nn.Module):
             print('PICK VALID STATE DECODER TYPE!!!')
             assert False
         
-
-
-        return sT_mean,sT_sig,a_mean,a_sig
-
-    
-
-
-        
+        return sT_mean, sT_sig, a_mean, a_sig
 
 
 class Prior(nn.Module):
