@@ -13,8 +13,10 @@ GlfwContext(offscreen=True)
 import d4rl
 import ipdb
 import h5py
+import utils
 
-def train(model,model_optimizer):
+
+def train(model, model_optimizer):
 	
 	losses = []
 	s_T_losses = []
@@ -70,176 +72,97 @@ def test(model):
 	return np.mean(losses), np.mean(s_T_losses), np.mean(a_losses), np.mean(kl_losses), np.mean(s_T_ents)
 
 
-# instantiating the environmnet, getting the dataset.
-# the data is in a big dictionary, containing long sequences of obs, rew, actions, goals
-# env_name = 'antmaze-medium-diverse-v0'  
-# env_name = 'maze2d-large-v1'
-env_name = 'antmaze-large-diverse-v0'
-env = gym.make(env_name)
+class HyperParams:
+    def __init__(self):
+        self.batch_size = 100
+        self.h_dim = 256
+        self.z_dim = 256
+        self.lr = 5e-5
+        self.wd = 0.001
+        self.state_dependent_prior = True
+        self.term_state_dependent_prior = False
+        self.state_dec_stop_grad = True
+        self.beta = 0.1
+        self.alpha = 1.0
+        self.ent_pen = 0.0
+        self.max_sig = None
+        self.fixed_sig = None
+        self.H = 20
+        self.stride = 1
+        self.n_epochs = 50000
+        self.test_split = .2
+        self.a_dist = 'normal' # 'tanh_normal' or 'normal'
+        self.encoder_type = 'state_action_sequence' #'state_sequence'
+        self.state_decoder_type = 'autoregressive'
+        self.env_name = 'antmaze-large-diverse-v0'
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        if self.term_state_dependent_prior:
+            self.filename = f'{self.env_name}_tsdp_H{self.H}_l2reg_{self.wd}_a_{self.alpha}_b_{self.beta}_sg_{self.state_dec_stop_grad}_max_sig_{self.max_sig}_fixed_sig_{self.fixed_sig}_log'
+        else:
+            self.filename = f'{self.env_name}_enc_type_{self.encoder_type}_state_dec_{self.state_decoder_type}_H_{self.H}_l2reg_{self.wd}_a_{self.alpha}_b_{self.beta}_sg_{self.state_dec_stop_grad}_max_sig_{self.max_sig}_fixed_sig_{self.fixed_sig}_ent_pen_{self.ent_pen}_log'
 
-dataset_file = None
-#dataset_file = "datasets/maze2d-umaze-v1.hdf5"
-# dataset_file = 'datasets/maze2d-large-v1-noisy-2.hdf5'
 
-if dataset_file is None:
-	dataset = env.get_dataset()
-else:
-	dataset = h5py.File(dataset_file, "r")
+hp = HyperParams()
 
-
-batch_size = 100
-
-h_dim = 256
-z_dim = 256
-lr = 5e-5
-wd = 0.001
-state_dependent_prior = True
-term_state_dependent_prior = False
-state_dec_stop_grad = True
-beta = 0.1
-alpha = 1.0
-ent_pen = 0.0
-max_sig = None
-fixed_sig = None
-H = 20
-stride = 1
-n_epochs = 50000
-test_split = .2
-a_dist = 'normal' # 'tanh_normal' or 'normal'
-encoder_type = 'state_action_sequence' #'state_sequence'
-state_decoder_type = 'autoregressive'
-			
-def chunks(obs,actions,goals,H,stride):
-	'''
-	obs is a N x 4 array
-	goals is a N x 2 array
-	H is length of chunck
-	stride is how far we move between chunks.  So if stride=H, chunks are non-overlapping.  If stride < H, they overlap
-	'''
-	
-	obs_chunks = []
-	action_chunks = []
-	targets = []
-	N = obs.shape[0]
-	for i in range(N//stride - H):
-		start_ind = i*stride
-		end_ind = start_ind + H
-		# If end_ind = 4000000, it goes out of bounds
-		# this way start_ind is from 0-3999980 and end_ind is from 20-3999999
-		# if end_ind == N:
-		# 	end_ind = N-1
-		
-		obs_chunk = obs[start_ind:end_ind,:]
-
-		action_chunk = actions[start_ind:end_ind,:]
-		
-		targets.append(goals[start_ind:end_ind,:])
-		obs_chunks.append(obs_chunk)
-		action_chunks.append(action_chunk)
-			
-	
-	return np.stack(obs_chunks),np.stack(action_chunks),np.stack(targets)
-
+dataset = utils.create_dataset_padded(utils.create_dataset_raw, hp.env_name)
 
 states = dataset['observations']
 actions = dataset['actions']
 goals = dataset['infos/goal']
 
-N = states.shape[0]
+N_episodes = states.shape[0]
+state_dim = states.shape[-1]
+a_dim = actions.shape[-1]
 
-state_dim = states.shape[1]
-a_dim = actions.shape[1]
+N_train = int((1 - hp.test_split) * N_episodes)
+N_test = N_episodes - N_train
 
-N_train = int((1-test_split)*N)
-N_test = N - N_train
-
-states_train  = states[:N_train,:]
-actions_train = actions[:N_train,:]
-goals_train = goals[:N_train,:]
-
+states_train  = states[:N_train, ...]
+actions_train = actions[:N_train, ...]
+goals_train = goals[:N_train, ...]
 
 states_test  = states[N_train:,:]
 actions_test = actions[N_train:,:]
 goals_test   = goals[N_train:,:]
 
-assert states_train.shape[0] == N_train
-assert states_test.shape[0] == N_test
+assert states_train.shape[0] == actions_train.shape[0] == goals_train.shape[0] == N_train
+assert states_test.shape[0] == actions_test.shape[0] == goals_test.shape[0] == N_test
 
-obs_chunks_train, action_chunks_train, targets_train = chunks(states_train, actions_train, goals_train, H, stride)
-obs_chunks_test,  action_chunks_test,  targets_test  = chunks(states_test,  actions_test,  goals_test,  H, stride)
-
+# obs_chunks_train, action_chunks_train, targets_train = chunks(states_train, actions_train, goals_train, H, stride)
+# obs_chunks_test,  action_chunks_test,  targets_test  = chunks(states_test,  actions_test,  goals_test,  H, stride)
 
 experiment = Experiment(api_key = '9mxH2vYX20hn9laEr0KtHLjAa', project_name = 'skill-learning')
 # experiment.add_tag('noisy2')
 
-
 # First, instantiate a skill model
-
-if term_state_dependent_prior:
-	model = SkillModelTerminalStateDependentPrior(state_dim,a_dim,z_dim,h_dim,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,fixed_sig=fixed_sig).cuda()
-elif state_dependent_prior:
-	model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,max_sig=max_sig,fixed_sig=fixed_sig,ent_pen=ent_pen,encoder_type=encoder_type,state_decoder_type=state_decoder_type).cuda()
-
+if hp.term_state_dependent_prior:
+	model = SkillModelTerminalStateDependentPrior(state_dim, a_dim, hp.z_dim, hp.h_dim, state_dec_stop_grad=hp.state_dec_stop_grad,beta=hp.beta,alpha=hp.alpha,fixed_sig=hp.fixed_sig).to(hp.device)
+elif hp.state_dependent_prior:
+	model = SkillModelStateDependentPrior(state_dim, a_dim, hp.z_dim, hp.h_dim, a_dist=hp.a_dist,state_dec_stop_grad=hp.state_dec_stop_grad,beta=hp.beta,alpha=hp.alpha,max_sig=hp.max_sig,fixed_sig=hp.fixed_sig,ent_pen=hp.ent_pen,encoder_type=hp.encoder_type,state_decoder_type=hp.state_decoder_type).to(hp.device)
 else:
-	model = SkillModel(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist).cuda()
+	model = SkillModel(state_dim, a_dim, hp.z_dim, hp.h_dim, a_dist=hp.a_dist).to(hp.device)
 	
-model_optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
+model_optimizer = torch.optim.Adam(model.parameters(), lr=hp.lr, weight_decay=hp.wd)
 
-filename = env_name+'_enc_type_'+str(encoder_type)+'state_dec_'+str(state_decoder_type)+'_H_'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_sg_'+str(state_dec_stop_grad)+'_max_sig_'+str(max_sig)+'_fixed_sig_'+str(fixed_sig)+'_ent_pen_'+str(ent_pen)+'_log'
-
-
-
-if term_state_dependent_prior:
-	filename = env_name+'_tsdp'+'_H'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_sg_'+str(state_dec_stop_grad)+'_max_sig_'+str(max_sig)+'_fixed_sig_'+str(fixed_sig)+'_log'
-
-
-experiment.log_parameters({'lr':lr,
-							'h_dim':h_dim,
-							'state_dependent_prior':state_dependent_prior,
-							'term_state_dependent_prior':term_state_dependent_prior,
-							'z_dim':z_dim,
-							'H':H,
-							'a_dist':a_dist,
-							'a_dim':a_dim,
-							'state_dim':state_dim,
-							'l2_reg':wd,
-							'state_dec_stop_grad':state_dec_stop_grad,
-							'beta':beta,
-							'alpha':alpha,
-							'max_sig':max_sig,
-							'fixed_sig':fixed_sig,
-							'ent_pen':ent_pen,
-							'env_name':env_name,
-							'filename':filename,
-							'encoder_type':encoder_type,
-							'state_decoder_type':state_decoder_type})
+experiment.log_parameters(hp.__dict__)
 
 # add chunks of data to a pytorch dataloader
 inputs_train = torch.tensor(np.concatenate([obs_chunks_train, action_chunks_train],axis=-1),dtype=torch.float32) # array that is dataset_size x T x state_dim+action_dim
 inputs_test  = torch.tensor(np.concatenate([obs_chunks_test,  action_chunks_test], axis=-1),dtype=torch.float32) # array that is dataset_size x T x state_dim+action_dim
 
 
-# dataset_size = len(inputs)
-# train_data, test_data = torch.utils.data.random_split(inputs, [int(0.8*dataset_size), int(dataset_size-int(0.8*dataset_size))])
-# train_targets, test_targets = torch.utils.data.random_split(targets, [int(0.8*dataset_size), int(dataset_size-int(0.8*dataset_size))])
-
-
-
-# train_data = TensorDataset(torch.tensor(inputs_train, dtype=torch.float32))
-# test_data  = TensorDataset(torch.tensor(inputs_test,  dtype=torch.float32))
-
 train_loader = DataLoader(
 	inputs_train,
-	batch_size=batch_size,
+	batch_size=hp.batch_size,
 	num_workers=0)  # not really sure about num_workers...
 
 test_loader = DataLoader(
 	inputs_test,
-	batch_size=batch_size,
+	batch_size=hp.batch_size,
 	num_workers=0)
 
 min_test_loss = 10**10
-for i in range(n_epochs):
+for i in range(hp.n_epochs):
 	loss, s_T_loss, a_loss, kl_loss, s_T_ent = train(model,model_optimizer)
 	
 	print("--------TRAIN---------")
@@ -277,7 +200,7 @@ for i in range(n_epochs):
 	if i % 10 == 0:
 		
 			
-		checkpoint_path = 'checkpoints/'+ filename + '.pth'
+		checkpoint_path = 'checkpoints/'+ hp.filename + '.pth'
 		torch.save({
 							'model_state_dict': model.state_dict(),
 							'model_optimizer_state_dict': model_optimizer.state_dict(),
@@ -287,6 +210,6 @@ for i in range(n_epochs):
 
 		
 			
-		checkpoint_path = 'checkpoints/'+ filename + '_best.pth'
+		checkpoint_path = 'checkpoints/'+ hp.filename + '_best.pth'
 		torch.save({'model_state_dict': model.state_dict(),
 			    'model_optimizer_state_dict': model_optimizer.state_dict()}, checkpoint_path)
