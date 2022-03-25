@@ -38,7 +38,7 @@ a_dim = data['actions'].shape[1]
 h_dim = 256
 z_dim = 256
 batch_size = 100
-skill_seq_len = 200
+skill_seq_len = 50
 lr = 1e-4
 wd = 0.001
 state_dependent_prior = True
@@ -49,7 +49,7 @@ max_sig = None
 fixed_sig = None
 use_epsilon = True
 ent_pen = 0.0
-n_iters = 20
+n_iters = 40
 a_dist = 'normal'
 render = False
 max_replans = 50
@@ -126,10 +126,9 @@ def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq,ep_n
 	n=0
 	timeout = False
 	# success = True
-	l = skill_seq_len
 	while np.sum((state[:2] - goals.flatten().detach().cpu().numpy()[:2])**2) > 1.0:
 	# for i in range(2):
-		state_torch = torch.tensor(s0,dtype=torch.float32).cuda()
+		state_torch = torch.tensor(state,dtype=torch.float32).cuda()
 		cost_fn = lambda s: skill_model.cost_for_mppi(s, goal_seq)
 		skill_seq_mean = torch.zeros((skill_seq_len,z_dim),device=device)
 		skill_seq_std  = torch.ones( (skill_seq_len,z_dim),device=device)
