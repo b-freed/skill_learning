@@ -69,8 +69,10 @@ def run_policy_iterative_reopt(env,model,policy,goal_loc,n_skills,H,max_reopt_it
 		plt.savefig('run_policy')
 
 		# reoptimize policy for new starting loc
-		policy = SkillPolicy(state_dim,z_dim,h_dim).cuda()
-		policy = optimize_policy(torch.stack(batch_size * [s.reshape((1,-1))]),model,policy,goal_loc,n_skills,n_iters,use_epsilon=True,temp=temp)
+		# policy = SkillPolicy(state_dim,z_dim,h_dim).cuda()
+		# optimizer = torch.optim.Adam(policy.parameters(), lr=lr, weight_decay=policy_l2_reg)
+
+		policy = optimize_policy(torch.stack(batch_size * [s.reshape((1,-1))]),model,policy,optimizer,goal_loc,n_skills,n_iters,use_epsilon=True,temp=temp)
 
 	return np.sum((s.detach().cpu().numpy()[:2] - goal_loc_np)**2)
 
@@ -141,7 +143,7 @@ def get_expected_cost(s0,model,policy,goal_loc,T,use_epsilon=True,plot=True,temp
 
 	return torch.mean(costs),l2_costs 
 
-def optimize_policy(s0,model,policy,goal_loc,n_skills,n_iters,use_epsilon=True,temp=1.0):
+def optimize_policy(s0,model,policy,optimizer,goal_loc,n_skills,n_iters,use_epsilon=True,temp=1.0):
 
 	policy_losses = []
 	for i in range(n_iters):
@@ -187,19 +189,19 @@ if __name__ == '__main__':
 	beta = 0.1
 	alpha = 1.0
 	max_sig = None
-	fixed_sig = None
+	fixed_sig = 0.0
 	a_dist = 'normal'
 	ent_pen = 0
 	colors = 3*['b','g','r','c','m','y','k']
 	# n_skills = len(colors)
-	n_skills = 30
-	temp = 0.2
-	n_iters = 100
-	n_initial_iters = 100
-	lr = 1e-4
+	n_skills = 50
+	temp = 1.0
+	n_iters = 20
+	n_initial_iters = 20
+	lr = 5e-5
 	max_reopt_iters = 100
-	policy_l2_reg = 0.0
-	skill_l2_pen = 10
+	policy_l2_reg = 10.0
+	skill_l2_pen = 0.0
 
 
 	filename = 'antmaze-large-diverse-v0_enc_type_state_action_sequencestate_dec_autoregressive_H_20_l2reg_0.0_a_1.0_b_0.1_sg_True_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
@@ -234,7 +236,7 @@ if __name__ == '__main__':
 	dists_list = []
 	for j in range(100):
 		s0 = torch.stack(batch_size * [torch.tensor(env.reset(),dtype=torch.float32,device=device).reshape(1,-1)])
-		policy = optimize_policy(s0,model,policy,goal_loc,n_skills,n_initial_iters,use_epsilon=True,temp=temp)
+		policy = optimize_policy(s0,model,policy,optimizer,goal_loc,n_skills,n_initial_iters,use_epsilon=True,temp=temp)
 
 		d = run_policy_iterative_reopt(env,model,policy,goal_loc,n_skills,H,max_reopt_iters,batch_size,optimizer,n_iters)
 		dists_list.append(d)
