@@ -135,7 +135,7 @@ def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq,ep_n
 
 
 		for k in range(n_iters):
-			skill_seq_mean = mppi_update(skill_seq_mean, state_torch, skill_model, cost_fn, batch_size, skill_seq_len, z_dim, True, goal_seq)
+			skill_seq_mean = mppi_update(skill_seq_mean, skill_seq_std, state_torch, skill_model, cost_fn, batch_size, skill_seq_len, z_dim, True, goal_seq)
 			print('No. of times updated:', k)
 
 
