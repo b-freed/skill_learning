@@ -24,13 +24,15 @@ from math import pi
 device = torch.device('cuda:0')
 
 
-def mppi_update(skill_seq_mean, s0, model, cost_fn, batch_size, T, z_dim, plot, goal_state, lam=0.1, eps=0.2):
+def mppi_update(skill_seq_mean, skill_seq_std, s0, model, cost_fn, batch_size, T, z_dim, plot, goal_state, lam=0.1, eps=0.2):
 
 	eps_dist = Normal(torch.zeros((batch_size, z_dim),device=device),torch.ones((batch_size, z_dim),device=device)*eps)
 
+	skill_seq = skill_seq_mean + skill_seq_std*torch.randn((skill_seq_mean.shape),device=device)
+
 	with torch.no_grad():
-		skill_seq_mean[:-1] = skill_seq_mean[1:].clone()
-		skill_seq_mean[-1].zero_()
+		skill_seq[:-1] = skill_seq[1:].clone()
+		skill_seq[-1].zero_()
 
 		
 		#skill_seq_mean = skill_seq_mean.tile([batch_size,1,1])
@@ -46,7 +48,7 @@ def mppi_update(skill_seq_mean, s0, model, cost_fn, batch_size, T, z_dim, plot, 
 			#     eta = eps
 			# else:
 			#     eta = gamma*eta + ((1-gamma**2)**0.5) * eps
-			v = skill_seq_mean[t].expand_as(eta) + eta
+			v = skill_seq[t].expand_as(eta) + eta
 			s,_ = model.decoder.abstract_dynamics(s,v)
 			s_i = s
 			rew = cost_fn(s)
@@ -64,7 +66,8 @@ def mppi_update(skill_seq_mean, s0, model, cost_fn, batch_size, T, z_dim, plot, 
 		w = torch.exp(sk.div(lam)) + 1e-5
 		w.div_(torch.sum(w, dim=1, keepdim=True))
 		for t in range(T):
-			skill_seq_mean[t] = skill_seq_mean[t] + torch.mv(dz[t].T, w[t])
+			skill_seq[t] = skill_seq[t] + torch.mv(dz[t].T, w[t])
+
 
 		goal_state = torch.cat(batch_size * [goal_state],dim=0)
 		pred_states = torch.stack(pred_states, dim=1)
@@ -81,4 +84,4 @@ def mppi_update(skill_seq_mean, s0, model, cost_fn, batch_size, T, z_dim, plot, 
 				
 			plt.savefig('pred_states_mppi')
 
-		return skill_seq_mean
+		return skill_seq
