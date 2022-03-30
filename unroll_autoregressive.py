@@ -52,8 +52,8 @@ if __name__ == '__main__':
 	env = gym.make(env)
 	data = env.get_dataset()
 	
-	H = 20
-	# H = 40
+	# H = 20
+	H = 40
 	n_samples = 100
 	n_env_samples = 100
 	state_dim = data['observations'].shape[1]
@@ -76,7 +76,8 @@ if __name__ == '__main__':
 	n_skills = len(colors)
 	temp = 0.1
 
-	filename = 'antmaze-large-diverse-v0_enc_type_state_action_sequencestate_dec_autoregressive_H_20_l2reg_0.0_a_1.0_b_0.1_sg_True_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
+	# filename = 'antmaze-large-diverse-v0_enc_type_state_action_sequencestate_dec_autoregressive_H_20_l2reg_0.0_a_1.0_b_0.1_sg_True_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
+	filename = 'EM_model_antmaze-large-diverse-v0state_dec_autoregressive_H_40_l2reg_0.0_a_1.0_b_1.0_log_best.pth'
 	PATH = 'checkpoints/'+filename
 
 	model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,max_sig=max_sig,fixed_sig=fixed_sig,ent_pen=ent_pen,encoder_type=encoder_type,state_decoder_type=state_decoder_type).cuda()

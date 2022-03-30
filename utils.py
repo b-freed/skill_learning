@@ -22,6 +22,8 @@ import cv2
 # from pygifsicle import optimize
 import imageio
 
+# device = torch.device('cuda:0')
+
 # def save_frames_as_gif(frames, path='./', filename='gym_animation.gif'):
 
 # 	#Mess with this to change frame size
@@ -88,9 +90,9 @@ def chunks(obs,next_obs,actions,H,stride):
 		# if end_ind == N:
 		# 	end_ind = N-1
 		
-		obs_chunk = obs[start_ind:end_ind,:]
+		obs_chunk = torch.tensor(obs[start_ind:end_ind,:],dtype=torch.float32)
 
-		action_chunk = actions[start_ind:end_ind,:]
+		action_chunk = torch.tensor(actions[start_ind:end_ind,:],dtype=torch.float32)
 		
 		# print('obs[start_ind+1:end_ind]: ',obs[start_ind+1:end_ind])
 		# print('next_obs[start_ind:end_ind-1]: ', next_obs[start_ind:end_ind-1])
@@ -106,4 +108,4 @@ def chunks(obs,next_obs,actions,H,stride):
 	print('len(action_chunks): ',len(action_chunks))
 			
 	
-	return np.stack(obs_chunks),np.stack(action_chunks)
+	return torch.stack(obs_chunks),torch.stack(action_chunks)

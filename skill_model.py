@@ -213,7 +213,6 @@ class LowLevelPolicy(nn.Module):
 			a_mean: batch_size x T x a_dim tensor of action means for each t in {0.,,,.T}
 			a_sig:  batch_size x T x a_dim tensor of action standard devs for each t in {0.,,,.T}
 		'''
-
 		# tile z along time axis so dimension matches state
 		z_tiled = z.tile([1,state.shape[-2],1]) #not sure about this 
 
@@ -306,6 +305,8 @@ class LowLevelDynamicsFF(nn.Module):
 			action = reparameterize(a_mean,a_sig)
 			# predict the next state given the current state and action
 			s_mean,s_sig = self.forward(s,action)
+			print('s_mean: ', s_mean)
+			print('s_sig: ', s_sig)
 			s = reparameterize(s_mean,s_sig)
 
 		return s
@@ -673,7 +674,15 @@ class TerminalStateDependentPrior(nn.Module):
 
 		return z_mean, z_sig
 		
+class GenerativeModel(nn.Module):
 
+	def __init__(self,decoder,prior):
+		super().__init__()
+		self.decoder = decoder
+		self.prior = prior
+
+	def forward(self):
+		pass
 
 class SkillModelStateDependentPrior(nn.Module):
 	def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal',state_dec_stop_grad=False,beta=1.0,alpha=1.0,max_sig=None,fixed_sig=None,ent_pen=0,encoder_type='state_action_sequence',state_decoder_type='mlp'):
@@ -681,7 +690,8 @@ class SkillModelStateDependentPrior(nn.Module):
 
 		self.state_dim = state_dim # state dimension
 		self.a_dim = a_dim # action dimension
-
+		self.encoder_type = encoder_type
+		self.state_dec_stop_grad = state_dec_stop_grad
 		
 		if encoder_type == 'state_action_sequence':
 			self.encoder = Encoder(state_dim,a_dim,z_dim,h_dim)
@@ -701,6 +711,9 @@ class SkillModelStateDependentPrior(nn.Module):
 
 		if ent_pen != 0:
 			assert not state_dec_stop_grad
+
+		# this is just to be used when initializing optimizers for EM algorithm
+		self.gen_model = GenerativeModel(self.decoder,self.prior)
 
 	def forward(self,states,actions):
 		
@@ -730,6 +743,57 @@ class SkillModelStateDependentPrior(nn.Module):
 
 		return s_T_mean, s_T_sig, a_means, a_sigs, z_post_means, z_post_sigs
 
+	def get_E_loss(self,states,actions):
+		
+		assert self.encoder_type == 'state_action_sequence'
+		assert not self.state_dec_stop_grad
+
+		batch_size,T,_ = states.shape
+		denom = T*batch_size
+		# get KL divergence between approximate and true posterior
+		z_post_means,z_post_sigs = self.encoder(states,actions)
+
+		z_sampled = self.reparameterize(z_post_means,z_post_sigs)
+
+		z_prior_means,z_prior_sigs = self.prior(states[:,0:1,:]) 
+		a_means,a_sigs = self.decoder.ll_policy(states,z_sampled)
+
+		post_dist = Normal.Normal(z_post_means,z_post_sigs)
+		a_dist    = Normal.Normal(a_means,a_sigs)
+		prior_dist = Normal.Normal(z_prior_means,z_prior_sigs)
+
+		log_pi = torch.sum(a_dist.log_prob(actions)) / denom
+		log_prior = torch.sum(prior_dist.log_prob(z_sampled)) / denom
+		log_post  = torch.sum(post_dist.log_prob(z_sampled)) / denom
+		
+
+		return -log_pi + -self.beta*log_prior + log_post
+
+	def get_M_loss(self,states,actions):
+
+		batch_size,T,_ = states.shape
+		denom = T*batch_size
+		
+		z_post_means,z_post_sigs = self.encoder(states,actions)
+
+		z_sampled = self.reparameterize(z_post_means,z_post_sigs)
+
+		z_prior_means,z_prior_sigs = self.prior(states[:,0:1,:]) 
+		sT_mean, sT_sig, a_means, a_sigs = self.decoder(states,z_sampled)
+
+		sT_dist  = Normal.Normal(sT_mean,sT_sig)
+		a_dist    = Normal.Normal(a_means,a_sigs)
+		prior_dist = Normal.Normal(z_prior_means,z_prior_sigs)
+
+		sT = states[:,-1:,:]
+		sT_loss = -torch.sum(sT_dist.log_prob(sT)) / denom
+		a_loss =  -torch.sum(a_dist.log_prob(actions)) / denom
+		prior_loss = -torch.sum(prior_dist.log_prob(z_sampled)) / denom
+
+		return sT_loss + a_loss + self.beta*prior_loss
+
+
+	
 	def get_losses(self,states,actions):
 		'''
 		Computes various components of the loss:
@@ -1088,12 +1152,8 @@ class DecoderWithLLDynamics(nn.Module):
 			z:      batch_size x 1 x z_dim sampled z/skill variable
 		OUTPUTS:
 			sT_mean: batch_size x 1 x state_dim tensor of terminal (time=T) state means
-			sT_sig:  batch_size x 1 x state_dim tensor of terminal (time=T) state standard devs
-			a_mean: batch_size x T x a_dim tensor of action means for each t in {0.,,,.T}
-			a_sig:  batch_size x T x a_dim tensor of action standard devs for each t in {0.,,,.T}
+			sT_sig:  basuper(BilevelSkillModelV4, self).__init__()[:,0:1,:]
 		'''
-		
-		# s_0 = states[:,0:1,:]
 		# z_detached = z.detach()
 		s_next_mean,s_next_sig = self.ll_dynamics(states[:,:-1,:],actions[:,:-1,:])
 		a_mean,a_sig   = self.ll_policy(states,z)
