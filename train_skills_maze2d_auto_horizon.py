@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from torch.utils.data import TensorDataset
 from torch.utils.data.dataloader import DataLoader
 import torch.distributions.normal as Normal
-from skill_model import SkillModel, SkillModelStateDependentPrior, SkillModelTerminalStateDependentPrior
+from skill_model import SkillModel, SkillModelStateDependentPrior, SkillModelTerminalStateDependentPrior, SkillModelStateDependentPriorAutoTermination
 import gym
 from mujoco_py import GlfwContext
 GlfwContext(offscreen=True)
@@ -16,7 +16,7 @@ import h5py
 import utils
 
 
-def train(model, model_optimizer):
+def train(model, model_optimizer, initial_skill):
 	
 	losses = []
 	s_T_losses = []
@@ -30,25 +30,53 @@ def train(model, model_optimizer):
 		data_ = data_.to(hp.device)
 		loss_tot, s_T_loss, a_loss, kl_loss, s_T_ent = 0, 0, 0, 0, 0
 
-		for H in range(hp.H_min, hp.H_max+1):
-			data = data_[:, :H, ...]
-			states = data[:,:,:model.state_dim] # first state_dim elements are the state
-			actions = data[:,:,model.state_dim:] # rest are actions
+		# sample initial skill prior, start with zero initial skill(s)
+		data = data_[:, :hp.H_min, ...]
+		states = data[:,:,:model.state_dim] # first state_dim elements are the state
+		actions = data[:,:,model.state_dim:] # rest are actions
+		z_post_means, z_post_sigs, b_post_means, b_post_sigs = model.encoder(states, actions, initial_skill)
 
-			loss_tot_, s_T_loss_, a_loss_, kl_loss_, s_T_ent_ = model.get_losses(states, actions)
+		z_t = model.reparameterize(z_post_means, z_post_sigs)
+		z_t_history = z_t.repeat(1, 21, 1)
+		# z_t = torch.cat([z_t, z_t[:, -1:, :]], dim=1)
+		b_t = model.reparameterize(b_post_means, b_post_sigs)
+
+		for H in range(hp.H_min+1, hp.H_max):
+			# if b_t == 1:
+			# 	# sample new z_t
+			data = data_[:, :H, ...]
+			states = data[:, :, :model.state_dim] # first state_dim elements are the state
+			actions = data[:, :, model.state_dim:] # rest are actions
+			s_0 = states[:,0:1,:]
+			s_T_gt = states[:,-1:,:]  
+
+			s_T_mean, s_T_sig, a_means, a_sigs = model.decoder(states, z_t)
+
+			# loss_tot_, s_T_loss_, a_loss_, kl_loss_, s_T_ent_ = model.get_losses(states, actions)
+			loss_tot_, s_T_loss_, a_loss_, kl_loss_, s_T_ent_ = model.compute_losses(s_T_mean, s_T_sig, a_means, a_sigs, z_post_means, z_post_sigs, s_0, H, s_T_gt, actions) 
 
 			loss_tot += loss_tot_
 			s_T_loss += s_T_loss_
 			a_loss += a_loss_
 			kl_loss += kl_loss_
 			s_T_ent += s_T_ent_
-			
+
+			z_post_means, z_post_sigs, b_post_means, b_post_sigs = model.encoder(states, actions, z_t_history)
+			z_t_ = model.reparameterize(z_post_means, z_post_sigs)
+			b_t_ = model.reparameterize(b_post_means, b_post_sigs)
+			z_t_history = torch.cat([z_t_history, z_t_history[:, -1:, :]], dim=1)
+			if (b_t == True).any():
+				new_indices = np.where(b_t == True)[0]
+				# update skills
+				z_t[new_indices] = z_t_[new_indices]
+				z_t_history[new_indices] = z_t_[new_indices]
+			b_t = b_t_
+	
 		model_optimizer.zero_grad()
 		loss_tot.backward()
 		model_optimizer.step()
 
 		# log losses
-
 		losses.append(loss_tot.item())
 		s_T_losses.append(s_T_loss.item())
 		a_losses.append(a_loss.item())
@@ -57,8 +85,7 @@ def train(model, model_optimizer):
 
 	return np.mean(losses), np.mean(s_T_losses), np.mean(a_losses), np.mean(kl_losses), np.mean(s_T_ents)
 
-
-def test(model):
+def test(model, initial_skill):
 	
 	losses = []
 	s_T_losses = []
@@ -66,32 +93,60 @@ def test(model):
 	kl_losses = []
 	s_T_ents = []
 
-	model.eval()
+	model.train()
 
-	with torch.no_grad():
-		for batch_id, data_ in enumerate(train_loader):
-			data_ = data_.to(hp.device)
-			loss_tot, s_T_loss, a_loss, kl_loss, s_T_ent = 0, 0, 0, 0, 0
+	for batch_id, data_ in enumerate(train_loader):
+		data_ = data_.to(hp.device)
+		loss_tot, s_T_loss, a_loss, kl_loss, s_T_ent = 0, 0, 0, 0, 0
 
-			for H in range(hp.H_min, hp.H_max+1):
-				data = data_[:, :H, ...]
-				states = data[:,:,:model.state_dim] # first state_dim elements are the state
-				actions = data[:,:,model.state_dim:] # rest are actions
+		# sample initial skill prior, start with zero initial skill(s)
+		data = data_[:, :hp.H_min, ...]
+		states = data[:,:,:model.state_dim] # first state_dim elements are the state
+		actions = data[:,:,model.state_dim:] # rest are actions
+		z_post_means, z_post_sigs, b_post_means, b_post_sigs = model.encoder(states, actions, initial_skill)
 
-				loss_tot_, s_T_loss_, a_loss_, kl_loss_, s_T_ent_ = model.get_losses(states, actions)
+		z_t = model.reparameterize(z_post_means, z_post_sigs)
+		z_t_history = z_t.repeat(1, 21, 1)
+		# z_t = torch.cat([z_t, z_t[:, -1:, :]], dim=1)
+		b_t = model.reparameterize(b_post_means, b_post_sigs)
 
-				loss_tot += loss_tot_
-				s_T_loss += s_T_loss_
-				a_loss += a_loss_
-				kl_loss += kl_loss_
-				s_T_ent += s_T_ent_
+		for H in range(hp.H_min+1, hp.H_max):
+			# if b_t == 1:
+			# 	# sample new z_t
+			data = data_[:, :H, ...]
+			states = data[:, :, :model.state_dim] # first state_dim elements are the state
+			actions = data[:, :, model.state_dim:] # rest are actions
+			s_0 = states[:,0:1,:]
+			s_T_gt = states[:,-1:,:]  
 
-			# log losses
-			losses.append(loss_tot.item())
-			s_T_losses.append(s_T_loss.item())
-			a_losses.append(a_loss.item())
-			kl_losses.append(kl_loss.item())
-			s_T_ents.append(s_T_ent.item())
+			s_T_mean, s_T_sig, a_means, a_sigs = model.decoder(states, z_t)
+
+			# loss_tot_, s_T_loss_, a_loss_, kl_loss_, s_T_ent_ = model.get_losses(states, actions)
+			loss_tot_, s_T_loss_, a_loss_, kl_loss_, s_T_ent_ = model.compute_losses(s_T_mean, s_T_sig, a_means, a_sigs, z_post_means, z_post_sigs, s_0, H, s_T_gt, actions) 
+
+			loss_tot += loss_tot_
+			s_T_loss += s_T_loss_
+			a_loss += a_loss_
+			kl_loss += kl_loss_
+			s_T_ent += s_T_ent_
+
+			z_post_means, z_post_sigs, b_post_means, b_post_sigs = model.encoder(states, actions, z_t_history)
+			z_t_ = model.reparameterize(z_post_means, z_post_sigs)
+			b_t_ = model.reparameterize(b_post_means, b_post_sigs)
+			z_t_history = torch.cat([z_t_history, z_t_history[:, -1:, :]], dim=1)
+			if (b_t == True).any():
+				new_indices = np.where(b_t == True)[0]
+				# update skills
+				z_t[new_indices] = z_t_[new_indices]
+				z_t_history[new_indices] = z_t_[new_indices]
+			b_t = b_t_
+	
+		# log losses
+		losses.append(loss_tot.item())
+		s_T_losses.append(s_T_loss.item())
+		a_losses.append(a_loss.item())
+		kl_losses.append(kl_loss.item())
+		s_T_ents.append(s_T_ent.item())
 
 	return np.mean(losses), np.mean(s_T_losses), np.mean(a_losses), np.mean(kl_losses), np.mean(s_T_ents)
 
@@ -112,13 +167,13 @@ class HyperParams:
         self.max_sig = None
         self.fixed_sig = None
         self.H_min = 20
-        self.H_max = 20
+        self.H_max = 30
         self.stride = 1
         self.n_epochs = 50000
         self.test_split = .2
         self.a_dist = 'normal' # 'tanh_normal' or 'normal'
         self.encoder_type = 'state_action_sequence' #'state_sequence'
-        self.state_decoder_type = 'autoregressive'
+        self.state_decoder_type = 'mlp'
         self.env_name = 'antmaze-large-diverse-v0'
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         if self.term_state_dependent_prior:
@@ -161,7 +216,7 @@ experiment = Experiment(api_key = 'Wlh5wstMNYkxV0yWRxN7JXZRu', project_name = 'o
 if hp.term_state_dependent_prior:
 	model = SkillModelTerminalStateDependentPrior(state_dim, a_dim, hp.z_dim, hp.h_dim, state_dec_stop_grad=hp.state_dec_stop_grad,beta=hp.beta,alpha=hp.alpha,fixed_sig=hp.fixed_sig).to(hp.device)
 elif hp.state_dependent_prior:
-	model = SkillModelStateDependentPrior(state_dim, a_dim, hp.z_dim, hp.h_dim, a_dist=hp.a_dist,state_dec_stop_grad=hp.state_dec_stop_grad,beta=hp.beta,alpha=hp.alpha,max_sig=hp.max_sig,fixed_sig=hp.fixed_sig,ent_pen=hp.ent_pen,encoder_type=hp.encoder_type,state_decoder_type=hp.state_decoder_type).to(hp.device)
+	model = SkillModelStateDependentPriorAutoTermination(state_dim, a_dim, hp.z_dim, hp.h_dim, a_dist=hp.a_dist,state_dec_stop_grad=hp.state_dec_stop_grad,beta=hp.beta,alpha=hp.alpha,max_sig=hp.max_sig,fixed_sig=hp.fixed_sig,ent_pen=hp.ent_pen,encoder_type=hp.encoder_type,state_decoder_type=hp.state_decoder_type).to(hp.device)
 else:
 	model = SkillModel(state_dim, a_dim, hp.z_dim, hp.h_dim, a_dist=hp.a_dist).to(hp.device)
 	
@@ -188,9 +243,10 @@ test_loader = DataLoader(
 min_test_loss = 10**10
 
 # TODO: Decide on something solid. rn doing skill learning for [H_min, H_max] time steps.
+initial_skill = torch.zeros(hp.batch_size, hp.H_min, hp.z_dim).to(hp.device) # TODO: probably not the right thing to do. sample from prior/learable initial skill?
 
 for i in range(hp.n_epochs):
-	loss, s_T_loss, a_loss, kl_loss, s_T_ent = train(model,model_optimizer)
+	loss, s_T_loss, a_loss, kl_loss, s_T_ent = train(model, model_optimizer, initial_skill)
 	
 	print("--------TRAIN---------")
 	
@@ -206,7 +262,7 @@ for i in range(hp.n_epochs):
 	experiment.log_metric("kl_loss", kl_loss, step=i)
 	experiment.log_metric("s_T_ent", s_T_ent, step=i)
 
-	test_loss, test_s_T_loss, test_a_loss, test_kl_loss, test_s_T_ent = test(model)
+	test_loss, test_s_T_loss, test_a_loss, test_kl_loss, test_s_T_ent = test(model, initial_skill)
 	
 	print("--------TEST---------")
 	
