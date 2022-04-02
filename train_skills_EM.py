@@ -78,8 +78,8 @@ h_dim = 256
 z_dim = 256
 lr = 5e-5
 wd = 0.0
-beta = 0.1
-alpha = 1.0
+beta = 1.0
+alpha = 2.0
 H = 40
 stride = 1
 n_epochs = 50000
@@ -91,6 +91,7 @@ state_decoder_type = 'mlp' #'autoregressive'
 dataset_file = None
 env_name = 'antmaze-large-diverse-v0'
 env = gym.make(env_name)
+init_state_dependent = False
 
 if dataset_file is None:
 	dataset = d4rl.qlearning_dataset(env) #env.get_dataset()
@@ -135,7 +136,7 @@ experiment = Experiment(api_key = '9mxH2vYX20hn9laEr0KtHLjAa', project_name = 's
 # First, instantiate a skill model
 
 if state_dependent_prior:
-	model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist='normal',state_dec_stop_grad=False,beta=beta,alpha=alpha,max_sig=None,fixed_sig=None,ent_pen=0,encoder_type='state_action_sequence',state_decoder_type=state_decoder_type).cuda()
+	model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist='normal',state_dec_stop_grad=False,beta=beta,alpha=alpha,max_sig=None,fixed_sig=None,ent_pen=0,encoder_type='state_action_sequence',state_decoder_type=state_decoder_type,init_state_dependent=init_state_dependent).cuda()
 
 else:
 	raise NotImplementedError
@@ -144,7 +145,7 @@ else:
 E_optimizer = torch.optim.Adam(model.encoder.parameters(), lr=lr, weight_decay=wd)
 M_optimizer = torch.optim.Adam(model.gen_model.parameters(), lr=lr, weight_decay=wd)
 
-filename = 'EM_model_'+env_name+'state_dec_'+str(state_decoder_type)+'_H_'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_log'
+filename = 'EM_model_'+env_name+'state_dec_'+str(state_decoder_type)+'_init_state_dep_'+str(init_state_dependent)+'_H_'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_log'
 
 
 

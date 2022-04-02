@@ -19,11 +19,15 @@ class AbstractDynamics(nn.Module):
 	(so similar to regular dynamics model, but in skill space and also temporally extended)
 	See Encoder and Decoder for more description
 	'''
-	def __init__(self,state_dim,z_dim,h_dim):
+	def __init__(self,state_dim,z_dim,h_dim,init_state_dependent=True):
 
 		super(AbstractDynamics,self).__init__()
 		
-		self.layers = nn.Sequential(nn.Linear(state_dim+z_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
+		self.init_state_dependent = init_state_dependent
+		if init_state_dependent:
+			self.layers = nn.Sequential(nn.Linear(state_dim+z_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
+		else:
+			self.layers = nn.Sequential(nn.Linear(z_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
 		#self.mean_layer = nn.Linear(h_dim,state_dim)
 		self.mean_layer = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,state_dim))
 		#self.sig_layer  = nn.Sequential(nn.Linear(h_dim,state_dim),nn.Softplus())
@@ -40,12 +44,13 @@ class AbstractDynamics(nn.Module):
 			sT_sig:  batch_size x 1 x state_dim tensor of terminal (time=T) state standard devs
 		'''
 
-		# concatenate s0 and z
-		s0_z = torch.cat([s0,z],dim=-1)
-
-		# pass s0_z through layers
-		feats = self.layers(s0_z)
-
+		if self.init_state_dependent:
+			# concatenate s0 and z
+			s0_z = torch.cat([s0,z],dim=-1)
+			# pass s0_z through layers
+			feats = self.layers(s0_z)
+		else:
+			feats = self.layers(z)
 		# get mean and stand dev of action distribution
 		sT_mean = self.mean_layer(feats)
 		sT_sig  = self.sig_layer(feats)
@@ -518,7 +523,7 @@ class Decoder(nn.Module):
 	-embed z
 	-Pass into fully connected network to get "state T features"
 	'''
-	def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist,state_dec_stop_grad, max_sig, fixed_sig, state_decoder_type):
+	def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist,state_dec_stop_grad, max_sig, fixed_sig, state_decoder_type, init_state_dependent):
 
 		super(Decoder,self).__init__()
 		
@@ -527,7 +532,7 @@ class Decoder(nn.Module):
 		self.z_dim = z_dim
 
 		if state_decoder_type == 'mlp':
-			self.abstract_dynamics = AbstractDynamics(state_dim,z_dim,h_dim)
+			self.abstract_dynamics = AbstractDynamics(state_dim,z_dim,h_dim,init_state_dependent=init_state_dependent)
 		elif state_decoder_type == 'autoregressive':
 			self.abstract_dynamics = AutoregressiveStateDecoder(state_dim,z_dim,h_dim)
 		else:
@@ -685,7 +690,7 @@ class GenerativeModel(nn.Module):
 		pass
 
 class SkillModelStateDependentPrior(nn.Module):
-	def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal',state_dec_stop_grad=False,beta=1.0,alpha=1.0,max_sig=None,fixed_sig=None,ent_pen=0,encoder_type='state_action_sequence',state_decoder_type='mlp'):
+	def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal',state_dec_stop_grad=False,beta=1.0,alpha=1.0,max_sig=None,fixed_sig=None,ent_pen=0,encoder_type='state_action_sequence',state_decoder_type='mlp',init_state_dependent=True):
 		super(SkillModelStateDependentPrior, self).__init__()
 
 		self.state_dim = state_dim # state dimension
@@ -703,7 +708,7 @@ class SkillModelStateDependentPrior(nn.Module):
 			print('INVALID ENCODER TYPE!!!!')
 			assert False
 
-		self.decoder = Decoder(state_dim,a_dim,z_dim,h_dim, a_dist, state_dec_stop_grad,max_sig=max_sig,fixed_sig=fixed_sig,state_decoder_type=state_decoder_type)
+		self.decoder = Decoder(state_dim,a_dim,z_dim,h_dim, a_dist, state_dec_stop_grad,max_sig=max_sig,fixed_sig=fixed_sig,state_decoder_type=state_decoder_type,init_state_dependent=init_state_dependent)
 		self.prior   = Prior(state_dim,z_dim,h_dim)
 		self.beta    = beta
 		self.alpha   = alpha
@@ -767,7 +772,7 @@ class SkillModelStateDependentPrior(nn.Module):
 		log_post  = torch.sum(post_dist.log_prob(z_sampled)) / denom
 		
 
-		return -log_pi + -self.beta*log_prior + log_post
+		return -log_pi + -log_prior + log_post
 
 	def get_M_loss(self,states,actions):
 
@@ -790,7 +795,7 @@ class SkillModelStateDependentPrior(nn.Module):
 		a_loss =  -torch.sum(a_dist.log_prob(actions)) / denom
 		prior_loss = -torch.sum(prior_dist.log_prob(z_sampled)) / denom
 
-		return sT_loss + a_loss + self.beta*prior_loss
+		return self.alpha*sT_loss + a_loss + prior_loss
 
 
 	
@@ -879,7 +884,7 @@ class SkillModelStateDependentPrior(nn.Module):
 		
 		return cost, torch.cat(pred_states,dim=1)
 
-	def get_expected_cost_for_cem(self, s0, skill_seq, goal_state, use_epsilons=True, plot=True, length_cost=0):
+	def get_expected_cost_for_cem(self, s0, skill_seq, goal_state, use_epsilons=True, plot=False, length_cost=0, var_pen=0.0):
 		'''
 		s0 is initial state, batch_size x 1 x s_dim
 		skill sequence is a batch_size x skill_seq_len x z_dim tensor that representents a skill_seq_len sequence of skills
@@ -895,6 +900,7 @@ class SkillModelStateDependentPrior(nn.Module):
 		# costs = torch.zeros(batch_size,device=s0.device)
 		costs = [torch.mean((s_i[:,:,:2] - goal_state[:,:,:2])**2,dim=-1).squeeze()]
 		# costs = (lengths == 0)*torch.mean((s_i[:,:,:2] - goal_state[:,:,:2])**2,dim=-1).squeeze()
+		var_cost = 0.0
 		for i in range(skill_seq_len):
 			
 			# z_i = skill_seq[:,i:i+1,:] # might need to reshape
@@ -906,6 +912,8 @@ class SkillModelStateDependentPrior(nn.Module):
 				z_i = skill_seq[:,i:i+1,:]
 			
 			s_mean, s_sig = self.decoder.abstract_dynamics(s_i,z_i)
+
+			var_cost += var_pen*var_cost 
 			
 			# sample s_i+1 using reparameterize
 			s_sampled = s_mean
@@ -926,8 +934,8 @@ class SkillModelStateDependentPrior(nn.Module):
 			plt.figure()
 			plt.scatter(s0[0,0,0].detach().cpu().numpy(),s0[0,0,1].detach().cpu().numpy(), label='init state')
 			plt.scatter(goal_state[0,0,0].detach().cpu().numpy(),goal_state[0,0,1].detach().cpu().numpy(),label='goal',s=300)
-			# plt.xlim([0,25])
-			# plt.ylim([0,25])
+			plt.xlim([-1,38])
+			plt.ylim([-1,30])
 			pred_states = torch.cat(pred_states,1)
 			
 			plt.plot(pred_states[:,:,0].T.detach().cpu().numpy(),pred_states[:,:,1].T.detach().cpu().numpy())
@@ -948,7 +956,7 @@ class SkillModelStateDependentPrior(nn.Module):
 			# plt.savefig('pred_states_cem_variable_length_FULL_SEQ')
 		
 		
-		return costs
+		return costs + var_cost
 	
 	def get_expected_cost_variable_length(self, s0, skill_seq, lengths, goal_state, use_epsilons=True, plot=False):
 		'''

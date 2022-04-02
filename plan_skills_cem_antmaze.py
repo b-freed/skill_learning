@@ -39,37 +39,40 @@ data = env.get_dataset()
 
 # vid = video_recorder.VideoRecorder(env,path="recording")
 
+skill_seq_len = 10
 H = 20
-replan_freq = H
+replan_freq = H * 5
 state_dim = data['observations'].shape[1]
 a_dim = data['actions'].shape[1]
 h_dim = 256
 z_dim = 256
 batch_size = 100
-skill_seq_len = 200
 lr = 1e-4
-wd = .001
+wd = 0.0
 state_dependent_prior = True
 state_dec_stop_grad = True
 beta = 1.0
 alpha = 1.0
 ent_pen = 0
 max_sig = None
-fixed_sig = 0.0
+fixed_sig =  0.0
 # n_iters = 100
-n_iters = 20
+n_iters = 100
 a_dist = 'normal'
-keep_frac = 0.1
+keep_frac = 0.5
+
 # background_img = mpimg.imread('maze_medium.png')
 use_epsilon = True
 max_ep = None
 cem_l2_pen = 0.0
+var_pen = 0.0
 render = False
 variable_length = False
 max_replans = 50
 plan_length_cost = 0.0
-encoder_type = 'state_sequence'
+encoder_type = 'state_action_sequence'
 term_state_dependent_prior = False
+init_state_dependent = True
 # start_ind = 937278
 
 # import glob
@@ -89,9 +92,11 @@ else:
 # filename = 'antmaze-large-diverse-v0_40_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
 # filename = 'antmaze-medium-diverse-v0_10_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
 # filename = 'antmaze-large-diverse-v0_20_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
-filename = 'antmaze-large-diverse-v0_enc_type_state_sequence_H20_l2reg_0.0_a_1.0_b_0.1_sg_True_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
+# filename = 'antmaze-large-diverse-v0_enc_type_state_sequence_H20_l2reg_0.0_a_1.0_b_0.1_sg_True_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
 # filename = 'antmaze-large-diverse-v0_5_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
 # filename = 'antmaze-large-diverse-v0_5_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
+filename = 'EM_model_antmaze-large-diverse-v0state_dec_mlp_H_40_l2reg_0.0_a_2.0_b_1.0_log_best.pth'
+# filename = 'EM_model_antmaze-large-diverse-v0state_dec_mlp_init_state_dep_False_H_40_l2reg_0.0_a_2.0_b_1.0_log_best.pth'
 
 PATH = 'checkpoints/'+filename
 
@@ -99,7 +104,7 @@ PATH = 'checkpoints/'+filename
 if term_state_dependent_prior:
 	skill_model = SkillModelTerminalStateDependentPrior(state_dim,a_dim,z_dim,h_dim,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,fixed_sig=fixed_sig).cuda()
 elif state_dependent_prior:
-	skill_model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,max_sig=max_sig,fixed_sig=fixed_sig,ent_pen=ent_pen,encoder_type=encoder_type).cuda()
+	skill_model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,max_sig=max_sig,fixed_sig=fixed_sig,ent_pen=ent_pen,encoder_type=encoder_type,init_state_dependent=init_state_dependent).cuda()
 else:
 	skill_model = SkillModel(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist).cuda()
 checkpoint = torch.load(PATH)
@@ -157,6 +162,19 @@ goal_seq = torch.tensor(goal_state, device=device).reshape(1,1,-1)
 #     frame_one.save("my_awesome.gif", format="GIF", append_images=frames,
 #                save_all=True, duration=100, loop=0)
 
+def convert_epsilon_to_z(epsilon,s0,model):
+
+	s = s0
+	z_seq = []
+	for i in range(epsilon.shape[1]):
+		# get prior
+		mu_z, sigma_z = model.prior(s)
+		z_i = mu_z + sigma_z*skill_seq[:,i:i+1,:]
+		z_seq.append(z_i)
+		s_mean,_ = model.decoder.abstract_dynamics(s,z_i)
+		s = s_mean
+
+	return torch.cat(z_seq,dim=1)
 
 
 def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq,variable_length,ep_num):
@@ -190,9 +208,15 @@ def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq,vari
 
 		else:
 			cost_fn = lambda skill_seq: skill_model.get_expected_cost_for_cem(state_torch, skill_seq, goal_seq, use_epsilons=use_epsilon,length_cost=plan_length_cost)
-			skill_seq_mean = torch.zeros((skill_seq_len,z_dim),device=device)
-			skill_seq_std  = torch.ones( (skill_seq_len,z_dim),device=device)
+			if n == 0:
+				skill_seq_mean = torch.zeros((skill_seq_len,z_dim),device=device)
+				skill_seq_std  = torch.ones( (skill_seq_len,z_dim),device=device)
+			else:
+				skill_seq_mean = torch.zeros((skill_seq_len,z_dim),device=device)
+				skill_seq_std  = torch.ones( (skill_seq_len,z_dim),device=device)
 			
+				# skill_seq_mean = torch.cat([skill_seq_mean[1:,:],torch.zeros((1,z_dim),device=device)])
+				# skill_seq_std  = torch.cat([skill_seq_std[1:,:], torch.ones((1,z_dim),device=device)])
 		
 			# 								           x_mean,        x_std,cost_fn,  pop_size,frac_keep,n_iters,l2_pen
 			skill_seq_mean,skill_seq_std = cem(skill_seq_mean,skill_seq_std,cost_fn,batch_size,keep_frac,n_iters,l2_pen=cem_l2_pen)
@@ -213,6 +237,7 @@ def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq,vari
 			z = mu_z + sigma_z*skill
 		else:
 			z = skill
+		print('executing skill')
 		for j in range(replan_freq):
 		# for j in range(100):
 			if render:
@@ -282,7 +307,7 @@ def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq,vari
 		
 
 
-def run_skill_seq(env,s0,model):
+def run_skill_seq(skill_seq,env,s0,model,use_epsilon):
 	'''
 	'''
 	# env.env.set_state(s0[:2],s0[2:])
@@ -293,11 +318,14 @@ def run_skill_seq(env,s0,model):
 	pred_sigs = []
 	states = []
 	plt.figure()
-	for i in range(skill_seq_len):
+	for i in range(skill_seq.shape[1]):
 		# get the skill
 		# z = skill_seq[:,i:i+1,:]
-		mu_z, sigma_z = model.prior(torch.tensor(state,dtype=torch.float32).cuda().reshape(1,1,-1))
-		z = mu_z + sigma_z*skill_seq[:,i:i+1,:]
+		if use_epsilon:
+			mu_z, sigma_z = model.prior(torch.tensor(state,dtype=torch.float32).cuda().reshape(1,1,-1))
+			z = mu_z + sigma_z*skill_seq[:,i:i+1,:]
+		else:
+			z = skill_seq[:,i:i+1,:]
 		skill_seq_states = []
 		state_torch = torch.tensor(state,dtype=torch.float32).cuda().reshape((1,1,-1))
 		s_mean, s_sig = model.decoder.abstract_dynamics(state_torch,z)
@@ -337,6 +365,9 @@ def run_skill_seq(env,s0,model):
 	# plt.errorbar(pred_states[:,0],pred_states[:,1],xerr=pred_sigs[:,0],yerr=pred_sigs[:,1])
 	# plt.legend(loc='lower center', bbox_to_anchor=(0.5, -0.2), ncol= 4)
 	plt.axis('square')
+	plt.xlim([-1,38])
+	plt.ylim([-1,30])
+
 
 	if not state_dependent_prior:
 		plt.title('Planned Skills (No State Dependent Prior)')
@@ -345,25 +376,73 @@ def run_skill_seq(env,s0,model):
 		plt.title('Planned skills (State Dependent Prior)')
 		plt.savefig('Skill_planning_H'+str(H)+'.png')
 
-	print('SAVED FIG!')
+	# print('SAVED FIG!')
+
+	return state,states
 
 
 
-# cost_fn = lambda skill_seq: skill_model.get_expected_cost_for_cem(s0_torch, skill_seq, goal_seq)
+# min_dists_list = []
+# for i in range(100):
+# 	states,min_dist = run_skills_iterative_replanning(env,skill_model,goal_seq,use_epsilon,replan_freq,variable_length,i)
+# 	min_dists_list.append(min_dist)
+# 	print('min_dists_list: ',min_dists_list)
+# 	np.save('min_dists_list_n_iters'+str(n_iters)+'_l2pen_'+str(cem_l2_pen),min_dists_list)
+
+
+execute_n_skills = 1
+
 min_dists_list = []
-for i in range(100):
-	states,min_dist = run_skills_iterative_replanning(env,skill_model,goal_seq,use_epsilon,replan_freq,variable_length,i)
+for j in range(100):
+	state = env.reset()
+	goal_loc = goal_state[:2]
+	min_dist = 10**10
+	for i in range(max_replans):
+		s_torch = torch.cat(batch_size*[torch.tensor(state,dtype=torch.float32,device=device).reshape((1,1,-1))])
+		cost_fn = lambda skill_seq: skill_model.get_expected_cost_for_cem(s_torch, skill_seq, goal_seq, var_pen = var_pen)
+		skill_seq,_ = cem(torch.zeros((skill_seq_len,z_dim),device=device),torch.ones((skill_seq_len,z_dim),device=device),cost_fn,batch_size,keep_frac,n_iters,l2_pen=cem_l2_pen)
+		skill_seq = skill_seq[:execute_n_skills,:]
+		skill_seq = skill_seq.unsqueeze(0)	
+		skill_seq = convert_epsilon_to_z(skill_seq,s_torch[:1,:,:],skill_model)
+		state,states = run_skill_seq(skill_seq,env,state,skill_model,use_epsilon=False)
+		# print('states.shape: ', states.shape)
+
+		dists = np.sum((states[0,:,:2] - goal_loc)**2,axis=-1)
+
+		if np.min(dists) < min_dist:
+			min_dist = np.min(dists)
+
+		if min_dist < 1.0:
+			break
+	
 	min_dists_list.append(min_dist)
-	print('min_dists_list: ',min_dists_list)
-	np.save('min_dists_list_n_iters'+str(n_iters)+'_l2pen_'+str(cem_l2_pen),min_dists_list)
+	print('min_dists_list: ', min_dists_list)
 
-# skill_seq,_ = cem(torch.zeros((skill_seq_len,z_dim),device=device),torch.ones((skill_seq_len,z_dim),device=device),cost_fn,100,.5,n_iters)
 
+
+# s_torch = torch.cat(batch_size*[torch.tensor(state,dtype=torch.float32,device=device).reshape((1,1,-1))])
+# cost_fn = lambda skill_seq: skill_model.get_expected_cost_for_cem(s_torch, skill_seq, goal_seq, var_pen = var_pen)
+# skill_seq,_ = cem(torch.zeros((skill_seq_len,z_dim),device=device),torch.ones((skill_seq_len,z_dim),device=device),cost_fn,batch_size,keep_frac,n_iters,l2_pen=cem_l2_pen)
+# skill_seq = skill_seq[:5,:]
 # skill_seq = skill_seq.unsqueeze(0)		
+# skill_seq = convert_epsilon_to_z(skill_seq,s0_torch[:1,:,:],skill_model)
+# state = run_skill_seq(skill_seq,env,s0,skill_model,use_epsilon=False)
 
-# s0 = env.reset()
-# run_skill_seq(env,s0,skill_model)
+# s_torch = torch.cat(batch_size*[torch.tensor(state,dtype=torch.float32,device=device).reshape((1,1,-1))])
+# cost_fn = lambda skill_seq: skill_model.get_expected_cost_for_cem(s_torch, skill_seq, goal_seq, var_pen = var_pen)
+# skill_seq,_ = cem(torch.zeros((skill_seq_len,z_dim),device=device),torch.ones((skill_seq_len,z_dim),device=device),cost_fn,batch_size,keep_frac,n_iters,l2_pen=cem_l2_pen)
+# skill_seq = skill_seq[:5,:]
+# skill_seq = skill_seq.unsqueeze(0)		
+# skill_seq = convert_epsilon_to_z(skill_seq,s0_torch[:1,:,:],skill_model)
+# state = run_skill_seq(skill_seq,env,s0,skill_model,use_epsilon=False)
 
+# s_torch = torch.cat(batch_size*[torch.tensor(state,dtype=torch.float32,device=device).reshape((1,1,-1))])
+# cost_fn = lambda skill_seq: skill_model.get_expected_cost_for_cem(s_torch, skill_seq, goal_seq, var_pen = var_pen)
+# skill_seq,_ = cem(torch.zeros((skill_seq_len,z_dim),device=device),torch.ones((skill_seq_len,z_dim),device=device),cost_fn,batch_size,keep_frac,n_iters,l2_pen=cem_l2_pen)
+# skill_seq = skill_seq[:5,:]
+# skill_seq = skill_seq.unsqueeze(0)		
+# skill_seq = convert_epsilon_to_z(skill_seq,s0_torch[:1,:,:],skill_model)
+# state = run_skill_seq(skill_seq,env,s0,skill_model,use_epsilon=False)
 
 # plt.figure()
 # plt.scatter(states[:,0],states[:,1])
