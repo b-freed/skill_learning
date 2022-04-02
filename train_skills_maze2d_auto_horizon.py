@@ -14,7 +14,7 @@ import d4rl
 import ipdb
 import h5py
 import utils
-
+import os
 
 def train(model, model_optimizer, initial_skill):
 	
@@ -27,6 +27,8 @@ def train(model, model_optimizer, initial_skill):
 	model.train()
 
 	for batch_id, data_ in enumerate(train_loader):
+		if data_.shape[0] != hp.batch_size:
+			continue
 		data_ = data_.to(hp.device)
 		loss_tot, s_T_loss, a_loss, kl_loss, s_T_ent = 0, 0, 0, 0, 0
 
@@ -37,9 +39,9 @@ def train(model, model_optimizer, initial_skill):
 		z_post_means, z_post_sigs, b_post_means, b_post_sigs = model.encoder(states, actions, initial_skill)
 
 		z_t = model.reparameterize(z_post_means, z_post_sigs)
-		z_t_history = z_t.repeat(1, 21, 1)
+		z_t_history = z_t.repeat(1, hp.H_min + 1, 1)
 		# z_t = torch.cat([z_t, z_t[:, -1:, :]], dim=1)
-		b_t = model.reparameterize(b_post_means, b_post_sigs)
+		b_t = model.decide_termination(b_post_means, b_post_sigs)
 
 		for H in range(hp.H_min+1, hp.H_max):
 			# if b_t == 1:
@@ -63,10 +65,10 @@ def train(model, model_optimizer, initial_skill):
 
 			z_post_means, z_post_sigs, b_post_means, b_post_sigs = model.encoder(states, actions, z_t_history)
 			z_t_ = model.reparameterize(z_post_means, z_post_sigs)
-			b_t_ = model.reparameterize(b_post_means, b_post_sigs)
+			b_t_ = model.decide_termination(b_post_means, b_post_sigs)
 			z_t_history = torch.cat([z_t_history, z_t_history[:, -1:, :]], dim=1)
 			if (b_t == True).any():
-				new_indices = np.where(b_t == True)[0]
+				new_indices = torch.where(b_t == True)[0]
 				# update skills
 				z_t[new_indices] = z_t_[new_indices]
 				z_t_history[new_indices] = z_t_[new_indices]
@@ -96,6 +98,8 @@ def test(model, initial_skill):
 	model.train()
 
 	for batch_id, data_ in enumerate(train_loader):
+		if data_.shape[0] != hp.batch_size:
+			continue
 		data_ = data_.to(hp.device)
 		loss_tot, s_T_loss, a_loss, kl_loss, s_T_ent = 0, 0, 0, 0, 0
 
@@ -106,9 +110,9 @@ def test(model, initial_skill):
 		z_post_means, z_post_sigs, b_post_means, b_post_sigs = model.encoder(states, actions, initial_skill)
 
 		z_t = model.reparameterize(z_post_means, z_post_sigs)
-		z_t_history = z_t.repeat(1, 21, 1)
+		z_t_history = z_t.repeat(1, hp.H_min + 1, 1)
 		# z_t = torch.cat([z_t, z_t[:, -1:, :]], dim=1)
-		b_t = model.reparameterize(b_post_means, b_post_sigs)
+		b_t = model.decide_termination(b_post_means, b_post_sigs)
 
 		for H in range(hp.H_min+1, hp.H_max):
 			# if b_t == 1:
@@ -132,10 +136,10 @@ def test(model, initial_skill):
 
 			z_post_means, z_post_sigs, b_post_means, b_post_sigs = model.encoder(states, actions, z_t_history)
 			z_t_ = model.reparameterize(z_post_means, z_post_sigs)
-			b_t_ = model.reparameterize(b_post_means, b_post_sigs)
+			b_t_ = model.decide_termination(b_post_means, b_post_sigs)
 			z_t_history = torch.cat([z_t_history, z_t_history[:, -1:, :]], dim=1)
 			if (b_t == True).any():
-				new_indices = np.where(b_t == True)[0]
+				new_indices = torch.where(b_t == True)[0]
 				# update skills
 				z_t[new_indices] = z_t_[new_indices]
 				z_t_history[new_indices] = z_t_[new_indices]
@@ -153,7 +157,7 @@ def test(model, initial_skill):
 
 class HyperParams:
     def __init__(self):
-        self.batch_size = 100
+        self.batch_size = 256
         self.h_dim = 256
         self.z_dim = 256
         self.lr = 5e-5
@@ -166,7 +170,7 @@ class HyperParams:
         self.ent_pen = 0.0
         self.max_sig = None
         self.fixed_sig = None
-        self.H_min = 20
+        self.H_min = 5
         self.H_max = 30
         self.stride = 1
         self.n_epochs = 50000
@@ -175,14 +179,19 @@ class HyperParams:
         self.encoder_type = 'state_action_sequence' #'state_sequence'
         self.state_decoder_type = 'mlp'
         self.env_name = 'antmaze-large-diverse-v0'
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.device_id = 3
+        self.device = f'cuda:{self.device_id}' if torch.cuda.is_available() else 'cpu'
         if self.term_state_dependent_prior:
             self.filename = f'{self.env_name}_tsdp_H{self.H_max}_l2reg_{self.wd}_a_{self.alpha}_b_{self.beta}_sg_{self.state_dec_stop_grad}_max_sig_{self.max_sig}_fixed_sig_{self.fixed_sig}_log'
         else:
             self.filename = f'{self.env_name}_enc_type_{self.encoder_type}_state_dec_{self.state_decoder_type}_H_{self.H_max}_l2reg_{self.wd}_a_{self.alpha}_b_{self.beta}_sg_{self.state_dec_stop_grad}_max_sig_{self.max_sig}_fixed_sig_{self.fixed_sig}_ent_pen_{self.ent_pen}_log'
+        self.msg = "variable_length_skills_2_30"
 
 
 hp = HyperParams()
+
+# set environment variable for device
+os.environ["_DEVICE"] = hp.device
 
 # dataset = utils.create_dataset_padded(utils.create_dataset_raw, hp.env_name)
 dataset_ = utils.create_dataset_raw(hp.env_name)
@@ -209,8 +218,8 @@ goals_test   = goals[N_train:]
 # obs_chunks_train, action_chunks_train, targets_train = chunks(states_train, actions_train, goals_train, H, stride)
 # obs_chunks_test,  action_chunks_test,  targets_test  = chunks(states_test,  actions_test,  goals_test,  H, stride)
 
-experiment = Experiment(api_key = 'Wlh5wstMNYkxV0yWRxN7JXZRu', project_name = 'other')
-# experiment.add_tag('noisy2')
+experiment = Experiment(api_key = 'Wlh5wstMNYkxV0yWRxN7JXZRu', project_name = 'dump')
+experiment.set_name(hp.msg)
 
 # First, instantiate a skill model
 if hp.term_state_dependent_prior:

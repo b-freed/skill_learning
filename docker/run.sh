@@ -1,4 +1,4 @@
-docker run --name skill_learning_env_$1 \
+docker run --name khusha_skill_learning_env_$1 \
     -it \
     --rm \
     --gpus all \

@@ -18,7 +18,7 @@ import matplotlib.transforms as transforms
 from math import pi
 from matplotlib import animation
 from PIL import Image
-import cv2
+# import cv2
 # from pygifsicle import optimize
 import imageio
 

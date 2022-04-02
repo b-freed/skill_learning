@@ -10,6 +10,7 @@ import torch.distributions.categorical as Categorical
 import torch.distributions.mixture_same_family as MixtureSameFamily
 import torch.distributions.kl as KL
 import ipdb
+import os
 import matplotlib.pyplot as plt
 from utils import reparameterize
 
@@ -85,10 +86,10 @@ class AutoregressiveStateDecoder(nn.Module):
         sT_tiled = torch.cat(self.state_dim*[sT],dim=1) # should be batch_size x state_dim x state_dim
 
         # Generate one hot vectors using identity 
-        onehots = torch.stack(batch_size*[torch.eye(self.state_dim,device=torch.device('cuda:0'))],dim=0) # batch_size x state_dim x state_dim
+        onehots = torch.stack(batch_size*[torch.eye(self.state_dim,device=os.environ.get('_DEVICE', 'cpu'))],dim=3) # batch_size x state_dim x state_dim
 
         # Mask out future elements of sT (so element-wise multiplication with a matrix with zeros on and below diagonal)
-        mask = torch.tril(torch.ones((self.state_dim,self.state_dim),device=torch.device('cuda:0')),diagonal=-1)
+        mask = torch.tril(torch.ones((self.state_dim,self.state_dim),device=os.environ.get('_DEVICE', 'cpu')),diagonal=-1)
 
         sT_tiled_masked = sT_tiled * mask
 
@@ -125,7 +126,7 @@ class AutoregressiveStateDecoder(nn.Module):
         # sT_tiled = torch.cat(self.state_dim*[sT],dim=1) # should be batch_size x state_dim x state_dim
 
         batch_size = s0.shape[0]
-        sT_lessthan_i = torch.zeros((batch_size,1,self.state_dim),device=torch.device('cuda:0'))
+        sT_lessthan_i = torch.zeros((batch_size,1,self.state_dim),device=os.environ.get('_DEVICE', 'cpu'))
         for i in range(self.state_dim):
             onehot = self.get_onehot(i,batch_size)
             # concatenate s0, sT[<i], onehot, z
@@ -140,7 +141,7 @@ class AutoregressiveStateDecoder(nn.Module):
 
     def get_onehot(self,i,batch_size):
 
-        onehot = torch.zeros((batch_size,1,self.state_dim),device=torch.device('cuda:0'))
+        onehot = torch.zeros((batch_size,1,self.state_dim),device=os.environ.get('_DEVICE', 'cpu'))
         onehot[:,:,i] = 1
 
         return onehot
@@ -237,7 +238,7 @@ class LowLevelPolicy(nn.Module):
         '''
         maps state as a numpy array and z as a pytorch tensor to a numpy action
         '''
-        state = torch.reshape(torch.tensor(state,device=torch.device('cuda:0'),dtype=torch.float32),(1,1,-1))
+        state = torch.reshape(torch.tensor(state,device=os.environ.get('_DEVICE', 'cpu'),dtype=torch.float32),(1,1,-1))
         
         a_mean,a_sig = self.forward(state,z)
         action = self.reparameterize(a_mean,a_sig)
@@ -248,7 +249,7 @@ class LowLevelPolicy(nn.Module):
         return action.reshape([self.a_dim,])
      
     def reparameterize(self, mean, std):
-        eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
+        eps = torch.normal(torch.zeros(mean.size()).to(os.environ.get('_DEVICE', 'cpu')), torch.ones(mean.size()).to(os.environ.get('_DEVICE', 'cpu')))
         return mean + std*eps
 
 class LowLevelPolicyWithTermination(nn.Module):
@@ -317,7 +318,7 @@ class LowLevelPolicyWithTermination(nn.Module):
         '''
         maps state as a numpy array and z as a pytorch tensor to a numpy action
         '''
-        state = torch.reshape(torch.tensor(state,device=torch.device('cuda:0'),dtype=torch.float32),(1,1,-1))
+        state = torch.reshape(torch.tensor(state,device=os.environ.get('_DEVICE', 'cpu'),dtype=torch.float32),(1,1,-1))
         
         a_mean,a_sig = self.forward(state,z)
         action = self.reparameterize(a_mean,a_sig)
@@ -328,7 +329,7 @@ class LowLevelPolicyWithTermination(nn.Module):
         return action.reshape([self.a_dim,])
      
     def reparameterize(self, mean, std):
-        eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
+        eps = torch.normal(torch.zeros(mean.size()).to(os.environ.get('_DEVICE', 'cpu')), torch.ones(mean.size()).to(os.environ.get('_DEVICE', 'cpu')))
         return mean + std*eps
 
 class LowLevelDynamicsFF(nn.Module):
@@ -1055,7 +1056,7 @@ class SkillModelStateDependentPrior(nn.Module):
         return costs
     
     def reparameterize(self, mean, std):
-        eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
+        eps = torch.normal(torch.zeros(mean.size()).to(os.environ.get('_DEVICE', 'cpu')), torch.ones(mean.size()).to(os.environ.get('_DEVICE', 'cpu')))
         return mean + std*eps
 
 
@@ -1131,18 +1132,31 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
 
         return  loss_tot, s_T_loss, a_loss, kl_loss, s_T_ent
 
-    def decide_termination(self, b_mean, b_sig, b_thresh=0.5):
-        '''
+    def decide_termination(self, b_mean, b_sig, b_thresh=0.5, greedy=False):
+        ''' Differentiable approach for selecting termination (Gumbal softmax)
         INPUTS:
             b_mean: batch_size x 1 x 1 tensor indicating mean of belief
             b_sig:  batch_size x 1 x 1 tensor indicating standard deviation of belief
         OUTPUTS:
             termination: batch_size x 1 tensor indicating whether to terminate
         '''
-        b_dist = torch.distributions.Normal(b_mean, b_sig)
-        b = b_dist.sample()
-        termination = torch.sigmoid(b) > b_thresh
-        return termination
+        b = b_mean # TODO: directly apply softmax over mean? 
+        b_t = torch.nn.functional.gumbel_softmax(b)
+        b = torch.argmax(b_t)
+        return b
+    # def decide_termination(self, b_mean, b_sig, b_thresh=0.5, greedy=False):
+    #     '''
+    #     INPUTS:
+    #         b_mean: batch_size x 1 x 1 tensor indicating mean of belief
+    #         b_sig:  batch_size x 1 x 1 tensor indicating standard deviation of belief
+    #     OUTPUTS:
+    #         termination: batch_size x 1 tensor indicating whether to terminate
+    #     '''
+    #     eps = torch.normal(torch.zeros(b_mean.size()).to(os.environ.get('_DEVICE', 'cpu')), torch.ones(b_mean.size()).to(os.environ.get('_DEVICE', 'cpu')))
+    #     b_t = b_mean + b_sig*eps
+    #     if greedy: b_t = b_mean
+    #     termination = torch.sigmoid(b_t) > b_thresh
+    #     return termination
 
 class SkillModelTerminalStateDependentPrior(SkillModelStateDependentPrior):
     def __init__(self,state_dim,a_dim,z_dim,h_dim,state_dec_stop_grad=False,beta=1.0,alpha=1.0,fixed_sig=None):
@@ -1491,7 +1505,7 @@ class BilevelSkillModel(nn.Module):
 
 
     def reparameterize(self, mean, std):
-        eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
+        eps = torch.normal(torch.zeros(mean.size()).to(os.environ.get('_DEVICE', 'cpu')), torch.ones(mean.size()).to(os.environ.get('_DEVICE', 'cpu')))
         return mean + std*eps
 
 
@@ -1548,7 +1562,7 @@ class BilevelSkillModelV2(nn.Module):
 
 
     def reparameterize(self, mean, std):
-        eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
+        eps = torch.normal(torch.zeros(mean.size()).to(os.environ.get('_DEVICE', 'cpu')), torch.ones(mean.size()).to(os.environ.get('_DEVICE', 'cpu')))
         return mean + std*eps
 
 
@@ -1604,7 +1618,7 @@ class BilevelSkillModelV3(nn.Module):
 
 
     def reparameterize(self, mean, std):
-        eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
+        eps = torch.normal(torch.zeros(mean.size()).to(os.environ.get('_DEVICE', 'cpu')), torch.ones(mean.size()).to(os.environ.get('_DEVICE', 'cpu')))
         return mean + std*eps
     
 
@@ -1717,7 +1731,7 @@ class SkillModel(nn.Module):
     
     
     def reparameterize(self, mean, std):
-        eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
+        eps = torch.normal(torch.zeros(mean.size()).to(os.environ.get('_DEVICE', 'cpu')), torch.ones(mean.size()).to(os.environ.get('_DEVICE', 'cpu')))
         return mean + std*eps
 
 
