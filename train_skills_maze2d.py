@@ -108,7 +108,7 @@ n_epochs = 50000
 test_split = .2
 a_dist = 'normal' # 'tanh_normal' or 'normal'
 encoder_type = 'state_action_sequence' #'state_sequence'
-state_decoder_type = 'autoregressive'
+state_decoder_type = 'mlp' #'autoregressive'
 			
 
 
