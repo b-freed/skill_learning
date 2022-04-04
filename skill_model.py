@@ -568,7 +568,6 @@ class Decoder(nn.Module):
 		
 		
 		if self.state_decoder_type == 'autoregressive':
-			z_detached = z.detach()
 			sT_mean,sT_sig = self.abstract_dynamics(s_T,s_0,z)
 		elif self.state_decoder_type == 'mlp':
 			sT_mean,sT_sig = self.abstract_dynamics(s_0,z)
