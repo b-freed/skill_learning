@@ -79,7 +79,7 @@ z_dim = 256
 lr = 5e-5
 wd = 0.0
 beta = 1.0
-alpha = 2.0
+alpha = 1.0
 H = 40
 stride = 1
 n_epochs = 50000
@@ -91,7 +91,7 @@ state_decoder_type = 'mlp' #'autoregressive'
 dataset_file = None
 env_name = 'antmaze-large-diverse-v0'
 env = gym.make(env_name)
-init_state_dependent = False
+init_state_dependent = True
 
 if dataset_file is None:
 	dataset = d4rl.qlearning_dataset(env) #env.get_dataset()

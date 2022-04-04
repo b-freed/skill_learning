@@ -40,7 +40,7 @@ data = env.get_dataset()
 # vid = video_recorder.VideoRecorder(env,path="recording")
 
 skill_seq_len = 10
-H = 20
+H = 10
 replan_freq = H * 5
 state_dim = data['observations'].shape[1]
 a_dim = data['actions'].shape[1]
@@ -56,8 +56,8 @@ alpha = 1.0
 ent_pen = 0
 max_sig = None
 fixed_sig =  0.0
-# n_iters = 100
 n_iters = 100
+# n_iters = 200
 a_dist = 'normal'
 keep_frac = 0.5
 
@@ -68,7 +68,7 @@ cem_l2_pen = 0.0
 var_pen = 0.0
 render = False
 variable_length = False
-max_replans = 50
+max_replans = 200
 plan_length_cost = 0.0
 encoder_type = 'state_action_sequence'
 term_state_dependent_prior = False
@@ -95,8 +95,9 @@ else:
 # filename = 'antmaze-large-diverse-v0_enc_type_state_sequence_H20_l2reg_0.0_a_1.0_b_0.1_sg_True_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
 # filename = 'antmaze-large-diverse-v0_5_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
 # filename = 'antmaze-large-diverse-v0_5_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
-filename = 'EM_model_antmaze-large-diverse-v0state_dec_mlp_H_40_l2reg_0.0_a_2.0_b_1.0_log_best.pth'
+# filename = 'EM_model_antmaze-large-diverse-v0state_dec_mlp_H_40_l2reg_0.0_a_2.0_b_1.0_log_best.pth'
 # filename = 'EM_model_antmaze-large-diverse-v0state_dec_mlp_init_state_dep_False_H_40_l2reg_0.0_a_2.0_b_1.0_log_best.pth'
+filename = 'EM_model_antmaze-large-diverse-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_5.0_b_1.0_log_best.pth'
 
 PATH = 'checkpoints/'+filename
 
@@ -416,6 +417,7 @@ for j in range(100):
 			break
 	
 	min_dists_list.append(min_dist)
+	np.save('min_dists_list', min_dists_list)
 	print('min_dists_list: ', min_dists_list)
 
 
