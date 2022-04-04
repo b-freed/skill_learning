@@ -771,7 +771,7 @@ class SkillModelStateDependentPrior(nn.Module):
 		log_post  = torch.sum(post_dist.log_prob(z_sampled)) / denom
 		
 
-		return -log_pi + -log_prior + log_post
+		return -log_pi + -self.beta*log_prior + self.beta*log_post
 
 	def get_M_loss(self,states,actions):
 
@@ -794,7 +794,7 @@ class SkillModelStateDependentPrior(nn.Module):
 		a_loss =  -torch.sum(a_dist.log_prob(actions)) / denom
 		prior_loss = -torch.sum(prior_dist.log_prob(z_sampled)) / denom
 
-		return self.alpha*sT_loss + a_loss + prior_loss
+		return self.alpha*sT_loss + a_loss + self.beta*prior_loss
 
 
 	
