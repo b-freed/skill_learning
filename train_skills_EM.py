@@ -14,6 +14,7 @@ import d4rl
 import ipdb
 import h5py
 from utils import chunks
+import config
 
 def train(model,E_optimizer,M_optimizer):
 	
@@ -79,7 +80,7 @@ z_dim = 256
 lr = 5e-5
 wd = 0.0
 beta = 1.0
-alpha = 1.0
+alpha = 2.0
 H = 40
 stride = 1
 n_epochs = 50000
@@ -225,8 +226,8 @@ for i in range(n_epochs):
 
 	if i % 10 == 0:
 		
-			
-		checkpoint_path = 'checkpoints/'+ filename + '.pth'
+		checkpoint_path = os.path.join(config.ckpt_dir,filename+'.pth')
+		# checkpoint_path = 'checkpoints/'+ filename + '.pth'
 		torch.save({
 							'model_state_dict': model.state_dict(),
 							'E_optimizer_state_dict': E_optimizer.state_dict(),
@@ -236,8 +237,8 @@ for i in range(n_epochs):
 		min_test_loss = test_loss
 
 		
-			
-		checkpoint_path = 'checkpoints/'+ filename + '_best.pth'
+		checkpoint_path = os.path.join(config.ckpt_dir,filename+'_best.pth')
+		# checkpoint_path = 'checkpoints/'+ filename + '_best.pth'
 		torch.save({'model_state_dict': model.state_dict(),
 				'E_optimizer_state_dict': E_optimizer.state_dict(),
 							'M_optimizer_state_dict': M_optimizer.state_dict()}, checkpoint_path)

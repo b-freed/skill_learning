@@ -96,8 +96,9 @@ else:
 # filename = 'antmaze-large-diverse-v0_5_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
 # filename = 'antmaze-large-diverse-v0_5_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
 # filename = 'EM_model_antmaze-large-diverse-v0state_dec_mlp_H_40_l2reg_0.0_a_2.0_b_1.0_log_best.pth'
-# filename = 'EM_model_antmaze-large-diverse-v0state_dec_mlp_init_state_dep_False_H_40_l2reg_0.0_a_2.0_b_1.0_log_best.pth'
+# filename = 'EM_model_antmaze-large-diverse-v0state_dec_mlp_init_state_dep_False_H_40_l2reg_0.0_a_2.0_b_1.0_log_best.pth'	
 filename = 'EM_model_antmaze-large-diverse-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_5.0_b_1.0_log_best.pth'
+# filename = 'EM_model_antmaze-large-diverse-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_1.0_b_1.0_log_best.pth'
 
 PATH = 'checkpoints/'+filename
 
@@ -318,7 +319,7 @@ def run_skill_seq(skill_seq,env,s0,model,use_epsilon):
 	pred_states = []
 	pred_sigs = []
 	states = []
-	plt.figure()
+	# plt.figure()
 	for i in range(skill_seq.shape[1]):
 		# get the skill
 		# z = skill_seq[:,i:i+1,:]
@@ -342,9 +343,9 @@ def run_skill_seq(skill_seq,env,s0,model,use_epsilon):
 			skill_seq_states.append(state)
 			plt.scatter(state[0],state[1], label='Trajectory',c='b')
 		states.append(skill_seq_states)
-		plt.scatter(state[0],state[1], label='Term state',c='r')
-		plt.scatter(pred_state[0],pred_state[1], label='Pred states',c='g')
-		plt.errorbar(pred_state[0],pred_state[1],xerr=pred_sig[0],yerr=pred_sig[1],c='g')
+		# plt.scatter(state[0],state[1], label='Term state',c='r')
+		# plt.scatter(pred_state[0],pred_state[1], label='Pred states',c='g')
+		# plt.errorbar(pred_state[0],pred_state[1],xerr=pred_sig[0],yerr=pred_sig[1],c='g')
 		
 
 	states = np.stack(states)
@@ -355,27 +356,20 @@ def run_skill_seq(skill_seq,env,s0,model,use_epsilon):
 
 
 
-	# plt.figure()
-	# plt.scatter(states[:,:,0],states[:,:,1], label='Trajectory')
-	plt.scatter(s0[0],s0[1], label='Initial States')
-	# plt.scatter(states[:,-1,0],states[:,-1,1], label='Predicted Final States')
-	plt.scatter(goals[:,:,0],goals[:,:,1], label='Goals')
-	# print('pred_states: ', pred_states)
-	# print('pred_states.shape: ', pred_states.shape)
-	# plt.scatter(pred_states[:,0],pred_states[:,1], label='Pred states')
-	# plt.errorbar(pred_states[:,0],pred_states[:,1],xerr=pred_sigs[:,0],yerr=pred_sigs[:,1])
-	# plt.legend(loc='lower center', bbox_to_anchor=(0.5, -0.2), ncol= 4)
-	plt.axis('square')
-	plt.xlim([-1,38])
-	plt.ylim([-1,30])
+	# plt.scatter(s0[0],s0[1], label='Initial States')
+	# plt.scatter(goals[:,:,0],goals[:,:,1], label='Goals')
+	
+	# plt.axis('square')
+	# plt.xlim([-1,38])
+	# plt.ylim([-1,30])
 
 
-	if not state_dependent_prior:
-		plt.title('Planned Skills (No State Dependent Prior)')
-		plt.savefig('Skill_planning_H'+str(H)+'_sdp_'+'false'+'.png')
-	else:
-		plt.title('Planned skills (State Dependent Prior)')
-		plt.savefig('Skill_planning_H'+str(H)+'.png')
+	# if not state_dependent_prior:
+	# 	plt.title('Planned Skills (No State Dependent Prior)')
+	# 	plt.savefig('Skill_planning_H'+str(H)+'_sdp_'+'false'+'.png')
+	# else:
+	# 	plt.title('Planned skills (State Dependent Prior)')
+	# 	plt.savefig('Skill_planning_H'+str(H)+'.png')
 
 	# print('SAVED FIG!')
 
@@ -394,7 +388,7 @@ def run_skill_seq(skill_seq,env,s0,model,use_epsilon):
 execute_n_skills = 1
 
 min_dists_list = []
-for j in range(100):
+for j in range(1000):
 	state = env.reset()
 	goal_loc = goal_state[:2]
 	min_dist = 10**10
@@ -417,7 +411,7 @@ for j in range(100):
 			break
 	
 	min_dists_list.append(min_dist)
-	np.save('min_dists_list', min_dists_list)
+	np.save('min_dists_list_'+filename, min_dists_list)
 	print('min_dists_list: ', min_dists_list)
 
 
