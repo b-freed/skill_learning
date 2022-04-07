@@ -27,6 +27,7 @@ from cem import cem, cem_variable_length
 # from utils import make_video, save_frames_as_gif
 # from gym.wrappers.monitoring import video_recorder
 from utils import make_gif,make_video
+from statsmodels.stats.proportion import proportion_confint
 
 device = torch.device('cuda:0')
 
@@ -97,8 +98,9 @@ else:
 # filename = 'antmaze-large-diverse-v0_5_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
 # filename = 'EM_model_antmaze-large-diverse-v0state_dec_mlp_H_40_l2reg_0.0_a_2.0_b_1.0_log_best.pth'
 # filename = 'EM_model_antmaze-large-diverse-v0state_dec_mlp_init_state_dep_False_H_40_l2reg_0.0_a_2.0_b_1.0_log_best.pth'	
-filename = 'EM_model_antmaze-large-diverse-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_5.0_b_1.0_log_best.pth'
+# filename = 'EM_model_antmaze-large-diverse-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_5.0_b_1.0_log_best.pth'
 # filename = 'EM_model_antmaze-large-diverse-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_1.0_b_1.0_log_best.pth'
+filename = 'EM_model_antmaze-large-diverse-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_2.0_b_1.0_log_best.pth'
 
 PATH = 'checkpoints/'+filename
 
@@ -412,7 +414,13 @@ for j in range(1000):
 	
 	min_dists_list.append(min_dist)
 	np.save('min_dists_list_'+filename, min_dists_list)
-	print('min_dists_list: ', min_dists_list)
+	# print('min_dists_list: ', min_dists_list)
+	n_success = np.sum(np.array(min_dists_list) <= 1.0)
+	n_tot = len(min_dists_list)
+
+	ci = proportion_confint(n_success,n_tot)
+	print('ci: ', ci)
+	print('mean: ',n_success/n_tot)
 
 
 
