@@ -64,7 +64,7 @@ def cem(x_mean,x_std,cost_fn,pop_size,frac_keep,n_iters,l2_pen):
         # print('cost: ', cost)
 
 
-    return x_mean,x_std
+    return x_mean,x_std, cost
 
 
 
