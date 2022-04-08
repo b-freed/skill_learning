@@ -10,6 +10,7 @@ import torch.distributions.categorical as Categorical
 import torch.distributions.mixture_same_family as MixtureSameFamily
 import torch.distributions.kl as KL
 import ipdb
+import utils
 import os
 import matplotlib.pyplot as plt
 from utils import reparameterize
@@ -477,10 +478,10 @@ class EncoderAutoTermination(nn.Module):
         self.rnn        = nn.GRU(h_dim+a_dim+z_dim,h_dim,batch_first=True,bidirectional=True,num_layers=n_gru_layers)
         #self.mean_layer = nn.Linear(h_dim,z_dim)
         self.z_mean_layer = nn.Sequential(nn.Linear(2*h_dim, h_dim),nn.ReLU(),nn.Linear(h_dim, z_dim))
-        self.b_mean_layer = nn.Sequential(nn.Linear(2*h_dim, h_dim),nn.ReLU(),nn.Linear(h_dim, 1))
+        self.b_mean_layer = nn.Sequential(nn.Linear(2*h_dim, h_dim),nn.ReLU(),nn.Linear(h_dim, 2))
         #self.sig_layer  = nn.Sequential(nn.Linear(h_dim,z_dim),nn.Softplus())  # using softplus to ensure stand dev is positive
         self.z_sig_layer  = nn.Sequential(nn.Linear(2*h_dim, h_dim),nn.ReLU(),nn.Linear(h_dim, z_dim),nn.Softplus())
-        self.b_sig_layer  = nn.Sequential(nn.Linear(2*h_dim, h_dim),nn.ReLU(),nn.Linear(h_dim, 1),nn.Softplus())
+        self.b_sig_layer  = nn.Sequential(nn.Linear(2*h_dim, h_dim),nn.ReLU(),nn.Linear(h_dim, 2),nn.Softplus())
 
 
     def forward(self, states, actions, skills):
@@ -1063,12 +1064,13 @@ class SkillModelStateDependentPrior(nn.Module):
 
 
 class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior):
-    def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal',state_dec_stop_grad=False,beta=1.0,alpha=1.0,max_sig=None,fixed_sig=None,ent_pen=0,encoder_type='state_action_sequence',state_decoder_type='mlp'):
+    def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal',state_dec_stop_grad=False,beta=1.0,alpha=1.0,gamma=1.0,max_sig=None,fixed_sig=None,ent_pen=0,encoder_type='state_action_sequence',state_decoder_type='mlp'):
         super(SkillModelStateDependentPriorAutoTermination, self).__init__(state_dim,a_dim,z_dim,h_dim,a_dist,state_dec_stop_grad,beta,alpha,max_sig,fixed_sig,ent_pen,encoder_type,state_decoder_type)
         if encoder_type == 'state_action_sequence':
             self.encoder = EncoderAutoTermination(state_dim,a_dim,z_dim,h_dim)
         else: 
             raise NotImplementedError
+        self.gamma = gamma # skill length penalty
 
     def forward(self, states, actions, skills):
         
@@ -1091,7 +1093,7 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
         z_post_means, z_post_sigs, b_post_means, b_post_sigs = self.encoder(states, actions, skills)
         # STEP 2. sample z from posterior 
         z_sampled = self.reparameterize(z_post_means, z_post_sigs)
-        b_sampled = self.reparameterize(b_post_means, b_post_sigs)
+        # b_sampled = self.reparameterize(b_post_means, b_post_sigs)
 
         # STEP 3. Pass z_sampled and states through decoder 
         s_T_mean, s_T_sig, a_means, a_sigs = self.decoder(states, z_sampled)
@@ -1132,18 +1134,38 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
 
         return  loss_tot, s_T_loss, a_loss, kl_loss, s_T_ent
 
-    def decide_termination(self, b_mean, b_sig, b_thresh=0.5, greedy=False):
-        ''' Differentiable approach for selecting termination (Gumbal softmax)
-        INPUTS:
-            b_mean: batch_size x 1 x 1 tensor indicating mean of belief
-            b_sig:  batch_size x 1 x 1 tensor indicating standard deviation of belief
-        OUTPUTS:
-            termination: batch_size x 1 tensor indicating whether to terminate
-        '''
-        b = b_mean # TODO: directly apply softmax over mean? 
-        b_t = torch.nn.functional.gumbel_softmax(b)
-        b = torch.argmax(b_t)
-        return b
+    def update_skills(self, z_prev, z_updated, b_mean, b_sig, greedy=False):
+        # Assume you already get a batch of sampled skills
+
+        # sample b from b_dist
+        if greedy:
+            b_probabilities = b_mean
+        else:
+            b_probabilities = self.reparameterize(b_mean, b_sig)
+
+        # TODO: softmax on b probabilities required?
+
+        b, _ = utils.boundary_sampler(b_probabilities.squeeze())
+        read, copy = b[:, 0].unsqueeze(dim=-1).unsqueeze(dim=-1), b[:, 1].unsqueeze(dim=-1).unsqueeze(dim=-1)
+        # only update last entry for skill and b
+        # z_ = z_prev * b[:, 0].unsqueeze(dim=-1)
+        z = read * z_prev + copy * z_updated.detach() # TODO: will (most likely) case issues
+        # ipdb.set_trace()
+        return z, b
+
+    # def decide_termination(self, b_mean, b_sig, b_thresh=0.5, greedy=False):
+    #     ''' Differentiable approach for selecting termination (Gumbal softmax)
+    #     INPUTS:
+    #         b_mean: batch_size x 1 x 1 tensor indicating mean of belief
+    #         b_sig:  batch_size x 1 x 1 tensor indicating standard deviation of belief
+    #     OUTPUTS:
+    #         termination: batch_size x 1 tensor indicating whether to terminate
+    #     '''
+    #     b = b_mean # TODO: directly apply softmax over mean? 
+    #     print(b)
+    #     b_t = torch.nn.functional.gumbel_softmax(b)
+    #     b = torch.argmax(b_t, dim=-1)
+    #     return b
     # def decide_termination(self, b_mean, b_sig, b_thresh=0.5, greedy=False):
     #     '''
     #     INPUTS:

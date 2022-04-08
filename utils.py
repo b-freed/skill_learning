@@ -36,6 +36,42 @@ import imageio
 # 	anim = animation.FuncAnimation(plt.gcf(), animate, frames = len(frames), interval=50)
 # 	anim.save(path, writer='imagemagick', fps=60)
 
+def boundary_sampler(log_alpha):
+    # sample and return corresponding logit
+    log_sample_alpha = gumbel_softmax(log_alpha, 1.0)
+
+    # probability
+    log_sample_alpha = log_sample_alpha - torch.logsumexp(log_sample_alpha, dim=-1, keepdim=True)
+    sample_prob = log_sample_alpha.exp()
+    sample_data = torch.eye(2, dtype=log_alpha.dtype, device=log_alpha.device)[torch.max(sample_prob, dim=-1)[1]]
+
+    # sample with rounding and st-estimator
+    sample_data = sample_data.detach() + (sample_prob - sample_prob.detach())
+
+    # return sample data and logit
+    return sample_data, log_sample_alpha
+
+def sample_gumbel(shape, eps=1e-20, device='cpu'):
+    U = torch.rand(shape).to(device)
+    return -(torch.log(-torch.log(U + eps) + eps))
+
+def gumbel_softmax_sample(logits, temperature):
+    y = logits + sample_gumbel(logits.size(), device=logits.device)
+    return F.softmax(y / temperature, dim=-1)
+
+def gumbel_softmax(logits, temperature):
+    """
+    input: [*, n_class]
+    return: [*, n_class] an one-hot vector
+    """
+    y = gumbel_softmax_sample(logits, temperature)
+    shape = y.size()
+    _, ind = y.max(dim=-1)
+    y_hard = torch.zeros_like(y).view(-1, shape[-1])
+    y_hard.scatter_(1, ind.view(-1, 1), 1)
+    y_hard = y_hard.view(*shape)
+    return (y_hard - y).detach() + y
+
 def make_gif(frames,name):
     frames = [Image.fromarray(image) for image in frames]
     frame_one = frames[0]
