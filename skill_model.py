@@ -1064,13 +1064,14 @@ class SkillModelStateDependentPrior(nn.Module):
 
 
 class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior):
-    def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal',state_dec_stop_grad=False,beta=1.0,alpha=1.0,gamma=1.0,max_sig=None,fixed_sig=None,ent_pen=0,encoder_type='state_action_sequence',state_decoder_type='mlp'):
+    def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal',state_dec_stop_grad=False,beta=1.0,alpha=1.0,gamma=1.0,temperature=1.0,max_sig=None,fixed_sig=None,ent_pen=0,encoder_type='state_action_sequence',state_decoder_type='mlp'):
         super(SkillModelStateDependentPriorAutoTermination, self).__init__(state_dim,a_dim,z_dim,h_dim,a_dist,state_dec_stop_grad,beta,alpha,max_sig,fixed_sig,ent_pen,encoder_type,state_decoder_type)
         if encoder_type == 'state_action_sequence':
             self.encoder = EncoderAutoTermination(state_dim,a_dim,z_dim,h_dim)
         else: 
             raise NotImplementedError
         self.gamma = gamma # skill length penalty
+        self.temperature = temperature # gumbel-softmax temperature
 
     def forward(self, states, actions, skills):
         
@@ -1145,7 +1146,7 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
 
         # TODO: softmax on b probabilities required?
 
-        b, _ = utils.boundary_sampler(b_probabilities.squeeze())
+        b, _ = utils.boundary_sampler(b_probabilities.squeeze(), temperature=self.temperature)
         read, copy = b[:, 0].unsqueeze(dim=-1).unsqueeze(dim=-1), b[:, 1].unsqueeze(dim=-1).unsqueeze(dim=-1)
         # only update last entry for skill and b
         # z_ = z_prev * b[:, 0].unsqueeze(dim=-1)

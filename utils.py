@@ -36,9 +36,9 @@ import imageio
 # 	anim = animation.FuncAnimation(plt.gcf(), animate, frames = len(frames), interval=50)
 # 	anim.save(path, writer='imagemagick', fps=60)
 
-def boundary_sampler(log_alpha):
+def boundary_sampler(log_alpha, temperature=1.0):
     # sample and return corresponding logit
-    log_sample_alpha = gumbel_softmax(log_alpha, 1.0)
+    log_sample_alpha = gumbel_softmax(log_alpha, temperature)
 
     # probability
     log_sample_alpha = log_sample_alpha - torch.logsumexp(log_sample_alpha, dim=-1, keepdim=True)
