@@ -13,7 +13,7 @@ GlfwContext(offscreen=True)
 import d4rl
 import ipdb
 import h5py
-from utils import chunks
+from utils import chunks, chunks_online
 from train_skills_maze2d import train, test
 from tokenize import ContStr
 import random
@@ -257,10 +257,8 @@ def run_skill_seq(skill_seq,env,s0,model,use_epsilon):
 		for j in range(H):
 			action = model.decoder.ll_policy.numpy_policy(state,z)
 			state,_,_,_ = env.step(action)
-			tensor_state = torch.tensor(state,dtype=torch.float32)
-			tensor_action = torch.tensor(action,dtype=torch.float32)
-			skill_seq_states.append(tensor_state)
-			skill_seq_actions.append(tensor_action)
+			skill_seq_states.append(state)
+			skill_seq_actions.append(action)
 			plt.scatter(state[0],state[1], label='Trajectory',c='b')
 		states.append(skill_seq_states)
 		actions.append(skill_seq_actions)
@@ -304,19 +302,16 @@ def run_skill_seq(skill_seq,env,s0,model,use_epsilon):
 
 	return state,states, actions
 
-def create_online_dataset(new_states,new_actions,train_loader):
+def create_online_dataset(dataset_states_train, dataset_actions_train, new_states, new_actions):
 
+	dataset_states_train.append(new_states)
+	dataset_actions_train.append(new_actions)
 
-	for batch_id, data in enumerate(train_loader):
-		data = data.cuda()
-		states = data[:,:,:model.state_dim]  # first state_dim elements are the state
-		actions = data[:,:,model.state_dim:]
+	obs_chunks_train, action_chunks_train = chunks_online(dataset_states_train, dataset_actions_train, H, stride)
 
-		states = torch.utils.data.ConcatDataset([states, new_states])
-		actions = torch.utils.data.ConcatDataset([actions, new_actions])
+	inputs_train = torch.cat([obs_chunks_train, action_chunks_train],dim=-1)
 
-	new_inputs_train = torch.cat([states, actions],dim=-1)
-	train_loader = DataLoader(new_inputs_train,
+	train_loader = DataLoader(inputs_train,
 								batch_size=batch_size,
 								num_workers=0)
 
@@ -420,8 +415,10 @@ N_train = int((1-test_split)*N)
 N_test = N - N_train
 
 states_train  = states[:N_train,:]
+dataset_states_train = states_train
 next_states_train = next_states[:N_train,:]
 actions_train = actions[:N_train,:]
+dataset_actions_train = actions_train
 
 
 states_test  = states[N_train:,:]
@@ -513,25 +510,15 @@ print('------Planning done------')
 
 print('Creating new dataset with states from planning')
 
-train_loader = create_online_dataset(states, actions, train_loader)
+train_loader = create_online_dataset(dataset_states_train, dataset_actions_train, new_states, new_actions)
 
 print('Done')
 
-print('Training new model on online dataset')
-
-if term_state_dependent_prior:
-	new_model = SkillModelTerminalStateDependentPrior(state_dim,a_dim,z_dim,h_dim,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,fixed_sig=fixed_sig).cuda()
-elif state_dependent_prior:
-	new_model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,max_sig=max_sig,fixed_sig=fixed_sig,ent_pen=ent_pen,encoder_type=encoder_type,state_decoder_type=state_decoder_type).cuda()
-
-else:
-	new_model = SkillModel(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist).cuda()
-	
-new_model_optimizer = torch.optim.Adam(new_model.parameters(), lr=lr, weight_decay=wd)
+print('Training model on online dataset')
 
 
 for i in range(n_epochs):
-	new_loss, new_s_T_loss, new_a_loss, new_kl_loss, new_s_T_ent = train(new_model,new_model_optimizer)
+	new_loss, new_s_T_loss, new_a_loss, new_kl_loss, new_s_T_ent = train(model,model_optimizer)
 	
 	print("--------TRAIN---------")
 	
@@ -546,10 +533,3 @@ for i in range(n_epochs):
 	experiment.log_metric("new_a_loss", new_a_loss, step=i)
 	experiment.log_metric("new_kl_loss", new_kl_loss, step=i)
 	experiment.log_metric("new_s_T_ent", new_s_T_ent, step=i)
-	
-
-
-
-
-
-
