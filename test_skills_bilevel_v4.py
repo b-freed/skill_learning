@@ -26,8 +26,8 @@ def run_skill(skill_model,s0,skill,env,H,render,pred_state):
 	
 	actions = []
 	frames = []
-	# for j in range(H): #H-1 if H!=1
-	for j in range(100):
+	for j in range(H): #H-1 if H!=1
+	# for j in range(40):
 		if render:
 			frames.append(env.render(mode='rgb_array'))
 		action = skill_model.decoder.ll_policy.numpy_policy(state,skill)
@@ -71,14 +71,14 @@ if __name__ == '__main__':
 	env = gym.make(env)
 	data = env.get_dataset()
 	
-	H = 10
-	# H = 40
+	# H = 10
+	H = 40
 	state_dim = data['observations'].shape[1]
 	a_dim = data['actions'].shape[1]
 	h_dim = 256
 	z_dim = 256
 	batch_size = 1
-	episodes = 3
+	episodes = 1
 	wd = .001
 	state_dependent_prior = True
 	state_dec_stop_grad = True
@@ -88,7 +88,7 @@ if __name__ == '__main__':
 	fixed_sig = None
 	state_decoder_type = 'mlp'
 	n_skills = 1
-	colors = ['r','g','b']
+	colors = 3*['b','g','r','c','m','y','k']
 
 
 	# if not state_dependent_prior:
@@ -103,7 +103,12 @@ if __name__ == '__main__':
 	# filename = 'Noisy2_maze2d_H20_l2reg_0_log_best.pth'
 	# filename = 'maze2d_H40_log_best.pth'
 	# filename = 'AntMaze_H20_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
-	filename = 'bilevelv4_antmaze-large-diverse-v0state_dec_mlp_H_10_l2reg_0.001_a_1.0_b_1.0_log_best.pth'
+	# filename = 'bilevelv4_antmaze-large-diverse-v0state_dec_mlp_H_10_l2reg_0.001_a_1.0_b_1.0_log_best.pth'
+	# filename = 'bilevelv4_antmaze-large-diverse-v0state_dec_mlp_H_10_l2reg_0.001_a_0.1_b_1.0_log_best.pth'
+	# filename = 'bilevelv4_antmaze-large-diverse-v0state_dec_mlp_H_10_l2reg_0.001_a_0.1_b_1.0_log_best.pth'
+	filename = 'bilevelv4_antmaze-large-diverse-v0state_dec_mlp_H_40_l2reg_0.001_a_0.1_b_1.0_log_best.pth'
+
+
 	PATH = 'checkpoints/'+filename
 	
 	ll_dynamics_path = 'checkpoints/ll_dynamics_antmaze-large-diverse-v0_l2reg_0.001_lr_0.0001_log.pth'
@@ -137,10 +142,15 @@ if __name__ == '__main__':
 
 	render = False
 
-	plt.figure()
+	f1 = plt.figure(1)
+	f2 = plt.figure(2)
+	initial_state = env.reset()
+	state = initial_state
 	for j in range(n_skills):
-		initial_state = env.reset()
+		
 		state = initial_state
+
+		# initial_state = state
 
 		state = torch.reshape(torch.tensor(state,dtype=torch.float32).cuda(), (1,1,state_dim))
 		#actions = torch.tensor(actions,dtype=torch.float32).cuda()
@@ -154,7 +164,8 @@ if __name__ == '__main__':
 		z = reparameterize(z_mean,z_sig)
 
 		for i in range(episodes):
-			initial_state = env.reset()
+			# initial_state = env.reset()
+			env.set_state(initial_state[:15],initial_state[15:])
 			state = initial_state
 			print('i: ', i)
 
@@ -172,7 +183,6 @@ if __name__ == '__main__':
 			#ipdb.set_trace()
 			
 			sT_samples = ll_dynamics.sample_from_sT_dist(torch.cat(10*[state]),torch.cat(10*[z]),skill_model.decoder.ll_policy,H)
-			plt.scatter(sT_samples[0,0,:].detach().cpu().numpy(),sT_samples[1,0,:].detach().cpu().numpy())
 
 		# 	# infer the skill
 		# 	z_mean,z_sig = skill_model.encoder(states,actions)
@@ -197,24 +207,35 @@ if __name__ == '__main__':
 			# print('states_actual.shape: ', states_actual.shape)
 
 			
-			
+			plt.figure(1)
 			plt.scatter(states_actual[:,0],states_actual[:,1],c=colors[j])
-			plt.scatter(states_actual[0,0],states_actual[0,1],c=colors[j])
-			# plt.errorbar(sT_mean[0,0,0].detach().cpu().numpy(),sT_mean[0,0,1].detach().cpu().numpy(),xerr=sT_sig[0,0,0].detach().cpu().numpy(),yerr=sT_sig[0,0,1].detach().cpu().numpy(),c=colors[j])
+			# plt.scatter(states_actual[0,0],states_actual[0,1],c=colors[j])
+			# plt.scatter(states_actual[-1,0],states_actual[-1,1],c=colors[j])
+			# plt.scatter(states_actual[0,0],states_actual[0,1],c=colors[j])
+			plt.errorbar(sT_mean[0,0,0].detach().cpu().numpy(),sT_mean[0,0,1].detach().cpu().numpy(),xerr=sT_sig[0,0,0].detach().cpu().numpy(),yerr=sT_sig[0,0,1].detach().cpu().numpy(),c=colors[j])
 			# plt.scatter(sT_mean[0,0,0].detach().cpu().numpy(),sT_mean[0,0,1].detach().cpu().numpy(),c=colors[j],marker='x')
+
+			plt.figure(2)
+			plt.scatter(sT_samples[0,0,:].detach().cpu().numpy(),sT_samples[1,0,:].detach().cpu().numpy())
 
 		actual_states.append(states_actual)
 		action_dist.append(actions)
 		pred_states_mean.append(sT_mean[0,0,:].detach().cpu().numpy())
 		
-	
+
+	plt.figure(1)
 	plt.legend(['Actual Trajectory','Initial State','Predicted Terminal State'])
 	plt.title('Skill Execution & Prediction (Skill-Dependent Prior) '+str(i))
 	plt.axis('square')
 	# plt.savefig('Skill_Prediction_H'+str(H)+'_'+str(i)+'.png')
 	plt.savefig('Skill_Prediction_H'+str(H)+'_'+'.png')
 
-		
+	plt.figure(2)
+	# plt.legend(['Actual Trajectory','Initial State','Predicted Terminal State'])
+	# plt.title('Skill Execution & Prediction (Skill-Dependent Prior) '+str(i))
+	plt.axis('square')
+	# plt.savefig('Skill_Prediction_H'+str(H)+'_'+str(i)+'.png')
+	plt.savefig('sT_samples'+str(H)+'_'+'.png')
 		
 		
 		

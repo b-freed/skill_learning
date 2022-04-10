@@ -69,10 +69,10 @@ def run_policy_iterative_reopt(env,model,policy,goal_loc,n_skills,H,max_reopt_it
 		plt.savefig('run_policy')
 
 		# reoptimize policy for new starting loc
-		# policy = SkillPolicy(state_dim,z_dim,h_dim).cuda()
-		# optimizer = torch.optim.Adam(policy.parameters(), lr=lr, weight_decay=policy_l2_reg)
+		policy = SkillPolicy(state_dim,z_dim,h_dim).cuda()
+		optimizer = torch.optim.Adam(policy.parameters(), lr=lr, weight_decay=policy_l2_reg)
 
-		policy = optimize_policy(torch.stack(batch_size * [s.reshape((1,-1))]),model,policy,optimizer,goal_loc,n_skills,n_iters,use_epsilon=True,temp=temp)
+		policy = optimize_policy(torch.stack(batch_size * [s.reshape((1,-1))]),model,policy,optimizer,goal_loc,n_skills,n_iters,use_epsilon=True,temp=temp,length_cost=length_cost)
 
 	return np.sum((s.detach().cpu().numpy()[:2] - goal_loc_np)**2)
 
@@ -98,7 +98,7 @@ def run_skill(skill_model,s0,skill,env,H,goal_loc,render=False):
 	  
 	return state, np.stack(states),np.stack(actions),frames
 
-def get_expected_cost(s0,model,policy,goal_loc,T,use_epsilon=True,plot=True,temp=1.0):
+def get_expected_cost(s0,model,policy,goal_loc,T,use_epsilon=True,plot=True,temp=1.0,length_cost=0):
 
 	s = s0
 	costs = [torch.mean((s[:,:,:2] - goal_loc)**2,dim=-1)]
@@ -122,7 +122,7 @@ def get_expected_cost(s0,model,policy,goal_loc,T,use_epsilon=True,plot=True,temp
 		s = s_next
 		states.append(s)
 
-		cost_t = torch.mean((s_next[:,:,:2] - goal_loc)**2,dim=-1)  
+		cost_t = torch.mean((s_next[:,:,:2] - goal_loc)**2,dim=-1) + i*length_cost
 		costs.append(cost_t) 
 	
 
@@ -143,13 +143,13 @@ def get_expected_cost(s0,model,policy,goal_loc,T,use_epsilon=True,plot=True,temp
 
 	return torch.mean(costs),l2_costs 
 
-def optimize_policy(s0,model,policy,optimizer,goal_loc,n_skills,n_iters,use_epsilon=True,temp=1.0):
+def optimize_policy(s0,model,policy,optimizer,goal_loc,n_skills,n_iters,use_epsilon=True,temp=1.0,length_cost=0.0):
 
 	policy_losses = []
 	for i in range(n_iters):
 		print('i: ', i)
 		# s0 = torch.stack(batch_size * [torch.tensor(env.reset(),dtype=torch.float32,device=device).reshape(1,-1)])
-		policy_loss,l2_loss = get_expected_cost(s0,model,policy,goal_loc,n_skills,use_epsilon=use_epsilon,temp=temp)
+		policy_loss,l2_loss = get_expected_cost(s0,model,policy,goal_loc,n_skills,use_epsilon=use_epsilon,temp=temp,length_cost=length_cost)
 		policy.zero_grad()
 		loss = policy_loss + skill_l2_pen*l2_loss
 		loss.backward()
@@ -173,8 +173,8 @@ if __name__ == '__main__':
 	env = gym.make(env)
 	data = env.get_dataset()
 	
-	H = 20
-	# H = 40
+	# H = 20
+	H = 40
 	batch_size = 100
 	state_dim = data['observations'].shape[1]
 	a_dim = data['actions'].shape[1]
@@ -194,17 +194,20 @@ if __name__ == '__main__':
 	ent_pen = 0
 	colors = 3*['b','g','r','c','m','y','k']
 	# n_skills = len(colors)
-	n_skills = 50
-	temp = 1.0
-	n_iters = 20
+	n_skills = 30
+	temp = 0.2
+	n_iters = 100
 	n_initial_iters = 20
 	lr = 5e-5
 	max_reopt_iters = 100
-	policy_l2_reg = 10.0
+	policy_l2_reg = 0.0
 	skill_l2_pen = 0.0
+	length_cost = 0.0
 
 
-	filename = 'antmaze-large-diverse-v0_enc_type_state_action_sequencestate_dec_autoregressive_H_20_l2reg_0.0_a_1.0_b_0.1_sg_True_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
+	# filename = 'antmaze-large-diverse-v0_enc_type_state_action_sequencestate_dec_autoregressive_H_20_l2reg_0.0_a_1.0_b_0.1_sg_True_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
+	filename = 'EM_model_antmaze-large-diverse-v0state_dec_autoregressive_H_40_l2reg_0.0_a_1.0_b_1.0_log_best.pth'
+
 	PATH = 'checkpoints/'+filename
 
 	model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,max_sig=max_sig,fixed_sig=fixed_sig,ent_pen=ent_pen,encoder_type=encoder_type,state_decoder_type=state_decoder_type).cuda()
