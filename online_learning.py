@@ -83,6 +83,44 @@ def offline_training():
     
     return loss, test_loss, checkpoint_path
 
+def online_train_model():
+    
+    for i in range(n_epochs):
+        new_loss, new_s_T_loss, new_a_loss, new_kl_loss, new_s_T_ent = train(model,model_optimizer)
+        
+        print("--------TRAIN---------")
+	
+		print('new_loss: ', new_loss)
+		print('new_s_T_loss: ', new_s_T_loss)
+		print('new_a_loss: ', new_a_loss)
+		print('new_kl_loss: ', new_kl_loss)
+		print('new_s_T_ent: ', new_s_T_ent)
+		print(i)
+		experiment.log_metric("new_loss", new_loss, step=i)
+		experiment.log_metric("new_s_T_loss", new_s_T_loss, step=i)
+		experiment.log_metric("new_a_loss", new_a_loss, step=i)
+		experiment.log_metric("new_kl_loss", new_kl_loss, step=i)
+		experiment.log_metric("new_s_T_ent", new_s_T_ent, step=i)
+
+        if i % 10 == 0:
+            
+                
+            checkpoint_path = 'checkpoints/'+ filename + '.pth'
+            torch.save({
+                                'model_state_dict': model.state_dict(),
+                                'model_optimizer_state_dict': model_optimizer.state_dict(),
+                                }, checkpoint_path)
+        if test_loss < min_test_loss:
+            min_test_loss = test_loss
+
+            
+                
+            checkpoint_path = 'checkpoints/'+ filename + '_best.pth'
+            torch.save({'model_state_dict': model.state_dict(),
+                    'model_optimizer_state_dict': model_optimizer.state_dict()}, checkpoint_path)
+    
+    return new_loss, checkpoint_path
+
 def convert_epsilon_to_z(epsilon,s0,model):
 
 	s = s0
@@ -317,6 +355,56 @@ def create_online_dataset(dataset_states_train, dataset_actions_train, new_state
 
 	return train_loader
 
+def plan_skills_online():
+
+	s0_torch = torch.cat([torch.tensor(env.reset(),dtype=torch.float32).cuda().reshape(1,1,-1) for _ in range(batch_size)])
+
+	skill_seq = torch.zeros((1,skill_seq_len,z_dim),device=device)
+	print('skill_seq.shape: ', skill_seq.shape)
+	skill_seq.requires_grad = True
+
+	goal_state = np.array(env.target_goal)
+	print('goal_state: ', goal_state)
+	goal_seq = torch.tensor(goal_state, device=device).reshape(1,1,-1)
+
+
+	execute_n_skills = 1
+
+	min_dists_list = []
+	total_rewards = []
+	for j in range(100):
+		state = env.reset()
+		goal_loc = goal_state[:2]
+		min_dist = 10**10
+		for i in range(max_replans):
+			s_torch = torch.cat(batch_size*[torch.tensor(state,dtype=torch.float32,device=device).reshape((1,1,-1))])
+			cost_fn = lambda skill_seq: skill_model.get_expected_cost_for_cem(s_torch, skill_seq, goal_seq, var_pen = var_pen)
+			skill_seq,_,cost = cem(torch.zeros((skill_seq_len,z_dim),device=device),torch.ones((skill_seq_len,z_dim),device=device),cost_fn,batch_size,keep_frac,n_iters,l2_pen=cem_l2_pen)
+			skill_seq = skill_seq[:execute_n_skills,:]
+			skill_seq = skill_seq.unsqueeze(0)	
+			skill_seq = convert_epsilon_to_z(skill_seq,s_torch[:1,:,:],skill_model)
+			state,states,actions = run_skill_seq(skill_seq,env,state,skill_model,use_epsilon=False)
+			print('states.shape: ', states.shape)
+
+			dists = np.sum((states[0,:,:2] - goal_loc)**2,axis=-1)
+
+			if np.min(dists) < min_dist:
+				min_dist = np.min(dists)
+
+			if min_dist < 1.0:
+				break
+		
+		min_dists_list.append(min_dist)
+		np.save('min_dists_list', min_dists_list)
+		print('min_dists_list: ', min_dists_list)
+
+		total_rewards.append(cost)
+		print('Rewards_list:', total_rewards)
+
+	return states, actions, min_dists_list, total_rewards
+
+
+
 
 
 env_name = 'antmaze-large-diverse-v0'
@@ -360,6 +448,7 @@ variable_length = False
 max_replans = 200
 plan_length_cost = 0.0
 init_state_dependent = True
+iterations = 100
 
 experiment = Experiment(api_key = '9mxH2vYX20hn9laEr0KtHLjAa', project_name = 'skill-learning')
 
@@ -401,135 +490,82 @@ experiment.log_parameters({'lr':lr,
 							'state_decoder_type':state_decoder_type})
 experiment.add_tag('online learning')
 
-print('##### Making offline dataset for training model #####')
-states = dataset['observations']
-next_states = dataset['next_observations']
-actions = dataset['actions']
+for iteration in range(iterations):
 
-N = states.shape[0]
+	print('##### Making offline dataset for training model #####')
+	states = dataset['observations']
+	next_states = dataset['next_observations']
+	actions = dataset['actions']
 
-state_dim = states.shape[1]
-a_dim = actions.shape[1]
+	N = states.shape[0]
 
-N_train = int((1-test_split)*N)
-N_test = N - N_train
+	state_dim = states.shape[1]
+	a_dim = actions.shape[1]
 
-states_train  = states[:N_train,:]
-dataset_states_train = states_train
-next_states_train = next_states[:N_train,:]
-actions_train = actions[:N_train,:]
-dataset_actions_train = actions_train
+	N_train = int((1-test_split)*N)
+	N_test = N - N_train
 
-
-states_test  = states[N_train:,:]
-next_states_test = next_states[N_train:,:]
-actions_test = actions[N_train:,:]
-
-assert states_train.shape[0] == N_train
-assert states_test.shape[0] == N_test
-										            #  obs,next_obs,actions,H,stride
-obs_chunks_train, action_chunks_train = chunks(states_train, next_states_train, actions_train, H, stride)
-
-print('states_test.shape: ',states_test.shape)
-print('MAKIN TEST SET!!!')
-
-obs_chunks_test,  action_chunks_test  = chunks(states_test,  next_states_test,  actions_test,  H, stride)
+	states_train  = states[:N_train,:]
+	dataset_states_train = states_train
+	next_states_train = next_states[:N_train,:]
+	actions_train = actions[:N_train,:]
+	dataset_actions_train = actions_train
 
 
-inputs_train = torch.cat([obs_chunks_train, action_chunks_train],dim=-1)
-inputs_test  = torch.cat([obs_chunks_test,  action_chunks_test], dim=-1)
+	states_test  = states[N_train:,:]
+	next_states_test = next_states[N_train:,:]
+	actions_test = actions[N_train:,:]
 
-train_loader = DataLoader(
-	inputs_train,
-	batch_size=batch_size,
-	num_workers=0)  # not really sure about num_workers...
+	assert states_train.shape[0] == N_train
+	assert states_test.shape[0] == N_test
+														#  obs,next_obs,actions,H,stride
+	obs_chunks_train, action_chunks_train = chunks(states_train, next_states_train, actions_train, H, stride)
 
-test_loader = DataLoader(
-	inputs_test,
-	batch_size=batch_size,
-	num_workers=0)
+	print('states_test.shape: ',states_test.shape)
+	print('MAKIN TEST SET!!!')
 
-min_test_loss = 10**10
-
-print('--------Offline training starting----------')
-
-train_loss, test_loss, PATH = offline_training()
-
-print('--------Offline training done----------')
-
-checkpoint = torch.load(PATH)
-skill_model = model
-skill_model.load_state_dict(checkpoint['model_state_dict'])
-
-print('------Planning------')
-s0_torch = torch.cat([torch.tensor(env.reset(),dtype=torch.float32).cuda().reshape(1,1,-1) for _ in range(batch_size)])
-
-skill_seq = torch.zeros((1,skill_seq_len,z_dim),device=device)
-print('skill_seq.shape: ', skill_seq.shape)
-skill_seq.requires_grad = True
-
-goal_state = np.array(env.target_goal)
-print('goal_state: ', goal_state)
-goal_seq = torch.tensor(goal_state, device=device).reshape(1,1,-1)
+	obs_chunks_test,  action_chunks_test  = chunks(states_test,  next_states_test,  actions_test,  H, stride)
 
 
-execute_n_skills = 1
+	inputs_train = torch.cat([obs_chunks_train, action_chunks_train],dim=-1)
+	inputs_test  = torch.cat([obs_chunks_test,  action_chunks_test], dim=-1)
 
-min_dists_list = []
-total_rewards = []
-for j in range(100):
-	state = env.reset()
-	goal_loc = goal_state[:2]
-	min_dist = 10**10
-	for i in range(max_replans):
-		s_torch = torch.cat(batch_size*[torch.tensor(state,dtype=torch.float32,device=device).reshape((1,1,-1))])
-		cost_fn = lambda skill_seq: skill_model.get_expected_cost_for_cem(s_torch, skill_seq, goal_seq, var_pen = var_pen)
-		skill_seq,_,cost = cem(torch.zeros((skill_seq_len,z_dim),device=device),torch.ones((skill_seq_len,z_dim),device=device),cost_fn,batch_size,keep_frac,n_iters,l2_pen=cem_l2_pen)
-		skill_seq = skill_seq[:execute_n_skills,:]
-		skill_seq = skill_seq.unsqueeze(0)	
-		skill_seq = convert_epsilon_to_z(skill_seq,s_torch[:1,:,:],skill_model)
-		state,states,actions = run_skill_seq(skill_seq,env,state,skill_model,use_epsilon=False)
-		print('states.shape: ', states.shape)
+	train_loader = DataLoader(
+		inputs_train,
+		batch_size=batch_size,
+		num_workers=0)  # not really sure about num_workers...
 
-		dists = np.sum((states[0,:,:2] - goal_loc)**2,axis=-1)
+	test_loader = DataLoader(
+		inputs_test,
+		batch_size=batch_size,
+		num_workers=0)
 
-		if np.min(dists) < min_dist:
-			min_dist = np.min(dists)
+	min_test_loss = 10**10
 
-		if min_dist < 1.0:
-			break
+	print('--------Offline training starting----------')
+
+	train_loss, test_loss, PATH = offline_training()
+
+	print('--------Offline training done----------')
+
+	checkpoint = torch.load(PATH)
+	skill_model = model
+	skill_model.load_state_dict(checkpoint['model_state_dict'])
+
+	print('------Planning------')
+
+	new_states, new_actions, min_dists_list, total_rewards = plan_skills_online()
+
+
+	print('------Planning done------')
+
+	print('Creating new dataset with states from planning')
+
+	train_loader = create_online_dataset(dataset_states_train, dataset_actions_train, new_states, new_actions)
+
+	print('Done')
+
+	print('Training model on online dataset')
+
+	new_loss,_ = online_train_model()
 	
-	min_dists_list.append(min_dist)
-	np.save('min_dists_list', min_dists_list)
-	print('min_dists_list: ', min_dists_list)
-
-	total_rewards.append(cost)
-	print('Rewards_list:', total_rewards)
-
-print('------Planning done------')
-
-print('Creating new dataset with states from planning')
-
-train_loader = create_online_dataset(dataset_states_train, dataset_actions_train, new_states, new_actions)
-
-print('Done')
-
-print('Training model on online dataset')
-
-
-for i in range(n_epochs):
-	new_loss, new_s_T_loss, new_a_loss, new_kl_loss, new_s_T_ent = train(model,model_optimizer)
-	
-	print("--------TRAIN---------")
-	
-	print('new_loss: ', new_loss)
-	print('new_s_T_loss: ', new_s_T_loss)
-	print('new_a_loss: ', new_a_loss)
-	print('new_kl_loss: ', new_kl_loss)
-	print('new_s_T_ent: ', new_s_T_ent)
-	print(i)
-	experiment.log_metric("new_loss", new_loss, step=i)
-	experiment.log_metric("new_s_T_loss", new_s_T_loss, step=i)
-	experiment.log_metric("new_a_loss", new_a_loss, step=i)
-	experiment.log_metric("new_kl_loss", new_kl_loss, step=i)
-	experiment.log_metric("new_s_T_ent", new_s_T_ent, step=i)
