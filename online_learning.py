@@ -340,12 +340,15 @@ def run_skill_seq(skill_seq,env,s0,model,use_epsilon):
 
 	return state,states, actions
 
-def create_online_dataset(dataset_states_train, dataset_actions_train, new_states, new_actions):
+def create_online_dataset(dataset_states, dataset_actions, new_states, new_actions, N_train):
 
-	dataset_states_train.append(new_states)
-	dataset_actions_train.append(new_actions)
+	dataset_states.append(new_states)
+	dataset_actions.append(new_actions)
 
-	obs_chunks_train, action_chunks_train = chunks_online(dataset_states_train, dataset_actions_train, H, stride)
+	states_train  = dataset_states[:N_train,:]
+	actions_train = dataset_actions[:N_train,:]
+
+	obs_chunks_train, action_chunks_train = chunks_online(states_train, actions_train, H, stride)
 
 	inputs_train = torch.cat([obs_chunks_train, action_chunks_train],dim=-1)
 
@@ -353,7 +356,7 @@ def create_online_dataset(dataset_states_train, dataset_actions_train, new_state
 								batch_size=batch_size,
 								num_workers=0)
 
-	return train_loader
+	return train_loader, dataset_states, dataset_actions
 
 def plan_skills_online():
 
@@ -432,6 +435,7 @@ ent_pen = 0.0
 max_sig = None
 fixed_sig = None
 H = 40
+skill_seq_len = 10
 stride = 1
 n_epochs = 50000
 test_split = .2
@@ -450,6 +454,16 @@ plan_length_cost = 0.0
 init_state_dependent = True
 iterations = 100
 
+states = dataset['observations']
+next_states = dataset['next_observations']
+actions = dataset['actions']
+
+
+
+state_dim = states.shape[1]
+a_dim = actions.shape[1]
+
+
 experiment = Experiment(api_key = '9mxH2vYX20hn9laEr0KtHLjAa', project_name = 'skill-learning')
 
 if term_state_dependent_prior:
@@ -462,10 +476,10 @@ else:
 	
 model_optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
 
-filename = env_name+'_enc_type_'+str(encoder_type)+'state_dec_'+str(state_decoder_type)+'_H_'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_sg_'+str(state_dec_stop_grad)+'_max_sig_'+str(max_sig)+'_fixed_sig_'+str(fixed_sig)+'_ent_pen_'+str(ent_pen)+'_log'
+filename = env_name+'_enc_type_'+str(encoder_type)+'state_dec_'+str(state_decoder_type)+'_H_'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_sg_'+str(state_dec_stop_grad)+'_max_sig_'+str(max_sig)+'_fixed_sig_'+str(fixed_sig)+'_ent_pen_'+str(ent_pen)+'_online_log'
 
 if term_state_dependent_prior:
-	filename = env_name+'_tsdp'+'_H'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_sg_'+str(state_dec_stop_grad)+'_max_sig_'+str(max_sig)+'_fixed_sig_'+str(fixed_sig)+'_log'
+	filename = env_name+'_tsdp'+'_H'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_sg_'+str(state_dec_stop_grad)+'_max_sig_'+str(max_sig)+'_fixed_sig_'+str(fixed_sig)+'_online_log'
 
 
 experiment.log_parameters({'lr':lr,
@@ -493,23 +507,15 @@ experiment.add_tag('online learning')
 for iteration in range(iterations):
 
 	print('##### Making offline dataset for training model #####')
-	states = dataset['observations']
-	next_states = dataset['next_observations']
-	actions = dataset['actions']
 
 	N = states.shape[0]
 
-	state_dim = states.shape[1]
-	a_dim = actions.shape[1]
-
 	N_train = int((1-test_split)*N)
 	N_test = N - N_train
-
+	
 	states_train  = states[:N_train,:]
-	dataset_states_train = states_train
 	next_states_train = next_states[:N_train,:]
 	actions_train = actions[:N_train,:]
-	dataset_actions_train = actions_train
 
 
 	states_test  = states[N_train:,:]
@@ -561,11 +567,10 @@ for iteration in range(iterations):
 
 	print('Creating new dataset with states from planning')
 
-	train_loader = create_online_dataset(dataset_states_train, dataset_actions_train, new_states, new_actions)
+	train_loader, states, actions = create_online_dataset(states, actions, new_states, new_actions, N_train)
 
 	print('Done')
 
 	print('Training model on online dataset')
 
 	new_loss,_ = online_train_model()
-	
