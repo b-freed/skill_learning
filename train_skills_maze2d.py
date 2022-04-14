@@ -14,6 +14,8 @@ import d4rl
 import ipdb
 import h5py
 from utils import chunks
+import os
+import config
 
 def train(model,model_optimizer):
 	
@@ -76,20 +78,29 @@ def test(model):
 # env_name = 'antmaze-medium-diverse-v0'  
 # env_name = 'maze2d-large-v1'
 env_name = 'antmaze-large-diverse-v0'
-env = gym.make(env_name)
 
-dataset_file = None
+dataset_file = config.dataset_file
 #dataset_file = "datasets/maze2d-umaze-v1.hdf5"
 # dataset_file = 'datasets/maze2d-large-v1-noisy-2.hdf5'
 
 if dataset_file is None:
+	env = gym.make(env_name)
 	dataset = d4rl.qlearning_dataset(env) #env.get_dataset()
 else:
-	dataset = d4rl.qlearning_dataset(env,h5py.File(dataset_file, "r"))  # Not sure if this will work
+	print('LOADING DATASET FROM FILE!!!')
+	data_path = os.path.join(config.data_dir,dataset_file)
+	if '.npz' in dataset_file:
+		# load numpy file
+		pass # TODO
+	elif '.hdf5' in dataset_file:
+		env = gym.make(env_name)
+		dataset = d4rl.qlearning_dataset(env,h5py.File(dataset_file, "r"))  # Not sure if this will work
 
+	else:
+		print('Unrecognized data format!!!')
+		assert False
 
 batch_size = 100
-
 h_dim = 256
 z_dim = 256
 lr = 5e-5
@@ -217,6 +228,7 @@ test_loader = DataLoader(
 	num_workers=0)
 
 min_test_loss = 10**10
+min_test_s_T_loss = 10**10
 for i in range(n_epochs):
 	loss, s_T_loss, a_loss, kl_loss, s_T_ent = train(model,model_optimizer)
 	
@@ -266,5 +278,13 @@ for i in range(n_epochs):
 		
 			
 		checkpoint_path = 'checkpoints/'+ filename + '_best.pth'
+		torch.save({'model_state_dict': model.state_dict(),
+			    'model_optimizer_state_dict': model_optimizer.state_dict()}, checkpoint_path)
+
+	
+	if test_s_T_loss < min_test_s_T_loss:
+		min_test_s_T_loss = test_s_T_loss
+
+		checkpoint_path = os.path.join(config.ckpt_dir,filename+'_best_sT.pth')
 		torch.save({'model_state_dict': model.state_dict(),
 			    'model_optimizer_state_dict': model_optimizer.state_dict()}, checkpoint_path)
