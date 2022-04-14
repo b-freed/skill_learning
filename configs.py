@@ -19,8 +19,11 @@ class HyperParams:
         self.temperature = 1.0 # gumbel-softmax temperature coeff
         self.max_sig = None
         self.fixed_sig = None
-        self.H_min = 10
-        self.H_max = 12
+        self.H_min = 5
+        self.H_max = 20
+        self.min_skill_len = None
+        self.max_skill_len = 15
+        self.max_skills_per_seq = 2
         self.stride = 1
         self.n_epochs = 50000
         self.test_split = .2

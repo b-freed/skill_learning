@@ -1064,7 +1064,7 @@ class SkillModelStateDependentPrior(nn.Module):
 
 
 class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior):
-    def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal',state_dec_stop_grad=False,beta=1.0,alpha=1.0,gamma=1.0,temperature=1.0,max_sig=None,fixed_sig=None,ent_pen=0,encoder_type='state_action_sequence',state_decoder_type='mlp'):
+    def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal',state_dec_stop_grad=False,beta=1.0,alpha=1.0,gamma=1.0,temperature=1.0,max_sig=None,fixed_sig=None,ent_pen=0,encoder_type='state_action_sequence',state_decoder_type='mlp', min_skill_len=None, max_skill_len=None, max_skills_per_seq=None):
         super(SkillModelStateDependentPriorAutoTermination, self).__init__(state_dim,a_dim,z_dim,h_dim,a_dist,state_dec_stop_grad,beta,alpha,max_sig,fixed_sig,ent_pen,encoder_type,state_decoder_type)
         if encoder_type == 'state_action_sequence':
             self.encoder = EncoderAutoTermination(state_dim,a_dim,z_dim,h_dim)
@@ -1072,6 +1072,9 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
             raise NotImplementedError
         self.gamma = gamma # skill length penalty
         self.temperature = temperature # gumbel-softmax temperature
+        self.min_skill_len = min_skill_len
+        self.max_skill_len = max_skill_len
+        self.max_skills_per_seq = max_skills_per_seq
 
     def forward(self, states, actions, skills):
         
@@ -1135,7 +1138,17 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
 
         return  loss_tot, s_T_loss, a_loss, kl_loss, s_T_ent
 
-    def update_skills(self, z_prev, z_updated, b_mean, b_sig, greedy=False):
+    def update_skills(self, z_prev, z_updated, b_mean, b_sig, running_l, executed_skills, greedy=False):
+        """
+        Prior:
+            p(b_t|z_{1:t-1}) = \begin{cases}
+                0, & \text{if} \; n(z_t) \geq N_{max} \\
+                1, & \text{elseif} \; l(z_t) \geq T_{max} \\
+                \sigma(f_{\theta}(s_{1:t}, z_{1:t-1})), & \text{otherwise}
+            \end{cases}
+        Copy -> keep prev skill
+        Read -> update skill
+        """
         # Assume you already get a batch of sampled skills
 
         # sample b from b_dist
@@ -1144,42 +1157,24 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
         else:
             b_probabilities = self.reparameterize(b_mean, b_sig)
 
-        # TODO: softmax on b probabilities required?
-
         b, _ = utils.boundary_sampler(b_probabilities.squeeze(), temperature=self.temperature)
-        read, copy = b[:, 0].unsqueeze(dim=-1).unsqueeze(dim=-1), b[:, 1].unsqueeze(dim=-1).unsqueeze(dim=-1)
+
+        # Now, use inductive bias / prior
+        over_max_len_idxs = running_l >  self.max_skill_len
+        over_max_n_skills_idxs = executed_skills >= self.max_skills_per_seq
+
+        # overwrite b with prior
+        b[over_max_len_idxs, 0] = 0.0
+        b[over_max_len_idxs, 1] = 1.0 # if skill_len > max_skill_len, update
+        b[over_max_n_skills_idxs, 0] = 1.0 # if total executed skills > N max skills allowed, don't update
+        b[over_max_n_skills_idxs, 1] = 0.0
+
+        copy, read = b[:, 0].unsqueeze(dim=-1).unsqueeze(dim=-1), b[:, 1].unsqueeze(dim=-1).unsqueeze(dim=-1)
+
+        z = (copy * z_prev) + (read.clone() * z_updated.clone()) # TODO: will (most likely) make it slow
         # only update last entry for skill and b
-        # z_ = z_prev * b[:, 0].unsqueeze(dim=-1)
-        z = read * z_prev + copy * z_updated.detach() # TODO: will (most likely) case issues
-        # ipdb.set_trace()
         return z, b
 
-    # def decide_termination(self, b_mean, b_sig, b_thresh=0.5, greedy=False):
-    #     ''' Differentiable approach for selecting termination (Gumbal softmax)
-    #     INPUTS:
-    #         b_mean: batch_size x 1 x 1 tensor indicating mean of belief
-    #         b_sig:  batch_size x 1 x 1 tensor indicating standard deviation of belief
-    #     OUTPUTS:
-    #         termination: batch_size x 1 tensor indicating whether to terminate
-    #     '''
-    #     b = b_mean # TODO: directly apply softmax over mean? 
-    #     print(b)
-    #     b_t = torch.nn.functional.gumbel_softmax(b)
-    #     b = torch.argmax(b_t, dim=-1)
-    #     return b
-    # def decide_termination(self, b_mean, b_sig, b_thresh=0.5, greedy=False):
-    #     '''
-    #     INPUTS:
-    #         b_mean: batch_size x 1 x 1 tensor indicating mean of belief
-    #         b_sig:  batch_size x 1 x 1 tensor indicating standard deviation of belief
-    #     OUTPUTS:
-    #         termination: batch_size x 1 tensor indicating whether to terminate
-    #     '''
-    #     eps = torch.normal(torch.zeros(b_mean.size()).to(os.environ.get('_DEVICE', 'cpu')), torch.ones(b_mean.size()).to(os.environ.get('_DEVICE', 'cpu')))
-    #     b_t = b_mean + b_sig*eps
-    #     if greedy: b_t = b_mean
-    #     termination = torch.sigmoid(b_t) > b_thresh
-    #     return termination
 
 class SkillModelTerminalStateDependentPrior(SkillModelStateDependentPrior):
     def __init__(self,state_dim,a_dim,z_dim,h_dim,state_dec_stop_grad=False,beta=1.0,alpha=1.0,fixed_sig=None):

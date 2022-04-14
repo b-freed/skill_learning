@@ -1,3 +1,5 @@
+import os 
+os.environ['D4RL_SUPPRESS_IMPORT_ERROR'] = '1'
 from comet_ml import Experiment
 import numpy as np
 import torch
@@ -45,8 +47,10 @@ def run_iteration(model, initial_skill, model_optimizer=None, train_mode=False):
 		z_t = model.reparameterize(z_post_means, z_post_sigs)
 		z_t_history = z_t.repeat(1, hp.H_min, 1)
 		z_t_p = z_t_history[:, -1:, :].detach().clone()
+		executed_skills = torch.ones(hp.batch_size)
+		running_l = torch.ones(hp.batch_size)
 
-		z_t, b_t = model.update_skills(z_t_p, z_t, b_post_means, b_post_sigs)
+		z_t, b_t = model.update_skills(z_t_p, z_t, b_post_means, b_post_sigs, running_l, executed_skills)
 		z_t_history = torch.cat([z_t_history, z_t], dim=1)
 		sl_tracker = b_t[:, 0] # loss for sticking w/ skills 
 
@@ -75,9 +79,14 @@ def run_iteration(model, initial_skill, model_optimizer=None, train_mode=False):
 			z_t = model.reparameterize(z_post_means, z_post_sigs)
 			z_t_p = z_t_history[:, -1:, :].detach().clone()
 
-			z_t, b_t = model.update_skills(z_t_p, z_t, b_post_means, b_post_sigs)
+			z_t, b_t = model.update_skills(z_t_p, z_t, b_post_means, b_post_sigs, running_l, executed_skills)
 			z_t_history = torch.cat([z_t_history, z_t], dim=1)
 			sl_tracker += b_t[:, 0] # loss for sticking w/ skills 
+			# update running_l and executed_skills
+			update = b_t[:, 1]
+			executed_skills[update.bool()] += 1
+			running_l[update.bool()] = 1 
+			running_l[~update.bool()] += 1
 
 		if train_mode:	
 			model_optimizer.zero_grad()
@@ -139,7 +148,8 @@ if __name__ == '__main__':
 		model = SkillModelStateDependentPriorAutoTermination(state_dim, a_dim, hp.z_dim, hp.h_dim, \
 					a_dist=hp.a_dist, state_dec_stop_grad=hp.state_dec_stop_grad, beta=hp.beta, alpha=hp.alpha, \
 					temperature=hp.temperature, gamma=hp.gamma, max_sig=hp.max_sig, fixed_sig=hp.fixed_sig, \
-					ent_pen=hp.ent_pen, encoder_type=hp.encoder_type, state_decoder_type=hp.state_decoder_type).to(hp.device)
+					ent_pen=hp.ent_pen, encoder_type=hp.encoder_type, state_decoder_type=hp.state_decoder_type, \
+					min_skill_len=hp.min_skill_len, max_skill_len=hp.max_skill_len, max_skills_per_seq=hp.max_skills_per_seq).to(hp.device)
 	else:
 		model = SkillModel(state_dim, a_dim, hp.z_dim, hp.h_dim, a_dist=hp.a_dist).to(hp.device)
 		
