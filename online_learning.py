@@ -27,7 +27,7 @@ from math import pi
 from cem import cem, cem_variable_length
 from utils import make_gif,make_video
 
-def offline_training():
+def train_model():
     
     for i in range(n_epochs):
         loss, s_T_loss, a_loss, kl_loss, s_T_ent = train(model,model_optimizer)
@@ -83,44 +83,6 @@ def offline_training():
     
     return loss, test_loss, checkpoint_path
 
-def online_train_model():
-    
-    for i in range(n_epochs):
-        new_loss, new_s_T_loss, new_a_loss, new_kl_loss, new_s_T_ent = train(model,model_optimizer)
-        
-        print("--------TRAIN---------")
-	
-		print('new_loss: ', new_loss)
-		print('new_s_T_loss: ', new_s_T_loss)
-		print('new_a_loss: ', new_a_loss)
-		print('new_kl_loss: ', new_kl_loss)
-		print('new_s_T_ent: ', new_s_T_ent)
-		print(i)
-		experiment.log_metric("new_loss", new_loss, step=i)
-		experiment.log_metric("new_s_T_loss", new_s_T_loss, step=i)
-		experiment.log_metric("new_a_loss", new_a_loss, step=i)
-		experiment.log_metric("new_kl_loss", new_kl_loss, step=i)
-		experiment.log_metric("new_s_T_ent", new_s_T_ent, step=i)
-
-        if i % 10 == 0:
-            
-                
-            checkpoint_path = 'checkpoints/'+ filename + '.pth'
-            torch.save({
-                                'model_state_dict': model.state_dict(),
-                                'model_optimizer_state_dict': model_optimizer.state_dict(),
-                                }, checkpoint_path)
-        if test_loss < min_test_loss:
-            min_test_loss = test_loss
-
-            
-                
-            checkpoint_path = 'checkpoints/'+ filename + '_best.pth'
-            torch.save({'model_state_dict': model.state_dict(),
-                    'model_optimizer_state_dict': model_optimizer.state_dict()}, checkpoint_path)
-    
-    return new_loss, checkpoint_path
-
 def convert_epsilon_to_z(epsilon,s0,model):
 
 	s = s0
@@ -134,133 +96,6 @@ def convert_epsilon_to_z(epsilon,s0,model):
 		s = s_mean
 
 	return torch.cat(z_seq,dim=1)
-
-def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq,variable_length,ep_num):
-	
-	s0 = env.reset()
-	state = s0
-	plt.scatter(s0[0],s0[1], label='Initial States')
-	plt.scatter(goals[:,:,0].detach().cpu().numpy(),goals[:,:,1].detach().cpu().numpy(), label='Goals')
-	plt.figure()
-	# for i in range(skill_seq_len):
-	# ipdb.set_trace()
-	states = [s0]
-	frames = []
-	n=0
-	timeout = False
-	# success = True
-	l = skill_seq_len
-	while np.sum((state[:2] - goals.flatten().detach().cpu().numpy()[:2])**2) > 1.0:
-	# for i in range(2):
-		state_torch = torch.cat(batch_size*[torch.tensor(state,dtype=torch.float32).cuda().reshape((1,1,-1))])
-		
-		if variable_length:
-			cost_fn = lambda skill_seq,lengths: skill_model.get_expected_cost_variable_length(state_torch, skill_seq, lengths, goal_seq, use_epsilons=use_epsilon)
-			skill_seq_mean = torch.zeros((skill_seq_len,z_dim),device=device)
-			skill_seq_std  = torch.ones( (skill_seq_len,z_dim),device=device)
-			p_lengths = (1/(skill_seq_len)) * torch.ones(skill_seq_len+1,device=device)
-			p_lengths[0] = 0.0
-		
-		
-			skill_seq_mean,skill_seq_std = cem_variable_length(skill_seq_mean,skill_seq_std,p_lengths,cost_fn,batch_size,keep_frac,n_iters,max_ep=max_ep,l2_pen=cem_l2_pen)
-
-		else:
-			cost_fn = lambda skill_seq: skill_model.get_expected_cost_for_cem(state_torch, skill_seq, goal_seq, use_epsilons=use_epsilon,length_cost=plan_length_cost)
-			if n == 0:
-				skill_seq_mean = torch.zeros((skill_seq_len,z_dim),device=device)
-				skill_seq_std  = torch.ones( (skill_seq_len,z_dim),device=device)
-			else:
-				skill_seq_mean = torch.zeros((skill_seq_len,z_dim),device=device)
-				skill_seq_std  = torch.ones( (skill_seq_len,z_dim),device=device)
-			
-				# skill_seq_mean = torch.cat([skill_seq_mean[1:,:],torch.zeros((1,z_dim),device=device)])
-				# skill_seq_std  = torch.cat([skill_seq_std[1:,:], torch.ones((1,z_dim),device=device)])
-		
-			# 								           x_mean,        x_std,cost_fn,  pop_size,frac_keep,n_iters,l2_pen
-			skill_seq_mean,skill_seq_std = cem(skill_seq_mean,skill_seq_std,cost_fn,batch_size,keep_frac,n_iters,l2_pen=cem_l2_pen)
-
-
-
-		if skill_seq_mean.shape[0] == 0:
-
-			print('OUT OF SKILLS!!!')
-			# out_of_skills = True
-			# break
-		else:
-			skill = skill_seq_mean[0,:].unsqueeze(0)
-
-			
-		if use_epsilon:
-			mu_z, sigma_z = model.prior(torch.tensor(state,dtype=torch.float32).cuda().reshape(1,1,-1))
-			z = mu_z + sigma_z*skill
-		else:
-			z = skill
-		print('executing skill')
-		for j in range(replan_freq):
-		# for j in range(100):
-			if render:
-				frames.append(env.render(mode='rgb_array'))
-			# env.render()
-			# vid.capture_frame()
-			action = model.decoder.ll_policy.numpy_policy(state,z)
-			state,_,done,_ = env.step(action)
-			# print('state: ', state)
-			states.append(state)
-			
-			# skill_seq_states.append(state)
-			# plt.scatter(state[0],state[1], label='Trajectory',c='b')
-			if np.sum((state[:2] - goals.flatten().detach().cpu().numpy()[:2])**2) <= 1.0:
-				break
-			if done:
-				print('DOOOOOOOOONE!!!!!!!!!!!!!!')
-				print('state: ', state)
-			# 	print('n: ',n)
-				# break
-		n += 1
-
-		
-	
-
-		fig = plt.figure()
-		# plt.imshow(background_img, extent = [-8,28,-8,28])
-		plt.scatter(np.stack(states)[:,0],np.stack(states)[:,1])
-		plt.scatter(goals.flatten().detach().cpu().numpy()[0],goals.flatten().detach().cpu().numpy()[1])
-		plt.axis('equal')
-		plt.savefig('ant_iterative_replanning_actual_states_niters'+str(n_iters)+'_l2pen_'+str(cem_l2_pen)+'.png')
-	
-		if n > max_replans*H/replan_freq:
-			print('TIMEOUT!!!!!!!!!!!!!!')
-			timeout = True
-			break 
-	
-
-
-		# plt.savefig('ant_skills_iterative_replanning')
-	# ipdb.set_trace()
-
-
-	# save_frames_as_gif(frames)
-	# for i,f in enumerate(frames):
-	# 	plt.figure()
-	# 	plt.imshow(f)
-	# 	plt.savefig('ant'+str())
-	env.close()
-	# make_gif(frames,name='ant')
-	if render or timeout:
-		print('MAKING VIDEO!')
-		# if timeout: 
-		# 	print('making timout vid')
-		# 	make_video(frames,name='failed_ant_'+str(j))
-		# else:
-		# 	make_video(frames,name='ant')
-		make_video(frames,name='ant'+str(ep_num))
-		# make_video(frames,name='yant')
-		# make_video(frames,name='yant')
-
-
-	states = np.stack(states)
-	return states, np.min(np.sum((states[:,:2] - goals.flatten().detach().cpu().numpy()[:2])**2,axis=-1))
-
 
 def run_skill_seq(skill_seq,env,s0,model,use_epsilon):
 	'''
@@ -375,7 +210,7 @@ def plan_skills_online():
 
 	min_dists_list = []
 	total_rewards = []
-	for j in range(100):
+	for j in range(plan_eps):
 		state = env.reset()
 		goal_loc = goal_state[:2]
 		min_dist = 10**10
@@ -453,6 +288,8 @@ max_replans = 200
 plan_length_cost = 0.0
 init_state_dependent = True
 iterations = 100
+plan_eps = 100
+load_model = True
 
 states = dataset['observations']
 next_states = dataset['next_observations']
@@ -550,13 +387,14 @@ for iteration in range(iterations):
 
 	print('--------Offline training starting----------')
 
-	train_loss, test_loss, PATH = offline_training()
+	train_loss, test_loss, PATH = train_model()
 
 	print('--------Offline training done----------')
 
 	checkpoint = torch.load(PATH)
 	skill_model = model
 	skill_model.load_state_dict(checkpoint['model_state_dict'])
+
 
 	print('------Planning------')
 
@@ -573,4 +411,22 @@ for iteration in range(iterations):
 
 	print('Training model on online dataset')
 
-	new_loss,_ = online_train_model()
+	if load_model:
+		pass
+	else:
+		if term_state_dependent_prior:
+			model = SkillModelTerminalStateDependentPrior(state_dim,a_dim,z_dim,h_dim,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,fixed_sig=fixed_sig).cuda()
+		elif state_dependent_prior:
+			model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,max_sig=max_sig,fixed_sig=fixed_sig,ent_pen=ent_pen,encoder_type=encoder_type,state_decoder_type=state_decoder_type).cuda()
+
+		else:
+			model = SkillModel(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist).cuda()
+			
+		model_optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
+
+
+	new_train_loss, new_test_loss,_ = train_model()
+
+	print('New training loss:', new_test_loss)
+	print('New test loss:', new_test_loss)
+	print('Iteration:', iteration)
