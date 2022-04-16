@@ -179,7 +179,7 @@ if __name__ == '__main__':
 	for i in range(hp.n_epochs):
 		loss, s_T_loss, a_loss, kl_loss, s_T_ent, sl_loss = run_iteration(model, initial_skill, model_optimizer=model_optimizer, train_mode=True)
 		
-		print(f'Iteration: {i}')
+		print(f'Exp: {hp.exp_name} | Iter: {i}')
 		print("--------TRAIN---------")
 		
 		print('loss: ', loss)
