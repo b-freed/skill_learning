@@ -81,7 +81,7 @@ def train_model():
             torch.save({'model_state_dict': model.state_dict(),
                     'model_optimizer_state_dict': model_optimizer.state_dict()}, checkpoint_path)
     
-    return loss, test_loss, checkpoint_path
+    return loss, test_loss, checkpoint_path, min_test_loss
 
 def convert_epsilon_to_z(epsilon,s0,model):
 
@@ -175,23 +175,37 @@ def run_skill_seq(skill_seq,env,s0,model,use_epsilon):
 
 	return state,states, actions
 
-def create_online_dataset(dataset_states, dataset_actions, new_states, new_actions, N_train):
+def create_online_dataset(dataset_states, dataset_actions, new_states, new_actions, test_split):
 
 	dataset_states.append(new_states)
 	dataset_actions.append(new_actions)
 
+	N = dataset_states.shape[0]
+
+	N_train = int((1-test_split)*N)
+	N_test = N - N_train
+
 	states_train  = dataset_states[:N_train,:]
 	actions_train = dataset_actions[:N_train,:]
 
+	states_test  = states[N_train:,:]
+	actions_test = actions[N_train:,:]
+
 	obs_chunks_train, action_chunks_train = chunks_online(states_train, actions_train, H, stride)
+	obs_chunks_test,  action_chunks_test  = chunks_online(states_test, actions_test,  H, stride)
 
 	inputs_train = torch.cat([obs_chunks_train, action_chunks_train],dim=-1)
+	inputs_test  = torch.cat([obs_chunks_test,  action_chunks_test], dim=-1)
 
 	train_loader = DataLoader(inputs_train,
 								batch_size=batch_size,
 								num_workers=0)
 
-	return train_loader, dataset_states, dataset_actions
+	test_loader = DataLoader(inputs_test,
+							batch_size=batch_size,
+							num_workers=0)
+
+	return train_loader, test_loader, dataset_states, dataset_actions
 
 def plan_skills_online():
 
@@ -290,6 +304,7 @@ init_state_dependent = True
 iterations = 100
 plan_eps = 100
 load_model = True
+min_test_loss = 10**10
 
 states = dataset['observations']
 next_states = dataset['next_observations']
@@ -341,53 +356,53 @@ experiment.log_parameters({'lr':lr,
 							'state_decoder_type':state_decoder_type})
 experiment.add_tag('online learning')
 
+print('##### Making dataset for training model #####')
+
+N = states.shape[0]
+
+N_train = int((1-test_split)*N)
+N_test = N - N_train
+
+states_train  = states[:N_train,:]
+next_states_train = next_states[:N_train,:]
+actions_train = actions[:N_train,:]
+
+
+states_test  = states[N_train:,:]
+next_states_test = next_states[N_train:,:]
+actions_test = actions[N_train:,:]
+
+assert states_train.shape[0] == N_train
+assert states_test.shape[0] == N_test
+													#  obs,next_obs,actions,H,stride
+obs_chunks_train, action_chunks_train = chunks(states_train, next_states_train, actions_train, H, stride)
+
+print('states_test.shape: ',states_test.shape)
+print('MAKIN TEST SET!!!')
+
+obs_chunks_test,  action_chunks_test  = chunks(states_test,  next_states_test,  actions_test,  H, stride)
+
+
+inputs_train = torch.cat([obs_chunks_train, action_chunks_train],dim=-1)
+inputs_test  = torch.cat([obs_chunks_test,  action_chunks_test], dim=-1)
+
+train_loader = DataLoader(
+	inputs_train,
+	batch_size=batch_size,
+	num_workers=0)  # not really sure about num_workers...
+
+test_loader = DataLoader(
+	inputs_test,
+	batch_size=batch_size,
+	num_workers=0)
+
+
 for iteration in range(iterations):
 
-	print('##### Making offline dataset for training model #####')
-
-	N = states.shape[0]
-
-	N_train = int((1-test_split)*N)
-	N_test = N - N_train
-	
-	states_train  = states[:N_train,:]
-	next_states_train = next_states[:N_train,:]
-	actions_train = actions[:N_train,:]
-
-
-	states_test  = states[N_train:,:]
-	next_states_test = next_states[N_train:,:]
-	actions_test = actions[N_train:,:]
-
-	assert states_train.shape[0] == N_train
-	assert states_test.shape[0] == N_test
-														#  obs,next_obs,actions,H,stride
-	obs_chunks_train, action_chunks_train = chunks(states_train, next_states_train, actions_train, H, stride)
-
-	print('states_test.shape: ',states_test.shape)
-	print('MAKIN TEST SET!!!')
-
-	obs_chunks_test,  action_chunks_test  = chunks(states_test,  next_states_test,  actions_test,  H, stride)
-
-
-	inputs_train = torch.cat([obs_chunks_train, action_chunks_train],dim=-1)
-	inputs_test  = torch.cat([obs_chunks_test,  action_chunks_test], dim=-1)
-
-	train_loader = DataLoader(
-		inputs_train,
-		batch_size=batch_size,
-		num_workers=0)  # not really sure about num_workers...
-
-	test_loader = DataLoader(
-		inputs_test,
-		batch_size=batch_size,
-		num_workers=0)
-
-	min_test_loss = 10**10
 
 	print('--------Offline training starting----------')
 
-	train_loss, test_loss, PATH = train_model()
+	train_loss, test_loss, PATH, min_test_loss = train_model()
 
 	print('--------Offline training done----------')
 
@@ -400,12 +415,11 @@ for iteration in range(iterations):
 
 	new_states, new_actions, min_dists_list, total_rewards = plan_skills_online()
 
-
 	print('------Planning done------')
 
-	print('Creating new dataset with states from planning')
+	print('Appending dataset with states from planning')
 
-	train_loader, states, actions = create_online_dataset(states, actions, new_states, new_actions, N_train)
+	train_loader, test_loader, states, actions = create_online_dataset(states, actions, new_states, new_actions, test_split)
 
 	print('Done')
 
@@ -425,7 +439,7 @@ for iteration in range(iterations):
 		model_optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
 
 
-	new_train_loss, new_test_loss,_ = train_model()
+	new_train_loss, new_test_loss,_,min_test_loss = train_model()
 
 	print('New training loss:', new_test_loss)
 	print('New test loss:', new_test_loss)
