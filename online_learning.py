@@ -175,39 +175,22 @@ def run_skill_seq(skill_seq,env,s0,model,use_epsilon):
 
 	return state,states, actions
 
-def create_online_dataset(dataset_states, dataset_actions, new_states, new_actions, test_split):
+def create_online_dataset(dataset_states, dataset_actions, new_states, new_actions):
 
 	dataset_states.append(new_states)
 	dataset_actions.append(new_actions)
 
-	N = dataset_states.shape[0]
+	obs_chunks, action_chunks = chunks_online(dataset_states, dataset_actions, H, stride)
 
-	N_train = int((1-test_split)*N)
-	N_test = N - N_train
+	inputs = torch.cat([obs_chunks, action_chunks],dim=-1)
 
-	states_train  = dataset_states[:N_train,:]
-	actions_train = dataset_actions[:N_train,:]
-
-	states_test  = states[N_train:,:]
-	actions_test = actions[N_train:,:]
-
-	obs_chunks_train, action_chunks_train = chunks_online(states_train, actions_train, H, stride)
-	obs_chunks_test,  action_chunks_test  = chunks_online(states_test, actions_test,  H, stride)
-
-	inputs_train = torch.cat([obs_chunks_train, action_chunks_train],dim=-1)
-	inputs_test  = torch.cat([obs_chunks_test,  action_chunks_test], dim=-1)
-
-	train_loader = DataLoader(inputs_train,
+	data_loader = DataLoader(inputs,
 								batch_size=batch_size,
 								num_workers=0)
 
-	test_loader = DataLoader(inputs_test,
-							batch_size=batch_size,
-							num_workers=0)
+	return data_loader, dataset_states, dataset_actions
 
-	return train_loader, test_loader, dataset_states, dataset_actions
-
-def plan_skills_online():
+def plan_skills_online(plan_eps):
 
 	s0_torch = torch.cat([torch.tensor(env.reset(),dtype=torch.float32).cuda().reshape(1,1,-1) for _ in range(batch_size)])
 
@@ -302,9 +285,10 @@ max_replans = 200
 plan_length_cost = 0.0
 init_state_dependent = True
 iterations = 100
-plan_eps = 100
 load_model = True
 min_test_loss = 10**10
+test_data_eps = 100
+train_data_eps = 20
 
 states = dataset['observations']
 next_states = dataset['next_observations']
@@ -410,16 +394,29 @@ for iteration in range(iterations):
 	skill_model = model
 	skill_model.load_state_dict(checkpoint['model_state_dict'])
 
+	print('###### Episodes for training data ######')
 
 	print('------Planning------')
 
-	new_states, new_actions, min_dists_list, total_rewards = plan_skills_online()
+	new_states_train, new_actions_train, min_dists_list_train, total_rewards_train = plan_skills_online(train_data_eps)
 
 	print('------Planning done------')
 
 	print('Appending dataset with states from planning')
 
-	train_loader, test_loader, states, actions = create_online_dataset(states, actions, new_states, new_actions, test_split)
+	train_loader, states_train, actions_train = create_online_dataset(states_train, actions_train, new_states_train, new_actions_train)
+
+	print('Done')
+
+	print('###### Episodes for test data ######')
+
+	new_states_test, new_actions_test, min_dists_list_test, total_rewards_test = plan_skills_online(test_data_eps)
+
+	print('------Planning done------')
+
+	print('Appending dataset with states from planning')
+
+	test_loader, states_test, actions_test = create_online_dataset(states_test, actions_test, new_states_test, new_actions_test)
 
 	print('Done')
 
