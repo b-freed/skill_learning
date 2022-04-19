@@ -75,24 +75,28 @@ if __name__ == '__main__':
 	episodes = 20
 	wd = .01
 	state_dependent_prior = True
+	a_dist = 'normal'
+	max_sig = None
+	fixed_sig = None
 
 
 	# if not state_dependent_prior:
 	# 	filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
 	# else:
 	# 	filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
-	filename = 'Franka_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
+	# filename = 'Franka_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
+	filename = 
 	PATH = 'checkpoints/'+filename
 	
 	
 
 	if not state_dependent_prior:
-		skill_model_sdp = SkillModel(state_dim, a_dim, z_dim, h_dim).cuda()
+		skill_model = SkillModel(state_dim, a_dim, z_dim, h_dim).cuda()
 	else:
-		skill_model_sdp = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim).cuda()
+		skill_model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim a_dist=a_dist,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,max_sig=max_sig,fixed_sig=fixed_sig).cuda()
 		
 	checkpoint = torch.load(PATH)
-	skill_model_sdp.load_state_dict(checkpoint['model_state_dict'])
+	skill_model.load_state_dict(checkpoint['model_state_dict'])
 	# ll_policy = skill_model_sdp.decoder.ll_policy
 
 
