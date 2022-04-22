@@ -177,8 +177,8 @@ def run_skill_seq(skill_seq,env,s0,model,use_epsilon):
 
 def create_online_dataset(dataset_states, dataset_actions, new_states, new_actions):
 
-	dataset_states.append(new_states)
-	dataset_actions.append(new_actions)
+	dataset_states = np.concatenate((dataset_states, new_states), axis=0)
+	dataset_actions = np.concatenate((dataset_actions, new_actions), axis=0)
 
 	obs_chunks, action_chunks = chunks_online(dataset_states, dataset_actions, H, stride)
 
@@ -302,20 +302,35 @@ a_dim = actions.shape[1]
 
 experiment = Experiment(api_key = '9mxH2vYX20hn9laEr0KtHLjAa', project_name = 'skill-learning')
 
-if term_state_dependent_prior:
-	model = SkillModelTerminalStateDependentPrior(state_dim,a_dim,z_dim,h_dim,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,fixed_sig=fixed_sig).cuda()
-elif state_dependent_prior:
-	model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,max_sig=max_sig,fixed_sig=fixed_sig,ent_pen=ent_pen,encoder_type=encoder_type,state_decoder_type=state_decoder_type).cuda()
+if load_model:
+	filename = env_name+'_enc_type_'+str(encoder_type)+'state_dec_'+str(state_decoder_type)+'_H_'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_sg_'+str(state_dec_stop_grad)+'_max_sig_'+str(max_sig)+'_fixed_sig_'+str(fixed_sig)+'_ent_pen_'+str(ent_pen)+'_online_log'
+
+	if term_state_dependent_prior:
+		filename = env_name+'_tsdp'+'_H'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_sg_'+str(state_dec_stop_grad)+'_max_sig_'+str(max_sig)+'_fixed_sig_'+str(fixed_sig)+'_online_log'
+		model = SkillModelTerminalStateDependentPrior(state_dim,a_dim,z_dim,h_dim,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,fixed_sig=fixed_sig).cuda()
+
+	elif state_dependent_prior:
+		model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,max_sig=max_sig,fixed_sig=fixed_sig,ent_pen=ent_pen,encoder_type=encoder_type,state_decoder_type=state_decoder_type).cuda()
+	
+	else:
+		model = SkillModel(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist).cuda()
+	
+	PATH = 'checkpoints/'+ filename + '_best.pth'
+	checkpoint = torch.load(PATH)
+	model.load_state_dict(checkpoint['model_state_dict'])
+	model_optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
+
 
 else:
-	model = SkillModel(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist).cuda()
-	
-model_optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
+	if term_state_dependent_prior:
+		model = SkillModelTerminalStateDependentPrior(state_dim,a_dim,z_dim,h_dim,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,fixed_sig=fixed_sig).cuda()
+	elif state_dependent_prior:
+		model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,max_sig=max_sig,fixed_sig=fixed_sig,ent_pen=ent_pen,encoder_type=encoder_type,state_decoder_type=state_decoder_type).cuda()
 
-filename = env_name+'_enc_type_'+str(encoder_type)+'state_dec_'+str(state_decoder_type)+'_H_'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_sg_'+str(state_dec_stop_grad)+'_max_sig_'+str(max_sig)+'_fixed_sig_'+str(fixed_sig)+'_ent_pen_'+str(ent_pen)+'_online_log'
-
-if term_state_dependent_prior:
-	filename = env_name+'_tsdp'+'_H'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_sg_'+str(state_dec_stop_grad)+'_max_sig_'+str(max_sig)+'_fixed_sig_'+str(fixed_sig)+'_online_log'
+	else:
+		model = SkillModel(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist).cuda()
+		
+	model_optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
 
 
 experiment.log_parameters({'lr':lr,
@@ -421,20 +436,6 @@ for iteration in range(iterations):
 	print('Done')
 
 	print('Training model on online dataset')
-
-	if load_model:
-		pass
-	else:
-		if term_state_dependent_prior:
-			model = SkillModelTerminalStateDependentPrior(state_dim,a_dim,z_dim,h_dim,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,fixed_sig=fixed_sig).cuda()
-		elif state_dependent_prior:
-			model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,max_sig=max_sig,fixed_sig=fixed_sig,ent_pen=ent_pen,encoder_type=encoder_type,state_decoder_type=state_decoder_type).cuda()
-
-		else:
-			model = SkillModel(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist).cuda()
-			
-		model_optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
-
 
 	new_train_loss, new_test_loss,_,min_test_loss = train_model()
 
