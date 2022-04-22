@@ -19,7 +19,7 @@ class AbstractDynamics(nn.Module):
 	(so similar to regular dynamics model, but in skill space and also temporally extended)
 	See Encoder and Decoder for more description
 	'''
-	def __init__(self,state_dim,z_dim,h_dim,init_state_dependent=True):
+	def __init__(self,state_dim,z_dim,h_dim,init_state_dependent=True,per_element_sigma=True):
 
 		super(AbstractDynamics,self).__init__()
 		
@@ -31,7 +31,13 @@ class AbstractDynamics(nn.Module):
 		#self.mean_layer = nn.Linear(h_dim,state_dim)
 		self.mean_layer = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,state_dim))
 		#self.sig_layer  = nn.Sequential(nn.Linear(h_dim,state_dim),nn.Softplus())
-		self.sig_layer  = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,state_dim),nn.Softplus())
+		if per_element_sigma:
+			self.sig_layer  = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,state_dim),nn.Softplus())
+		else:
+			self.sig_layer = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,1),nn.Softplus())
+
+		self.state_dim = state_dim
+		self.per_element_sigma = per_element_sigma
 
 	def forward(self,s0,z):
 
@@ -54,6 +60,11 @@ class AbstractDynamics(nn.Module):
 		# get mean and stand dev of action distribution
 		sT_mean = self.mean_layer(feats)
 		sT_sig  = self.sig_layer(feats)
+
+		if not self.per_element_sigma:
+			# sT_sig has shape batch_size x 1 x 1
+			# tile sT_sig along final dimension, return it
+			sT_sig = torch.cat(self.state_dim*[sT_sig],dim=-1)
 
 		return sT_mean,sT_sig
 
@@ -523,7 +534,7 @@ class Decoder(nn.Module):
 	-embed z
 	-Pass into fully connected network to get "state T features"
 	'''
-	def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist,state_dec_stop_grad, max_sig, fixed_sig, state_decoder_type, init_state_dependent):
+	def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist,state_dec_stop_grad, max_sig, fixed_sig, state_decoder_type, init_state_dependent, per_element_sigma):
 
 		super(Decoder,self).__init__()
 		
@@ -532,7 +543,7 @@ class Decoder(nn.Module):
 		self.z_dim = z_dim
 
 		if state_decoder_type == 'mlp':
-			self.abstract_dynamics = AbstractDynamics(state_dim,z_dim,h_dim,init_state_dependent=init_state_dependent)
+			self.abstract_dynamics = AbstractDynamics(state_dim,z_dim,h_dim,init_state_dependent=init_state_dependent,per_element_sigma=per_element_sigma)
 		elif state_decoder_type == 'autoregressive':
 			self.abstract_dynamics = AutoregressiveStateDecoder(state_dim,z_dim,h_dim)
 		else:
@@ -689,7 +700,7 @@ class GenerativeModel(nn.Module):
 		pass
 
 class SkillModelStateDependentPrior(nn.Module):
-	def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal',state_dec_stop_grad=False,beta=1.0,alpha=1.0,max_sig=None,fixed_sig=None,ent_pen=0,encoder_type='state_action_sequence',state_decoder_type='mlp',init_state_dependent=True):
+	def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal',state_dec_stop_grad=False,beta=1.0,alpha=1.0,max_sig=None,fixed_sig=None,ent_pen=0,encoder_type='state_action_sequence',state_decoder_type='mlp',init_state_dependent=True,per_element_sigma=True):
 		super(SkillModelStateDependentPrior, self).__init__()
 
 		self.state_dim = state_dim # state dimension
@@ -707,7 +718,7 @@ class SkillModelStateDependentPrior(nn.Module):
 			print('INVALID ENCODER TYPE!!!!')
 			assert False
 
-		self.decoder = Decoder(state_dim,a_dim,z_dim,h_dim, a_dist, state_dec_stop_grad,max_sig=max_sig,fixed_sig=fixed_sig,state_decoder_type=state_decoder_type,init_state_dependent=init_state_dependent)
+		self.decoder = Decoder(state_dim,a_dim,z_dim,h_dim, a_dist, state_dec_stop_grad,max_sig=max_sig,fixed_sig=fixed_sig,state_decoder_type=state_decoder_type,init_state_dependent=init_state_dependent,per_element_sigma=per_element_sigma)
 		self.prior   = Prior(state_dim,z_dim,h_dim)
 		self.beta    = beta
 		self.alpha   = alpha
@@ -1025,6 +1036,23 @@ class SkillModelStateDependentPrior(nn.Module):
 		eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
 		return mean + std*eps
 
+
+# class SkillModelMultiModel(nn.Module):
+# 	def __init__(self,state_dim,a_dim,z_dim,h_dim,beta=1.0,alpha=1.0)
+# 		self.state_dim = state_dim # state dimension
+# 		self.a_dim = a_dim # action dimension
+# 		self.encoder1 = Encoder(state_dim,a_dim,z_dim,h_dim)
+# 		self.encoder2 = Encoder(state_dim,a_dim,z_dim,h_dim)
+
+# 		self.ll_policy = LowLevelPolicy(state_dim,a_dim,z_dim,h_dim,a_dist='normal',max_sig=None,fixed_sig=None):
+# 		self.state_dec1 = AbstractDynamics(state_dim,z_dim,h_dim,init_state_dependent=True)
+# 		self.state_dec2 = AbstractDynamics(state_dim,z_dim,h_dim,init_state_dependent=True)
+# 		self.prior   = Prior(state_dim,z_dim,h_dim)
+
+# 	class get_losses1(self):
+# 		pass
+	
+# 	class get_encoder2_loss(self):
 
 
 

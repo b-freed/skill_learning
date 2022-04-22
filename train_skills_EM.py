@@ -80,7 +80,7 @@ h_dim = 256
 z_dim = 256
 lr = 5e-5
 wd = 0.0
-beta = 0.1
+beta = 1.0
 alpha = 1.0
 H = 40
 stride = 1
@@ -90,13 +90,14 @@ a_dist = 'normal' # 'tanh_normal' or 'normal'
 state_dependent_prior = True
 encoder_type = 'state_action_sequence' #'state_sequence'
 state_decoder_type = 'mlp' #'autoregressive'
-dataset_file = None
+init_state_dependent = True
+load_from_checkpoint = False
+per_element_sigma = False
+
 # env_name = 'antmaze-large-diverse-v0'
-
-
 env_name = 'kitchen-partial-v0'
 
-dataset_file = None
+dataset_file = 'datasets/'+env_name+'.npz'
 #dataset_file = "datasets/maze2d-umaze-v1.hdf5"
 # dataset_file = 'datasets/maze2d-large-v1-noisy-2.hdf5'
 
@@ -105,7 +106,8 @@ if dataset_file is None:
 else:
 	if '.npz' in dataset_file:
 		# load numpy file
-		pass # TODO
+		dataset = np.load
+		dataset = np.load(dataset_file)
 	elif '.hdf5' in dataset_file:
 		env = gym.make(env_name)
 		dataset = d4rl.qlearning_dataset(env,h5py.File(dataset_file, "r"))  # Not sure if this will work
@@ -152,7 +154,7 @@ experiment = Experiment(api_key = '9mxH2vYX20hn9laEr0KtHLjAa', project_name = 's
 # First, instantiate a skill model
 
 if state_dependent_prior:
-	model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist='normal',state_dec_stop_grad=False,beta=beta,alpha=alpha,max_sig=None,fixed_sig=None,ent_pen=0,encoder_type='state_action_sequence',state_decoder_type=state_decoder_type,init_state_dependent=init_state_dependent).cuda()
+	model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist='normal',state_dec_stop_grad=False,beta=beta,alpha=alpha,max_sig=None,fixed_sig=None,ent_pen=0,encoder_type='state_action_sequence',state_decoder_type=state_decoder_type,init_state_dependent=init_state_dependent,per_element_sigma=per_element_sigma).cuda()
 
 else:
 	raise NotImplementedError
@@ -161,7 +163,7 @@ else:
 E_optimizer = torch.optim.Adam(model.encoder.parameters(), lr=lr, weight_decay=wd)
 M_optimizer = torch.optim.Adam(model.gen_model.parameters(), lr=lr, weight_decay=wd)
 
-filename = 'EM_model_'+env_name+'state_dec_'+str(state_decoder_type)+'_init_state_dep_'+str(init_state_dependent)+'_H_'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_log'
+filename = 'EM_model_'+env_name+'state_dec_'+str(state_decoder_type)+'_init_state_dep_'+str(init_state_dependent)+'_H_'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_per_el_sig_'+str(per_element_sigma)+'_log'
 
 if load_from_checkpoint:
 	PATH = os.path.join(config.ckpt_dir,filename+'_best_sT.pth')
@@ -187,7 +189,8 @@ experiment.log_parameters({'lr':lr,
 							'env_name':env_name,
 							'filename':filename,
 							'encoder_type':encoder_type,
-							'state_decoder_type':state_decoder_type})
+							'state_decoder_type':state_decoder_type,
+							'per_element_sigma':per_element_sigma})
 experiment.add_tag('fixed chunks')
 
 # add chunks of data to a pytorch dataloader
