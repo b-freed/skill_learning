@@ -4,7 +4,7 @@ import torch
 
 class HyperParams:
     def __init__(self):
-        self.batch_size = 16
+        self.batch_size = 2
         self.h_dim = 256
         self.z_dim = 256
         self.lr = 5e-5
@@ -21,9 +21,9 @@ class HyperParams:
         self.fixed_sig = None
         self.H_min = 10
         self.H_max = 40
-        self.min_skill_len = None
+        self.min_skill_len = 10
         self.max_skill_len = 40
-        self.max_skills_per_seq = 100
+        self.max_skills_per_seq = 65
         self.stride = 1
         self.n_epochs = 50000
         self.test_split = .2
@@ -40,6 +40,8 @@ class HyperParams:
             self.msg = f'{self.env_name}_tsdp_H{self.H_max}_l2reg_{self.wd}_a_{self.alpha}_b_{self.beta}_sg_{self.state_dec_stop_grad}_max_sig_{self.max_sig}_fixed_sig_{self.fixed_sig}_log'
         else:
             self.msg = f'{self.env_name}_enc_type_{self.encoder_type}_state_dec_{self.state_decoder_type}_H_{self.H_max}_l2reg_{self.wd}_a_{self.alpha}_b_{self.beta}_sg_{self.state_dec_stop_grad}_max_sig_{self.max_sig}_fixed_sig_{self.fixed_sig}_ent_pen_{self.ent_pen}_log'
+
+        self.additional_msg = 'train with prior'
 
         date_time = time.asctime()[4:16].replace(' ', '_').replace(':', '_')[:6].replace('__', '_')
         self.log_dir = os.path.join('checkpoints', date_time)
