@@ -72,6 +72,7 @@ def test(model):
 
 # instantiating the environmnet, getting the dataset.
 # the data is in a big dictionary, containing long sequences of obs, rew, actions, goals
+<<<<<<< HEAD:train_skills_maze2d.py
 # env_name = 'antmaze-medium-diverse-v0'  
 # env_name = 'maze2d-large-v1'
 env_name = 'antmaze-large-diverse-v0'
@@ -80,6 +81,13 @@ env = gym.make(env_name)
 dataset_file = None
 #dataset_file = "datasets/maze2d-umaze-v1.hdf5"
 # dataset_file = 'datasets/maze2d-large-v1-noisy-2.hdf5'
+=======
+env = 'pen-expert-v1'  # maze whatever
+maze_name = env
+env = gym.make(env)
+dataset = env.get_dataset()  # dictionary, with 'observations', 'rewards', 'actions', 'infos/desired-orien'
+
+>>>>>>> bef628c5aaa150a505024b5928ecfcc8594b9dae:train_skills_adroit.py
 
 if dataset_file is None:
 	dataset = env.get_dataset()
@@ -94,6 +102,7 @@ z_dim = 256
 lr = 5e-5
 wd = 0.001
 state_dependent_prior = True
+<<<<<<< HEAD:train_skills_maze2d.py
 term_state_dependent_prior = False
 state_dec_stop_grad = True
 beta = 0.1
@@ -101,6 +110,11 @@ alpha = 1.0
 ent_pen = 0.0
 max_sig = None
 fixed_sig = None
+=======
+
+
+goals = dataset['infos/desired_orien']
+>>>>>>> bef628c5aaa150a505024b5928ecfcc8594b9dae:train_skills_adroit.py
 H = 20
 stride = 1
 n_epochs = 50000
@@ -141,6 +155,7 @@ def chunks(obs,actions,goals,H,stride):
 	return np.stack(obs_chunks),np.stack(action_chunks),np.stack(targets)
 
 
+<<<<<<< HEAD:train_skills_maze2d.py
 states = dataset['observations']
 actions = dataset['actions']
 goals = dataset['infos/goal']
@@ -172,6 +187,10 @@ obs_chunks_test,  action_chunks_test,  targets_test  = chunks(states_test,  acti
 experiment = Experiment(api_key = '9mxH2vYX20hn9laEr0KtHLjAa', project_name = 'skill-learning')
 # experiment.add_tag('noisy2')
 
+=======
+experiment = Experiment(api_key = 'yQQo8E8TOCWYiVSruS7nxHaB5', project_name = 'skill-learning', workspace = 'anirudh-27')
+experiment.add_tag(maze_name+'H_'+str(H)+' model')
+>>>>>>> bef628c5aaa150a505024b5928ecfcc8594b9dae:train_skills_adroit.py
 
 # First, instantiate a skill model
 
@@ -275,7 +294,14 @@ for i in range(n_epochs):
 	experiment.log_metric("test_s_T_ent", test_s_T_ent, step=i)
 
 	if i % 10 == 0:
+<<<<<<< HEAD:train_skills_maze2d.py
 		
+=======
+		if not state_dependent_prior:
+			filename = maze_name+'_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log.pth'
+		else:
+			filename = maze_name+'_H'+str(H)+'_l2reg_'+str(wd)+'_log.pth'
+>>>>>>> bef628c5aaa150a505024b5928ecfcc8594b9dae:train_skills_adroit.py
 			
 		checkpoint_path = 'checkpoints/'+ filename + '.pth'
 		torch.save({
@@ -284,8 +310,15 @@ for i in range(n_epochs):
 							}, checkpoint_path)
 	if test_loss < min_test_loss:
 		min_test_loss = test_loss
+<<<<<<< HEAD:train_skills_maze2d.py
 
 		
+=======
+		if not state_dependent_prior:
+			filename = maze_name+'_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
+		else:
+			filename = maze_name+'_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
+>>>>>>> bef628c5aaa150a505024b5928ecfcc8594b9dae:train_skills_adroit.py
 			
 		checkpoint_path = 'checkpoints/'+ filename + '_best.pth'
 		torch.save({'model_state_dict': model.state_dict(),

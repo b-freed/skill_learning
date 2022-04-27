@@ -9,6 +9,7 @@ import torch.distributions.normal as Normal
 import torch.distributions.categorical as Categorical
 import torch.distributions.mixture_same_family as MixtureSameFamily
 import torch.distributions.kl as KL
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import ipdb
 import utils
 import os
@@ -465,50 +466,98 @@ class EncoderAutoTermination(nn.Module):
     -Concat states+actions
     -Pass through linear embedding
     -Pass through bidirectional RNN
-    -Pass output of bidirectional RNN through 2 linear layers, one to get mean of z and one to get stand dev (we're estimating one z ("skill") for entire episode)
+    -Pass output of bidirectional RNN through 2 linear layers, one to get mean of z and one to get stand dev.
+    -Pass output of bidirectional RNN through 2 linear layers, one to get mean of b and one to get stand dev.
+    Outside of this encoder, we will decide whether to terminate the episode based on the b distribution.
     '''
-    def __init__(self,state_dim,a_dim,z_dim,h_dim,n_gru_layers=4):
+    def __init__(self, state_dim, a_dim, z_dim, h_dim, n_gru_layers=4):
         super(EncoderAutoTermination, self).__init__()
 
+        self.a_dim = a_dim
+        self.state_dim = state_dim
 
-        self.state_dim = state_dim # state dimension
-        self.a_dim = a_dim # action dimension
+        self.emb_layer    = nn.Sequential(nn.Linear(state_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
+        self.rnn          = nn.GRU(h_dim+a_dim,h_dim,batch_first=True,bidirectional=True,num_layers=n_gru_layers)
 
-        self.emb_layer  = nn.Sequential(nn.Linear(state_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
-        self.rnn        = nn.GRU(h_dim+a_dim+z_dim,h_dim,batch_first=True,bidirectional=True,num_layers=n_gru_layers)
-        #self.mean_layer = nn.Linear(h_dim,z_dim)
         self.z_mean_layer = nn.Sequential(nn.Linear(2*h_dim, h_dim),nn.ReLU(),nn.Linear(h_dim, z_dim))
         self.b_mean_layer = nn.Sequential(nn.Linear(2*h_dim, h_dim),nn.ReLU(),nn.Linear(h_dim, 2))
-        #self.sig_layer  = nn.Sequential(nn.Linear(h_dim,z_dim),nn.Softplus())  # using softplus to ensure stand dev is positive
+
         self.z_sig_layer  = nn.Sequential(nn.Linear(2*h_dim, h_dim),nn.ReLU(),nn.Linear(h_dim, z_dim),nn.Softplus())
         self.b_sig_layer  = nn.Sequential(nn.Linear(2*h_dim, h_dim),nn.ReLU(),nn.Linear(h_dim, 2),nn.Softplus())
 
 
-    def forward(self, states, actions, skills):
-
+    def forward(self, states, actions, seq_lens=None, variable_length=True):
         '''
         Takes a sequence of states and actions, and infers the distribution over latent skill variable, z
         
         INPUTS:
             states:  batch_size x t x state_dim state sequence tensor
             actions: batch_size x t x a_dim action sequence tensor
-            skills:  batch_size x t x skill_dim skill sequence tensor
         OUTPUTS:
             z_mean:  batch_size x 1 x z_dim tensor indicating mean of z distribution
             z_sig:   batch_size x 1 x z_dim tensor indicating standard deviation of z distribution
         '''
+        if not variable_length: self.forward_legacy(states, actions)
+        assert seq_lens is not None, "lens must be provided if variable_length is False"
+        # Assume that states and actions are padded
 
-        
+        # Convert (padded) state sequence to embedding
         s_emb = self.emb_layer(states)
-        # through rnn
-        s_emb_a = torch.cat([s_emb, actions, skills], dim=-1)
-        feats, _ = self.rnn(s_emb_a)
-        hn = feats[:, -1:, :]
-        # hn = hn.transpose(0,1) # use final hidden state, as this should be an encoding of all states and actions previously.
+
+        # Extract features from embedding, action sequence
+        s_emb_a = torch.cat([s_emb, actions], dim=-1) # this is padded
+
+        # Pack the padded sequence
+        packed_emb = pack_padded_sequence(s_emb_a, seq_lens, batch_first=True, enforce_sorted=False)
+
+        packed_feats, _ = self.rnn(packed_emb)
+        # packed_op, (feats, _) = self.rnn(packed_emb)
+
+
+        # We want to play with the packed_op
+        # output, ip_sizes = pad_packed_sequence(packed_op, batch_first=True)
+        unpacked_feats, ip_sizes = pad_packed_sequence(packed_feats, batch_first=True)
+
+        # ipdb.set_trace()
+        # Use the final hidden state TODO: change from below
+        hn = unpacked_feats[:, -1:, :]
+
         # get z_mean and z_sig by passing rnn output through mean_layer and sig_layer
         z_mean = self.z_mean_layer(hn)
         z_sig = self.z_sig_layer(hn)
 
+        # get b_mean and b_sig by passing rnn output through mean_layer and sig_layer
+        b_mean = self.b_mean_layer(hn)
+        b_sig = self.b_sig_layer(hn)
+        
+        return z_mean, z_sig, b_mean, b_sig
+
+    def forward_legacy(self, states, actions):
+        '''
+        Takes a sequence of states and actions, and infers the distribution over latent skill variable, z
+        
+        INPUTS:
+            states:  batch_size x t x state_dim state sequence tensor
+            actions: batch_size x t x a_dim action sequence tensor
+        OUTPUTS:
+            z_mean:  batch_size x 1 x z_dim tensor indicating mean of z distribution
+            z_sig:   batch_size x 1 x z_dim tensor indicating standard deviation of z distribution
+        '''
+        # Convert state sequence to embedding
+        s_emb = self.emb_layer(states)
+
+        # Extract features from embedding, action sequence
+        s_emb_a = torch.cat([s_emb, actions], dim=-1)
+        feats, _ = self.rnn(s_emb_a)
+
+        # Use the final hidden state
+        hn = feats[:, -1:, :]
+
+        # get z_mean and z_sig by passing rnn output through mean_layer and sig_layer
+        z_mean = self.z_mean_layer(hn)
+        z_sig = self.z_sig_layer(hn)
+
+        # get b_mean and b_sig by passing rnn output through mean_layer and sig_layer
         b_mean = self.b_mean_layer(hn)
         b_sig = self.b_sig_layer(hn)
         
@@ -1064,26 +1113,34 @@ class SkillModelStateDependentPrior(nn.Module):
 
 
 class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior):
-    def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal',state_dec_stop_grad=False,beta=1.0,alpha=1.0,gamma=1.0,temperature=1.0,max_sig=None,fixed_sig=None,ent_pen=0,encoder_type='state_action_sequence',state_decoder_type='mlp', min_skill_len=None, max_skill_len=None, max_skills_per_seq=None):
+    def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal',state_dec_stop_grad=False,beta=1.0,alpha=1.0, \
+                gamma=1.0,temperature=1.0,max_sig=None,fixed_sig=None,ent_pen=0, \
+                encoder_type='state_action_sequence', state_decoder_type='mlp', min_skill_len=None, \
+                max_skill_len=None, max_skills_per_seq=None, grad_clip_threshold=1.0):
         super(SkillModelStateDependentPriorAutoTermination, self).__init__(state_dim,a_dim,z_dim,h_dim,a_dist,state_dec_stop_grad,beta,alpha,max_sig,fixed_sig,ent_pen,encoder_type,state_decoder_type)
+
+        # Override the encoder module
         if encoder_type == 'state_action_sequence':
             self.encoder = EncoderAutoTermination(state_dim,a_dim,z_dim,h_dim)
         else: 
             raise NotImplementedError
+
         self.gamma = gamma # skill length penalty
         self.temperature = temperature # gumbel-softmax temperature
+        self.grad_clip_threshold = grad_clip_threshold
+
+        # Prior for termination
         self.min_skill_len = min_skill_len
         self.max_skill_len = max_skill_len
         self.max_skills_per_seq = max_skills_per_seq
 
-    def forward(self, states, actions, skills):
-        
+
+    def forward(self, states, actions):        
         '''
         Takes states and actions, returns the distributions necessary for computing the objective function
         INPUTS:
             states:       batch_size x t x state_dim sequence tensor
             actions:      batch_size x t x a_dim action sequence tensor
-            skills:       batch_size x t x skill_dim sequence tensor
         OUTPUTS:
             s_T_mean:     batch_size x 1 x state_dim tensor of means of "decoder" distribution over terminal states
             S_T_sig:      batch_size x 1 x state_dim tensor of standard devs of "decoder" distribution over terminal states
@@ -1093,21 +1150,31 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
             z_post_sigs:  batch_size x 1 x z_dim tensor of stand devs of z posterior distribution 
         '''
 
-        # STEP 1. Encode states and actions to get posterior over z
-        z_post_means, z_post_sigs, b_post_means, b_post_sigs = self.encoder(states, actions, skills)
-        # STEP 2. sample z from posterior 
-        z_sampled = self.reparameterize(z_post_means, z_post_sigs)
-        # b_sampled = self.reparameterize(b_post_means, b_post_sigs)
+        # Encode states and actions to get posterior over z
+        z_post_means, z_post_sigs, b_post_means, b_post_sigs = self.encoder(states, actions)
 
-        # STEP 3. Pass z_sampled and states through decoder 
+        # Sample z from posterior 
+        z_sampled = self.reparameterize(z_post_means, z_post_sigs)
+
+        # TODO: run skill updater here
+
+        # Pass z_sampled and states through decoder 
         s_T_mean, s_T_sig, a_means, a_sigs = self.decoder(states, z_sampled)
 
         return s_T_mean, s_T_sig, a_means, a_sigs, z_post_means, z_post_sigs, b_post_means, b_post_sigs
 
-    def compute_losses(self, s_T_mean, s_T_sig, a_means, a_sigs, 
-                        z_post_means, z_post_sigs, s_0, time_steps, s_T_gt, a_gt):
 
+    def compute_losses(self, s_T_mean, s_T_sig, a_means, a_sigs, 
+                        z_post_means, z_post_sigs, s_0, time_steps, s_T_gt, a_gt, mask):
+
+        # compute skill prior
+        z_prior_means, z_prior_sigs = self.prior(s_0)
+
+        # Construct required distributions
         s_T_dist = Normal.Normal(s_T_mean, s_T_sig )
+        z_post_dist = Normal.Normal(z_post_means, z_post_sigs)
+        z_prior_dist = Normal.Normal(z_prior_means, z_prior_sigs) 
+
         if self.decoder.ll_policy.a_dist == 'normal':
             a_dist = Normal.Normal(a_means, a_sigs)
         elif self.decoder.ll_policy.a_dist == 'tanh_normal':
@@ -1117,28 +1184,23 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
         else:
             assert False, f'{self.decoder.ll_policy.a_dist} not supported'
 
-        z_post_dist = Normal.Normal(z_post_means, z_post_sigs)
-
-        z_prior_means,z_prior_sigs = self.prior(s_0) #self.prior(states[:,0:1,:]) 
-        z_prior_dist = Normal.Normal(z_prior_means, z_prior_sigs) 
-
-        # loss terms corresponding to -logP(s_T|s_0,z) and -logP(a_t|s_t,z)
-        # T = time_steps#states.shape[1]
-        # s_T = s_T_gt#states[:,-1:,:]  
-        s_T_loss = -torch.mean(torch.sum(s_T_dist.log_prob(s_T_gt), dim=-1))/time_steps # divide by T because all other losses we take mean over T dimension, effectively dividing by T
-        a_loss   = -torch.mean(torch.sum(a_dist.log_prob(a_gt), dim=-1)) 
-        s_T_ent  =  torch.mean(torch.sum(s_T_dist.entropy(), dim=-1))/time_steps
-        # print('a_sigs: ', a_sigs)
-        # print('a_dist.log_prob(actions)[0,:,:]: ',a_dist.log_prob(actions)[0,:,:])
-        # loss term correpsonding ot kl loss between posterior and prior
-        # kl_loss = torch.mean(torch.sum(F.kl_div(z_post_dist, z_prior_dist),dim=-1))
-        kl_loss = torch.mean(torch.sum(KL.kl_divergence(z_post_dist, z_prior_dist), dim=-1))/time_steps # divide by T because all other losses we take mean over T dimension, effectively dividing by T
+        # Loss for predicting terminal state
+        s_T_loss = -torch.mean(torch.sum(s_T_dist.log_prob(s_T_gt), dim=-1)/time_steps) # divide by T because all other losses we take mean over T dimension, effectively dividing by T
+        # Los for predicting actions
+        a_loss_raw = a_dist.log_prob(a_gt)
+        a_loss_raw[mask, :] = 0.0
+        a_loss = -torch.mean(torch.sum(a_loss_raw, dim=-1)) 
+        # Entropy corresponding to terminal state
+        s_T_ent = torch.mean(torch.sum(s_T_dist.entropy(), dim=-1)/time_steps)
+        # Compute KL Divergence between prior and posterior
+        kl_loss = torch.mean(torch.sum(KL.kl_divergence(z_post_dist, z_prior_dist), dim=-1)/time_steps) # divide by T because all other losses we take mean over T dimension, effectively dividing by T
 
         loss_tot = self.alpha*s_T_loss + a_loss + self.beta*kl_loss + self.ent_pen*s_T_ent
 
         return  loss_tot, s_T_loss, a_loss, kl_loss, s_T_ent
 
-    def update_skills(self, z_prev, z_updated, b_mean, b_sig, running_l, executed_skills, greedy=False):
+
+    def update_skills(self, z_history, z_updated, b_mean, b_sig, running_l, executed_skills, greedy=False):
         """
         Prior:
             p(b_t|z_{1:t-1}) = \begin{cases}
@@ -1149,7 +1211,12 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
         Copy -> keep prev skill
         Read -> update skill
         """
-        # Assume you already get a batch of sampled skills
+        if len(z_history) == 0:
+            b = torch.zeros_like(b_mean.squeeze(dim=1))
+            b[:, 1] = 1
+            return z_updated, b
+        else:
+            z_prev = z_history[-1]
 
         # sample b from b_dist
         if greedy:
@@ -1157,10 +1224,12 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
         else:
             b_probabilities = self.reparameterize(b_mean, b_sig)
 
-        b, _ = utils.boundary_sampler(b_probabilities.squeeze(), temperature=self.temperature)
+        # differentiably sample b
+        b, _ = utils.boundary_sampler(b_probabilities.squeeze(dim=1), temperature=self.temperature)
 
         # Now, use inductive bias / prior
         over_max_len_idxs = running_l >  self.max_skill_len
+        below_min_len_idxs = running_l <  self.min_skill_len
         over_max_n_skills_idxs = executed_skills >= self.max_skills_per_seq
 
         # overwrite b with prior
@@ -1168,12 +1237,21 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
         b[over_max_len_idxs, 1] = 1.0 # if skill_len > max_skill_len, update
         b[over_max_n_skills_idxs, 0] = 1.0 # if total executed skills > N max skills allowed, don't update
         b[over_max_n_skills_idxs, 1] = 0.0
+        b[below_min_len_idxs, 0] = 1.0 # if total executed skills > N max skills allowed, don't update
+        b[below_min_len_idxs, 1] = 0.0
 
         copy, read = b[:, 0].unsqueeze(dim=-1).unsqueeze(dim=-1), b[:, 1].unsqueeze(dim=-1).unsqueeze(dim=-1)
 
+        # update skills
         z = (copy * z_prev) + (read.clone() * z_updated.clone()) # TODO: will (most likely) make it slow
-        # only update last entry for skill and b
+
         return z, b
+    
+    def clip_gradients(self):
+        """Clip gradients to avoid exploding gradients
+        """
+        # torch.nn.utils.clip_grad_norm_(self.parameters(), self.grad_clip_threshod) # TODO: check if this is correct
+        pass
 
 
 class SkillModelTerminalStateDependentPrior(SkillModelStateDependentPrior):

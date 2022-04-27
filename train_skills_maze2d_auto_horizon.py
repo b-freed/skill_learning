@@ -17,11 +17,44 @@ import ipdb
 import h5py
 import utils
 import time
+import tqdm
 import os
 from configs import HyperParams
+from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence
 
 
-def run_iteration(model, initial_skill, model_optimizer=None, train_mode=False):
+def prepare_data(data, start_idxs, end_idxs, s_dim, a_dim=None):
+	"""
+	Slice entire data tensor -> list of tensors w/ unequal lengths -> (pad -> packed seq) data that can be parallely 
+	processed by the model (LSTM/GRU cells).
+	"""
+	# Slice the data according to the start and end indices
+	total_dim = data.shape[-1]
+
+	seq_lens = (end_idxs - start_idxs).tolist()
+
+	if a_dim is None: a_dim = total_dim - s_dim
+
+	max_l = torch.max(end_idxs - start_idxs)
+	
+	# Create buffer_tensors
+	# End idx is same across the batch
+	end_idx = end_idxs[0]
+	padded_states = data[:, end_idx - max_l:end_idx, :state_dim].clone() # w/o clone, making might destroy the og data
+	padded_actions = data[:, end_idx - max_l:end_idx, state_dim:].clone()
+
+	# create mask ()
+	# data_dim = batch_size, seq_len, state_dim + action_dim
+	idx_mask = torch.arange(end_idx - max_l, end_idx).unsqueeze(dim=0).expand(data.shape[0], -1).to(hp.device) < end_idxs.unsqueeze(dim=1)
+	mask = torch.logical_not(idx_mask) # To mask idxs
+
+	padded_states[mask, :] = 0
+	padded_actions[mask, :] = 0
+
+	return padded_states, padded_actions, seq_lens, mask
+
+
+def run_iteration2(model, data_loader, model_optimizer=None, train_mode=False):
 	
 	losses = []
 	s_T_losses = []
@@ -32,42 +65,53 @@ def run_iteration(model, initial_skill, model_optimizer=None, train_mode=False):
 
 	model.train() if train_mode else model.eval()
 
-	for batch_id, data_ in enumerate(train_loader):
-		if data_.shape[0] != hp.batch_size:
-			continue
+	for batch_id, data_ in tqdm.tqdm(enumerate(data_loader), desc=f"Progress"):
+		# Now, we have a batch of trajectories, i.e., dim(data_) = (batch_size, 1000, state_dim + action_dim)
 		data_ = data_.to(hp.device)
+
+		# Reset required running variables
+		z_history = []
+		running_l = torch.zeros(hp.batch_size)
+		executed_skills = torch.zeros(hp.batch_size)
+		start_idxs = torch.zeros(hp.batch_size, dtype=torch.int).to(hp.device)
 		loss_tot, s_T_loss, a_loss, kl_loss, sl_loss, s_T_ent = 0, 0, 0, 0, 0, 0
 
-		# sample initial skill prior, start with zero initial skill(s)
-		data = data_[:, :hp.H_min, ...]
-		states = data[:,:,:model.state_dim] # first state_dim elements are the state
-		actions = data[:,:,model.state_dim:] # rest are actions
-		z_post_means, z_post_sigs, b_post_means, b_post_sigs = model.encoder(states, actions, initial_skill)
+		for i in range(1, data_.shape[1]):
+			'''
+			i is the end index of all trajectories in the sampled batch. We keep track of the start index, 
+			updating it on termination events. Now, all trajectories in a batch will have different lengths.
+			'''
+			end_idxs = i * torch.ones(hp.batch_size, dtype=torch.int).to(hp.device)
+			padded_states, padded_actions, seq_lens, mask = prepare_data(data_, start_idxs, end_idxs, model.state_dim)
 
-		z_t = model.reparameterize(z_post_means, z_post_sigs)
-		z_t_history = z_t.repeat(1, hp.H_min, 1)
-		z_t_p = z_t_history[:, -1:, :].detach().clone()
-		executed_skills = torch.ones(hp.batch_size)
-		running_l = torch.ones(hp.batch_size)
+			H = (end_idxs - start_idxs).float()
 
-		z_t, b_t = model.update_skills(z_t_p, z_t, b_post_means, b_post_sigs, running_l, executed_skills)
-		z_t_history = torch.cat([z_t_history, z_t], dim=1)
-		sl_tracker = b_t[:, 0] # loss for sticking w/ skills 
+			# states, actions = pack_padded_seq[:, :, :model.state_dim], pack_padded_seq[:, :, model.state_dim:] # first state_dim elements are the state, rest are actions
+			s_0 = data_[torch.arange(data_.shape[0]), start_idxs.long(), :model.state_dim].unsqueeze(dim=1)
+			# s_0 = states[:, 0:1, :]
+			s_T_gt = data_[torch.arange(data_.shape[0]), end_idxs.long(), :model.state_dim].unsqueeze(dim=1) # TODO: This isn't the right way to do it, but it's fine for now. don't IGNORE.
 
-		for H in range(hp.H_min+1, hp.H_max):
-			data = data_[:, :H, ...]
-			states = data[:, :, :model.state_dim] # first state_dim elements are the state
-			actions = data[:, :, model.state_dim:] # rest are actions
-			s_0 = states[:,0:1,:]
-			s_T_gt = states[:,-1:,:]  
+			# Infer skills from the sequence 
+			z_post_means, z_post_sigs, b_post_means, b_post_sigs = model.encoder(padded_states, padded_actions, seq_lens, variable_length=True)
+			# Sample a skill from the posterior
+			z_t = model.reparameterize(z_post_means, z_post_sigs)
+			# Choose if we want to update the skill
+			z_t, b_t = model.update_skills(z_history, z_t, b_post_means, b_post_sigs, running_l, executed_skills, greedy=(not train_mode))
 
-			s_T_mean, s_T_sig, a_means, a_sigs = model.decoder(states, z_t)
+			z_history.append(z_t)
 
-			loss_tot_, s_T_loss_, a_loss_, kl_loss_, s_T_ent_ = model.compute_losses(s_T_mean, s_T_sig, a_means, a_sigs, z_post_means, z_post_sigs, s_0, H, s_T_gt, actions) 
+			# TODO: We want to train s_T only against the true terminal state. Rn, ignore and just train (since there's no grad propogating from abstract dynamics model to the skill model).
+			s_T_mean, s_T_sig, a_means, a_sigs = model.decoder(padded_states, z_t)
 
+			# Now we want to mass the stuff from !mask
+
+			# Compute the losses
+			loss_tot_, s_T_loss_, a_loss_, kl_loss_, s_T_ent_ = model.compute_losses(s_T_mean, s_T_sig, a_means, a_sigs, z_post_means, z_post_sigs, s_0, H, s_T_gt, padded_actions, mask) 
+			sl_tracker = b_t[:, 0] # loss for sticking w/ skills 
 			sl_loss_ = model.gamma * sl_tracker.sum()
 			loss_tot_ += sl_loss_
 
+			# Update running loss
 			loss_tot += loss_tot_
 			s_T_loss += s_T_loss_
 			a_loss += a_loss_
@@ -75,22 +119,20 @@ def run_iteration(model, initial_skill, model_optimizer=None, train_mode=False):
 			sl_loss += sl_loss_
 			s_T_ent += s_T_ent_
 
-			z_post_means, z_post_sigs, b_post_means, b_post_sigs = model.encoder(states, actions, z_t_history)
-			z_t = model.reparameterize(z_post_means, z_post_sigs)
-			z_t_p = z_t_history[:, -1:, :].detach().clone()
+			# Update length running trackers
+			update = b_t[:, 1].bool()
+			executed_skills[update] += 1
+			running_l[update] = 1 
+			running_l[~update] += 1
 
-			z_t, b_t = model.update_skills(z_t_p, z_t, b_post_means, b_post_sigs, running_l, executed_skills)
-			z_t_history = torch.cat([z_t_history, z_t], dim=1)
-			sl_tracker += b_t[:, 0] # loss for sticking w/ skills 
-			# update running_l and executed_skills
-			update = b_t[:, 1]
-			executed_skills[update.bool()] += 1
-			running_l[update.bool()] = 1 
-			running_l[~update.bool()] += 1
+			# Update start index
+			start_idxs[update] = i
 
-		if train_mode:	
+		if train_mode:
 			model_optimizer.zero_grad()
 			loss_tot.backward()
+			# TODO: clip gradients
+			model.clip_gradients()
 			model_optimizer.step()
 
 		# log losses
@@ -98,11 +140,12 @@ def run_iteration(model, initial_skill, model_optimizer=None, train_mode=False):
 		s_T_losses.append(s_T_loss.item())
 		a_losses.append(a_loss.item())
 		kl_losses.append(kl_loss.item())
-		sl_losses.append(sl_loss.item())
 		s_T_ents.append(s_T_ent.item())
 
 	return np.mean(losses), np.mean(s_T_losses), np.mean(a_losses), np.mean(kl_losses), np.mean(s_T_ents), np.mean(sl_losses)
 
+
+# Seems correct # TODO remove this comment
 if __name__ == '__main__':
 	hp = HyperParams()
 
@@ -117,27 +160,25 @@ if __name__ == '__main__':
 	os.makedirs(hp.log_dir, exist_ok=True) # safely create log dir
 	os.system(f'cp configs.py {hp.log_dir}')
 
-	# dataset = utils.create_dataset_padded(utils.create_dataset_raw, hp.env_name)
-	dataset_ = utils.create_dataset_raw(hp.env_name)
+	# might want to get rid of this
+	env = gym.make(hp.env_name)
+	state_dim = env.observation_space.shape[0]
+	a_dim = env.action_space.shape[0]
 
-	states = dataset_['observations']
-	actions = dataset_['actions']
-	goals = dataset_['infos/goal']
+	# Now, only load the npz files
+	raw_data = np.load(os.path.join(hp.data_dir, f'{hp.env_name}.npz'))
+	inputs_train = torch.from_numpy(raw_data['inputs_train'])
+	inputs_test  = torch.from_numpy(raw_data['inputs_test'])
 
-	N_episodes = len(states)
-	state_dim = states[0].shape[-1]
-	a_dim = actions[0].shape[-1]
+	train_loader = DataLoader(
+		inputs_train,
+		batch_size=hp.batch_size,
+		num_workers=0)  # not really sure about num_workers...
 
-	N_train = int((1 - hp.test_split) * N_episodes)
-	N_test = N_episodes - N_train
-
-	states_train  = states[:N_train]
-	actions_train = actions[:N_train]
-	goals_train = goals[:N_train]
-
-	states_test  = states[N_train:]
-	actions_test = actions[N_train:]
-	goals_test   = goals[N_train:]
+	test_loader = DataLoader(
+		inputs_test,
+		batch_size=hp.batch_size,
+		num_workers=0)
 
 	# First, instantiate a skill model
 	if hp.term_state_dependent_prior:
@@ -155,29 +196,10 @@ if __name__ == '__main__':
 		
 	model_optimizer = torch.optim.Adam(model.parameters(), lr=hp.lr, weight_decay=hp.wd)
 
-	# add chunks of data to a pytorch dataloader
-	inputs_train_ = utils.create_dataset_auto_horizon(states_train, actions_train, hp.H_max)
-	inputs_test_ = utils.create_dataset_auto_horizon(states_test, actions_test, hp.H_max)
-	inputs_train = torch.from_numpy(inputs_train_) # dim: (N_train, H, state_dim)
-	inputs_test  = torch.from_numpy(inputs_test_) # dim: (N_test, H, state_dim)
-
-	train_loader = DataLoader(
-		inputs_train,
-		batch_size=hp.batch_size,
-		num_workers=0)  # not really sure about num_workers...
-
-	test_loader = DataLoader(
-		inputs_test,
-		batch_size=hp.batch_size,
-		num_workers=0)
-
 	min_test_loss = 10**10
 
-	# TODO: Decide on something solid. rn doing skill learning for [H_min, H_max] time steps.
-	initial_skill = torch.zeros(hp.batch_size, hp.H_min, hp.z_dim).to(hp.device) # TODO: probably not the right thing to do. sample from prior/learable initial skill?
-
 	for i in range(hp.n_epochs):
-		loss, s_T_loss, a_loss, kl_loss, s_T_ent, sl_loss = run_iteration(model, initial_skill, model_optimizer=model_optimizer, train_mode=True)
+		loss, s_T_loss, a_loss, kl_loss, s_T_ent, sl_loss = run_iteration2(model, train_loader, model_optimizer=model_optimizer, train_mode=True)
 		
 		print(f'Exp: {hp.exp_name} | Iter: {i}')
 		print("--------TRAIN---------")
@@ -199,7 +221,7 @@ if __name__ == '__main__':
 		experiment.log_metric("sl_loss", sl_loss, step=i)
 
 		with torch.no_grad():
-			test_loss, test_s_T_loss, test_a_loss, test_kl_loss, test_s_T_ent, sl_loss = run_iteration(model, initial_skill, train_mode=False)
+			test_loss, test_s_T_loss, test_a_loss, test_kl_loss, test_s_T_ent, sl_loss = run_iteration2(model, test_loader, train_mode=False)
 		
 		print("--------TEST---------")
 		

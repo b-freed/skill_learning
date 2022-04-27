@@ -64,44 +64,27 @@ if __name__ == '__main__':
 
 	device = torch.device('cuda:0')
 	
-	# env = 'maze2d-large-v1'
-	env = 'antmaze-medium-diverse-v0'
-	# env = 'kitchen-partial-v0'
+	env = 'maze2d-large-v1'
 	env = gym.make(env)
 	data = env.get_dataset()
 	
-	H = 20
-	# H = 40
+	H = 40
 	state_dim = data['observations'].shape[1]
 	a_dim = data['actions'].shape[1]
 	h_dim = 256
 	z_dim = 256
 	batch_size = 1
-	episodes = 3
-	wd = .001
+	episodes = 1
+	wd = 0
 	state_dependent_prior = True
-	state_dec_stop_grad = True
-	beta = 1.0
-	alpha = 1.0
-	max_sig = None
-	fixed_sig = 0.1
-	a_dist = 'normal'
-	n_skills = 3
-	colors = ['r','g','b']
 
 
-	# if not state_dependent_prior:
-	# 	filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
-	# else:
-	# 	filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
-	# filename = 'Franka_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
-	# filename = 'Antmaze_H20_l2reg_0.001_stopgrad_log_best.pth'
-	# filename = 'AntMaze_H20_l2reg_0.001_a_10.0_b_1.0_log_best.pth'
-	# filename = 'AntMaze_H20_l2reg_0.001_a_1.0_b_0.01_sg_True_log_best.pth'
-	# filename = 'AntMaze_H20_l2reg_0.001_a_1.0_b_1.0_sg_True_max_sig_None_fixed_sig_0.1_log_best.pth'#'AntMaze_H20_l2reg_0.001_a_1.0_b_0.01_sg_False_log_best.pth'
-	# filename = 'Noisy2_maze2d_H20_l2reg_0_log_best.pth'
-	# filename = 'maze2d_H40_log_best.pth'
-	filename = 'AntMaze_H20_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best.pth'
+	if not state_dependent_prior:
+		#filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
+		filename = 'Noisy1_maze2d_H'+str(H)+'_l2reg_'+str(wd)+'_sdp_'+str(state_dependent_prior)+'_log_best.pth'
+	else:
+		#filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
+		filename = 'Noisy1_maze2d_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
 	PATH = 'checkpoints/'+filename
 	
 	
@@ -263,3 +246,20 @@ if __name__ == '__main__':
 
 
 
+if not state_dependent_prior:
+	plt.title('Skill Execution & Prediction (Noisy, No Skill-Dependent Prior)')
+else:
+	plt.title('Skill Execution & Prediction (Noisy, Skill-Dependent Prior)')
+	
+plt.savefig('Skill_Prediction_H'+str(H)+'_l2reg_'+str(wd)+'.png')
+
+#ipdb.set_trace()
+#plt.figure()
+#plt.scatter(actual_states[:,:,0],actual_states[:,:,1], c='r')
+#plt.scatter(actual_states[:,0,0],actual_states[:,0,1], c='b')
+#plt.scatter(pred_states[:,0],pred_states[:,1], c='g')
+#plt.legend(['Actual Trajectory','Initial State','Predicted Terminal State'])
+#plt.title('Skill Execution & Prediction (Skill-Dependent Prior)')
+#plt.savefig('Skill_Prediction_H'+str(H)+'.png')
+
+#action_dist = np.stack(action_dist)
