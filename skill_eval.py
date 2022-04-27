@@ -224,7 +224,11 @@ if __name__ == '__main__':
 
 	plt.figure()
 	plt.plot(min_dists)
-	plt.savefig('min_dists')
+	plt.ylabel('Distance')
+	plt.title('Minimum distances of agent and final predicted goal')
+	plt.savefig('min_dists_noisyx2')
+	np.save('min_dists_noisyx2', min_dists)
+	
 
 	# plt.figure()
 	# plt.plot(state_lls)

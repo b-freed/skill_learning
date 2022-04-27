@@ -26,7 +26,7 @@ from math import pi
 device = torch.device('cuda:0')
 
 #env = 'antmaze-medium-diverse-v0'
-env = 'maze2d-large-v1'
+env = 'antmaze-large-diverse-v0'
 env_name = env
 env = gym.make(env)
 data = env.get_dataset()
@@ -50,14 +50,15 @@ else:
 '''
 filename = 'maze2d_H'+str(H)+'_log_best.pth'
 
-PATH = 'checkpoints/'+filename
+PATH = 'checkpoints/canebrake/Apr_16/T_None_40_slp_None__r1/best.pth'
+# PATH = 'checkpoints/'+filename
 
 if not state_dependent_prior:
   	skill_model = SkillModel(state_dim, a_dim, z_dim, h_dim).cuda()
 else:
   	skill_model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim).cuda()
 
-checkpoint = torch.load(PATH)
+checkpoint = torch.load(PATH, map_location='cpu')
 skill_model.load_state_dict(checkpoint['model_state_dict'])
 
 # initialize skill sequence
@@ -184,8 +185,31 @@ for e in range(epochs):
 # run_skill_seq(env,s0,skill_model.decoder.ll_policy)
 
 # Test plan: deploy learned skills in actual environment.  Now we're going be selecting base-level actions conditioned on the current skill and state, and executign that action in the real environment
-# ll_policy = skill_model.decoder.ll_policy
+ll_policy = skill_model.decoder.ll_policy
 
+state = env.reset()
+states = []
+for i in range(skill_seq_len):
+	# get the skill
+	z = skill_seq[:,i:i+1,:]
+	skill_seq_states = []
+	# run skill for H timesteps
+	for j in range(H):
+		action = ll_policy.numpy_policy(state,z)
+		state,_,_,_ = env.step(action)
+		skill_seq_states.append(state)
+	states.append(skill_seq_states)
+
+states = np.stack(states)
+goals = goal_seq.detach().cpu().numpy()
+goals = np.stack(goals)
+
+plt.figure()
+plt.scatter(states[:,:,0],states[:,:,1], label='Trajectory')
+plt.scatter(states[:,0,0],states[:,0,1], label='Initial States')
+plt.scatter(states[:,-1,0],states[:,-1,1], label='Predicted Final States')
+plt.scatter(goals[:,:,0],goals[:,:,1], label='Goals')
+plt.legend(loc='lower center', bbox_to_anchor=(0.5, -0.17), ncol= 4)
 
 
 
