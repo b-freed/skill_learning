@@ -1211,15 +1211,15 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
             assert False, f'{self.decoder.ll_policy.a_dist} not supported'
 
         # Loss for predicting terminal state
-        s_T_loss = -torch.mean(torch.sum(s_T_dist.log_prob(s_T_gt), dim=-1))/time_steps # divide by T because all other losses we take mean over T dimension, effectively dividing by T
+        s_T_loss = -torch.mean(torch.sum(s_T_dist.log_prob(s_T_gt), dim=-1)/time_steps) # divide by T because all other losses we take mean over T dimension, effectively dividing by T
         # Los for predicting actions
         a_loss_raw = a_dist.log_prob(a_gt)
         a_loss_raw[mask, :] = 0.0
         a_loss = -torch.mean(torch.sum(a_loss_raw, dim=-1)) 
         # Entropy corresponding to terminal state
-        s_T_ent = torch.mean(torch.sum(s_T_dist.entropy(), dim=-1))/time_steps
+        s_T_ent = torch.mean(torch.sum(s_T_dist.entropy(), dim=-1)/time_steps)
         # Compute KL Divergence between prior and posterior
-        kl_loss = torch.mean(torch.sum(KL.kl_divergence(z_post_dist, z_prior_dist), dim=-1))/time_steps # divide by T because all other losses we take mean over T dimension, effectively dividing by T
+        kl_loss = torch.mean(torch.sum(KL.kl_divergence(z_post_dist, z_prior_dist), dim=-1)/time_steps) # divide by T because all other losses we take mean over T dimension, effectively dividing by T
 
         loss_tot = self.alpha*s_T_loss + a_loss + self.beta*kl_loss + self.ent_pen*s_T_ent
 
