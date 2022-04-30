@@ -218,7 +218,8 @@ class LowLevelPolicy(nn.Module):
         '''
 
         # tile z along time axis so dimension matches state
-        z_tiled = z.tile([1,state.shape[-2],1]) #not sure about this 
+        # z_tiled = z.tile([1,state.shape[-2],1]) #not sure about this - I am. Haha.
+        z_tiled = z
 
         # Concat state and z_tiled
         state_z = torch.cat([state,z_tiled],dim=-1)
@@ -497,7 +498,9 @@ class EncoderAutoTermination(nn.Module):
             z_mean:  batch_size x 1 x z_dim tensor indicating mean of z distribution
             z_sig:   batch_size x 1 x z_dim tensor indicating standard deviation of z distribution
         '''
-        if not variable_length: self.forward_legacy(states, actions)
+        return self.forward2(states, actions)
+        """
+        if not variable_length: return self.forward_legacy(states, actions)
         assert seq_lens is not None, "lens must be provided if variable_length is False"
         # Assume that states and actions are padded
 
@@ -531,6 +534,7 @@ class EncoderAutoTermination(nn.Module):
         b_sig = self.b_sig_layer(hn)
         
         return z_mean, z_sig, b_mean, b_sig
+        """
 
     def forward_legacy(self, states, actions):
         '''
@@ -562,6 +566,27 @@ class EncoderAutoTermination(nn.Module):
         b_sig = self.b_sig_layer(hn)
         
         return z_mean, z_sig, b_mean, b_sig
+
+    def forward2(self, states, actions):
+        s_emb = self.emb_layer(states)
+
+        # Extract features from embedding, action sequence
+        s_emb_a = torch.cat([s_emb, actions], dim=-1)
+        feats, _ = self.rnn(s_emb_a)
+
+        # Use the final hidden state
+        # hn = feats[:, -1:, :]
+
+        # get z_mean and z_sig by passing rnn output through mean_layer and sig_layer
+        z_mean = self.z_mean_layer(feats)
+        z_sig = self.z_sig_layer(feats)
+
+        # get b_mean and b_sig by passing rnn output through mean_layer and sig_layer
+        b_mean = self.b_mean_layer(feats)
+        b_sig = self.b_sig_layer(feats)
+
+        return z_mean, z_sig, b_mean, b_sig
+
 
 
 class StateSeqEncoder(nn.Module):
@@ -686,13 +711,13 @@ class Decoder(nn.Module):
         self.a_dim = a_dim
         self.z_dim = z_dim
 
-        if state_decoder_type == 'mlp':
-            self.abstract_dynamics = AbstractDynamics(state_dim,z_dim,h_dim)
-        elif state_decoder_type == 'autoregressive':
-            self.abstract_dynamics = AutoregressiveStateDecoder(state_dim,z_dim,h_dim)
-        else:
-            print('PICK VALID STATE DECODER TYPE!!!')
-            assert False
+        # if state_decoder_type == 'mlp':
+        #     self.abstract_dynamics = AbstractDynamics(state_dim,z_dim,h_dim)
+        # elif state_decoder_type == 'autoregressive':
+        #     self.abstract_dynamics = AutoregressiveStateDecoder(state_dim,z_dim,h_dim)
+        # else:
+        #     print('PICK VALID STATE DECODER TYPE!!!')
+        #     assert False
         # self.ll_policy = LowLevelPolicyWithTermination(state_dim,a_dim,z_dim,h_dim, a_dist, max_sig = max_sig, fixed_sig=fixed_sig)
         self.ll_policy = LowLevelPolicy(state_dim,a_dim,z_dim,h_dim, a_dist, max_sig = max_sig, fixed_sig=fixed_sig)
         self.emb_layer  = nn.Linear(state_dim+z_dim,h_dim)
@@ -723,16 +748,16 @@ class Decoder(nn.Module):
         if self.state_dec_stop_grad:
             z = z.detach()
         
-        if self.state_decoder_type == 'autoregressive':
-            z_detached = z.detach()
-            sT_mean,sT_sig = self.abstract_dynamics(s_T,s_0,z)
-        elif self.state_decoder_type == 'mlp':
-            sT_mean,sT_sig = self.abstract_dynamics(s_0,z)
-        else:
-            print('PICK VALID STATE DECODER TYPE!!!')
-            assert False
+        # if self.state_decoder_type == 'autoregressive':
+        #     z_detached = z.detach()
+        #     sT_mean,sT_sig = self.abstract_dynamics(s_T,s_0,z)
+        # elif self.state_decoder_type == 'mlp':
+        #     sT_mean,sT_sig = self.abstract_dynamics(s_0,z)
+        # else:
+        #     print('PICK VALID STATE DECODER TYPE!!!')
+        #     assert False
         
-        return sT_mean, sT_sig, a_mean, a_sig
+        return a_mean, a_sig
 
 
 class Prior(nn.Module):
@@ -1116,7 +1141,7 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
     def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal',state_dec_stop_grad=False,beta=1.0,alpha=1.0, \
                 gamma=1.0,temperature=1.0,max_sig=None,fixed_sig=None,ent_pen=0, \
                 encoder_type='state_action_sequence', state_decoder_type='mlp', min_skill_len=None, \
-                max_skill_len=None, max_skills_per_seq=None, grad_clip_threshold=1.0):
+                max_skill_len=None, max_skills_per_seq=None, grad_clip_threshold=1.0, device='cpu'):
         super(SkillModelStateDependentPriorAutoTermination, self).__init__(state_dim,a_dim,z_dim,h_dim,a_dist,state_dec_stop_grad,beta,alpha,max_sig,fixed_sig,ent_pen,encoder_type,state_decoder_type)
 
         # Override the encoder module
@@ -1125,6 +1150,7 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
         else: 
             raise NotImplementedError
 
+        self.device = device
         self.gamma = gamma # skill length penalty
         self.temperature = temperature # gumbel-softmax temperature
         self.grad_clip_threshold = grad_clip_threshold
@@ -1199,8 +1225,104 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
 
         return  loss_tot, s_T_loss, a_loss, kl_loss, s_T_ent
 
+    def update_skills(self, z_means, z_sigs, b_mean, b_sig, states, greedy=False):
+        # (differentiably) sample from the termination distribution
 
-    def update_skills(self, z_history, z_updated, b_mean, b_sig, running_l, executed_skills, greedy=False):
+        # sample b from b_dist
+        if greedy:
+            b_probabilities = b_mean
+        else:
+            b_probabilities = self.reparameterize(b_mean, b_sig)
+
+        # differentiably sample b
+        b, _ = utils.boundary_sampler(b_probabilities.squeeze(dim=1), temperature=self.temperature)
+
+        time_steps = b.shape[1]
+        batch_size = b.shape[0]
+
+        self.skill_steps = torch.zeros(b_mean.shape[0], b_mean.shape[1], device=self.device, dtype=torch.long) # TODO: long used here. Double check.
+        self.exhausted_steps = torch.zeros(b_mean.shape[0], device=self.device, dtype=torch.long) # TODO: long used here. Double check.
+
+        running_l = torch.ones(batch_size, dtype=torch.long, device=self.device)
+        n_executed_skills = torch.zeros(batch_size, dtype=torch.float32, device=self.device)  # TODO: long used here. Double check.
+        skill_list = []
+        s0_list = []
+        executed_skills = []
+        init_idxs = []
+
+        z_means_list = []
+        z_sigs_list = []
+
+        z_t = self.reparameterize(z_means, z_sigs)
+
+        z_i_previous = z_t[:, 0, :] # TODO: detach required for copying over a skill? 
+        s_0_previous = states[:, 0, :] # TODO: detach required for copying over a skill? 
+
+        z_mean_previous = z_means[:, 0, :] # TODO: detach required for copying over a skill? 
+        z_sig_previous = z_sigs[:, 0, :] # TODO: detach required for copying over a skill? 
+
+        for i in range(time_steps):
+            b_i = b[:, i, :] # (batch_size, 2)
+            z_i_updated = z_t[:, i, :] # (batch_size, z_dim)
+            s_0_updated = states[:, i, :] # (batch_size, s_dim)
+
+            z_mean_updated = z_means[:, i, :] # (batch_size, z_dim)
+            z_sig_updated = z_sigs[:, i, :] # (batch_size, z_dim)
+
+            # Add termination inductive bias/prior here
+            # over_max_len_idxs = running_l >  self.max_skill_len
+            # below_min_len_idxs = running_l <  self.min_skill_len
+            # over_max_n_skills_idxs = executed_skills >= self.max_skills_per_seq
+
+            copy, read = b_i[:, 0].unsqueeze(dim=-1), b_i[:, 1].unsqueeze(dim=-1) # (batch_size, 1)
+
+            z_i = (copy * z_i_previous) + (read.clone() * z_i_updated.clone()) # TODO: get rid of clone()
+            s_0 = (copy * s_0_previous) + (read.clone() * s_0_updated.clone()) # TODO: get rid of clone()
+
+            z_mean = (copy * z_mean_previous) + (read.clone() * z_mean_updated.clone()) # TODO: get rid of clone()
+            z_sig = (copy * z_sig_previous) + (read.clone() * z_sig_updated.clone()) # TODO: get rid of clone()
+
+            update = b_i[:, 1].bool()
+
+            self.update_skill_steps(running_l, update)
+
+            n_executed_skills[update] += 1
+            running_l[update] = 1
+            running_l[~update] += 1
+
+            skill_list.append(z_i)
+            s0_list.append(s_0)
+
+            z_means_list.append(z_mean)
+            z_sigs_list.append(z_sig)
+
+            z_i_previous = z_i
+            s_0_previous = s_0
+
+        z = torch.stack(skill_list, dim=1)
+        s0 = torch.stack(s0_list, dim=1).detach() # we don't want any gradients from here. 
+
+        z_post_means = torch.stack(z_means_list, dim=1) 
+        z_post_sigs = torch.stack(z_sigs_list, dim=1)
+
+        return z, z_post_means, z_post_sigs, s0, running_l, n_executed_skills, self.correct_for_zeros(self.skill_steps)
+
+    def update_skill_steps(self, time_idxs, batch_idxs):
+        column_idxs = torch.arange(self.skill_steps.shape[1]).unsqueeze(dim=0).expand(self.skill_steps.shape[0], -1).to(self.device)
+
+        mask = ((self.exhausted_steps.unsqueeze(dim=-1) <= column_idxs) * (column_idxs < (self.exhausted_steps + time_idxs).unsqueeze(dim=-1))) * batch_idxs.unsqueeze(dim=-1)
+
+        self.skill_steps[mask] = time_idxs[batch_idxs].repeat_interleave(time_idxs[batch_idxs]).to(self.skill_steps.dtype)
+        self.exhausted_steps[batch_idxs] += time_idxs[batch_idxs].to(self.exhausted_steps.dtype)
+
+    def correct_for_zeros(self, ip):
+        """Last skills might not be terminated. In such cases, just replace the trailing zero sequence with its length.
+        """
+        ip[ip==0] = (ip == 0).sum(dim=-1).repeat_interleave((ip == 0).sum(dim=-1))
+        return ip
+
+
+    def update_skills_legacy(self, z_history, z_updated, b_mean, b_sig, running_l, executed_skills, greedy=False):
         """
         Prior:
             p(b_t|z_{1:t-1}) = \begin{cases}
