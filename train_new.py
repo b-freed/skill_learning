@@ -1,6 +1,6 @@
 import os 
 os.environ['D4RL_SUPPRESS_IMPORT_ERROR'] = '1'
-from comet_ml import Experiment
+from logger import Logger
 import numpy as np
 import torch
 import torch.nn as nn
@@ -25,13 +25,23 @@ from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence
 import torch.distributions.kl as KL
 
 
-def run_iteration(model, data_loader, experiment, model_optimizer=None, train_mode=False):
+def run_iteration(model, data_loader, model_optimizer=None, train_mode=False):
 	losses = []
 	s_T_losses = []
 	a_losses = []
 	kl_losses = []
 	sl_losses = []
 	s_T_ents = []
+
+	sl_means = []
+	sl_stds = []
+	sl_mins = []
+	sl_maxs = []
+
+	ns_means = []
+	ns_stds = []
+	ns_mins = []
+	ns_maxs = []
 
 	model.train()
 
@@ -48,7 +58,7 @@ def run_iteration(model, data_loader, experiment, model_optimizer=None, train_mo
 
 		# Actually find the skills to be executed, i.e., use the termination events
 		# z_t, _, _ = model.update_skills(z_t_, b_post_means, b_post_sigs, greedy=False)
-		z_t, z_post_means, z_post_sigs, s0, _, _, skill_steps = model.update_skills(z_post_means_update, z_post_sigs_update, b_post_means, b_post_sigs, states, greedy=False)
+		z_t, z_post_means, z_post_sigs, s0, _, _, skill_steps, skill_lens_data, n_executed_skills_data = model.update_skills(z_post_means_update, z_post_sigs_update, b_post_means, b_post_sigs, states, greedy=False)
 		skill_steps = skill_steps.detach()
 		# # z_t, b_t = model.update_skills(z_history, z_t, b_post_means, b_post_sigs, running_l, executed_skills, greedy=(not train_mode))
 
@@ -95,7 +105,7 @@ def run_iteration(model, data_loader, experiment, model_optimizer=None, train_mo
 			model.clip_gradients()
 			model_optimizer.step()
 
-			losses.append(loss_tot.item())
+		losses.append(loss_tot.item())
 		# s_T_losses.append(s_T_loss.item())
 		s_T_losses.append(0)
 		# s_T_ents.append(s_T_ent.item())
@@ -104,9 +114,17 @@ def run_iteration(model, data_loader, experiment, model_optimizer=None, train_mo
 		sl_losses.append(0)
 		a_losses.append(a_loss.item())
 		kl_losses.append(kl_loss.item())
+		sl_means.append(skill_lens_data['mean'])
+		sl_stds.append(skill_lens_data['std'])
+		sl_mins.append(skill_lens_data['min'])
+		sl_maxs.append(skill_lens_data['max'])
+		ns_means.append(n_executed_skills_data['mean'])
+		ns_stds.append(n_executed_skills_data['std'])
+		ns_mins.append(n_executed_skills_data['min'])
+		ns_maxs.append(n_executed_skills_data['max'])
 
 
-	return np.mean(losses), np.mean(s_T_losses), np.mean(a_losses), np.mean(kl_losses), np.mean(s_T_ents), np.mean(sl_losses)
+	return np.mean(losses), np.mean(s_T_losses), np.mean(a_losses), np.mean(kl_losses), np.mean(s_T_ents), np.mean(sl_losses), np.mean(sl_means), np.mean(sl_stds), np.mean(sl_mins), np.mean(sl_maxs), np.mean(ns_means), np.mean(ns_stds), np.mean(ns_mins), np.mean(ns_maxs)
 
 
 # Seems correct # TODO remove this comment
@@ -116,13 +134,7 @@ if __name__ == '__main__':
 	# set environment variable for device
 	os.environ["_DEVICE"] = hp.device
 
-	experiment = Experiment(api_key = 'Wlh5wstMNYkxV0yWRxN7JXZRu', project_name = 'dump')
-	experiment.set_name(hp.exp_name)
-
-	experiment.log_parameters(hp.__dict__)
-	# save hyperparams locally
-	os.makedirs(hp.log_dir, exist_ok=True) # safely create log dir
-	os.system(f'cp configs.py {hp.log_dir}')
+	logger = Logger(hp)
 
 	# might want to get rid of this
 	env = gym.make(hp.env_name)
@@ -161,57 +173,21 @@ if __name__ == '__main__':
 		
 	model_optimizer = torch.optim.Adam(model.parameters(), lr=hp.lr, weight_decay=hp.wd)
 
-	min_test_loss = 10**10
-
 	for i in range(hp.n_epochs):
-		loss, s_T_loss, a_loss, kl_loss, s_T_ent, sl_loss = run_iteration(model, train_loader, experiment, model_optimizer=model_optimizer, train_mode=True)
-		
-		print(f'Exp: {hp.exp_name} | Iter: {i}')
-		print("--------TRAIN---------")
-		
-		print('loss: ', loss)
-		print('s_T_loss: ', s_T_loss)
-		print('a_loss: ', a_loss)
-		print('kl_loss: ', kl_loss)
-		print('s_T_ent: ', s_T_ent)
-		print('s_T_ent: ', s_T_ent)
-		print('sl_loss: ', sl_loss)
-		print('')
+		loss, s_T_loss, a_loss, kl_loss, s_T_ent, sl_loss, sl_mean, sl_std, sl_min, sl_max, \
+			ns_mean, ns_std, ns_min, ns_max = run_iteration(model, train_loader, model_optimizer=model_optimizer, train_mode=True)
 
-		experiment.log_metric("loss", loss, step=i)
-		experiment.log_metric("s_T_loss", s_T_loss, step=i)
-		experiment.log_metric("a_loss", a_loss, step=i)
-		experiment.log_metric("kl_loss", kl_loss, step=i)
-		experiment.log_metric("s_T_ent", s_T_ent, step=i)
-		experiment.log_metric("sl_loss", sl_loss, step=i)
-
+		logger.update_train(i, loss, s_T_loss, a_loss, kl_loss, s_T_ent, sl_loss, sl_mean, sl_std, sl_min, sl_max, ns_mean, ns_std, ns_min, ns_max)
+		
 		with torch.no_grad():
-			test_loss, test_s_T_loss, test_a_loss, test_kl_loss, test_s_T_ent, sl_loss = run_iteration(model, test_loader, experiment, train_mode=False)
-		
-		print("--------TEST---------")
-		
-		print('test_loss: ', test_loss)
-		print('test_s_T_loss: ', test_s_T_loss)
-		print('test_a_loss: ', test_a_loss)
-		print('test_kl_loss: ', test_kl_loss)
-		print('test_s_T_ent: ', test_s_T_ent)
-		print('sl_loss: ', sl_loss)
-		print('')
+			test_loss, test_s_T_loss, test_a_loss, test_kl_loss, test_s_T_ent, sl_loss, sl_mean, sl_std, sl_min, sl_max, \
+			ns_mean, ns_std, ns_min, ns_max = run_iteration(model, test_loader, train_mode=False)
 
-		experiment.log_metric("test_loss", test_loss, step=i)
-		experiment.log_metric("test_s_T_loss", test_s_T_loss, step=i)
-		experiment.log_metric("test_a_loss", test_a_loss, step=i)
-		experiment.log_metric("test_kl_loss", test_kl_loss, step=i)
-		experiment.log_metric("test_s_T_ent", test_s_T_ent, step=i)
-		experiment.log_metric("test_sl_loss", sl_loss, step=i)
-
+		logger.update_test(i, test_loss, test_s_T_loss, test_a_loss, test_kl_loss, test_s_T_ent, sl_loss, sl_mean, sl_std, sl_min, sl_max, ns_mean, ns_std, ns_min, ns_max)
+		
 		if i % 10 == 0:
-			checkpoint_path = os.path.join(hp.log_dir, 'latest.pth')
-			torch.save({'model_state_dict': model.state_dict(),
-						'model_optimizer_state_dict': model_optimizer.state_dict()}, checkpoint_path)
+			logger.save_training_state(i, model, model_optimizer, 'latest.pth')
 
-		if test_loss < min_test_loss:
-			min_test_loss = test_loss
-			checkpoint_path = os.path.join(hp.log_dir, 'best.pth')
-			torch.save({'model_state_dict': model.state_dict(),
-						'model_optimizer_state_dict': model_optimizer.state_dict()}, checkpoint_path)
+		if test_loss < logger.min_test_loss:
+			logger.min_test_loss = test_loss
+			logger.save_training_state(i, model, model_optimizer, 'best.pth')

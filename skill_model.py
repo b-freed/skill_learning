@@ -1245,6 +1245,7 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
 
         running_l = torch.ones(batch_size, dtype=torch.long, device=self.device)
         n_executed_skills = torch.zeros(batch_size, dtype=torch.float32, device=self.device)  # TODO: long used here. Double check.
+        skill_lens = []
         skill_list = []
         s0_list = []
         executed_skills = []
@@ -1285,6 +1286,7 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
             update = b_i[:, 1].bool()
 
             self.update_skill_steps(running_l, update)
+            skill_lens.extend(running_l[update].tolist())
 
             n_executed_skills[update] += 1
             running_l[update] = 1
@@ -1305,7 +1307,21 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
         z_post_means = torch.stack(z_means_list, dim=1) 
         z_post_sigs = torch.stack(z_sigs_list, dim=1)
 
-        return z, z_post_means, z_post_sigs, s0, running_l, n_executed_skills, self.correct_for_zeros(self.skill_steps)
+        # Data for creating plots
+        skill_lens_data = {
+                'mean': np.mean(skill_lens),
+                'std': np.std(skill_lens),
+                'min': np.min(skill_lens),
+                'max': np.max(skill_lens),
+            }
+        n_executed_skills_data = {
+                'mean': np.mean(n_executed_skills.tolist()),
+                'std': np.std(n_executed_skills.tolist()),
+                'min': np.min(n_executed_skills.tolist()),
+                'max': np.max(n_executed_skills.tolist()),
+            }
+
+        return z, z_post_means, z_post_sigs, s0, running_l, n_executed_skills, self.correct_for_zeros(self.skill_steps), skill_lens_data, n_executed_skills_data
 
     def update_skill_steps(self, time_idxs, batch_idxs):
         column_idxs = torch.arange(self.skill_steps.shape[1]).unsqueeze(dim=0).expand(self.skill_steps.shape[0], -1).to(self.device)

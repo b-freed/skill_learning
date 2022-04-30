@@ -4,7 +4,7 @@ import torch
 
 class HyperParams:
     def __init__(self):
-        self.batch_size = 2
+        self.batch_size = 16
         self.h_dim = 256
         self.z_dim = 256
         self.lr = 5e-5
@@ -35,6 +35,8 @@ class HyperParams:
         self.device = f'cuda:{self.device_id}' if torch.cuda.is_available() else 'cpu'
         self.exp_name = exp_name = f"T_{self.H_min}_{self.H_max}_slp_{self.gamma}"
         self.data_dir = 'datasets'
+        self.log_online = True
+        self.log_offline = True
         
         if self.term_state_dependent_prior:
             self.msg = f'{self.env_name}_tsdp_H{self.H_max}_l2reg_{self.wd}_a_{self.alpha}_b_{self.beta}_sg_{self.state_dec_stop_grad}_max_sig_{self.max_sig}_fixed_sig_{self.fixed_sig}_log'
