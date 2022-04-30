@@ -1256,11 +1256,11 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
 
         z_t = self.reparameterize(z_means, z_sigs)
 
-        z_i_previous = z_t[:, 0, :] # TODO: detach required for copying over a skill? 
-        s_0_previous = states[:, 0, :] # TODO: detach required for copying over a skill? 
+        z_i_previous = z_t[:, 0, :] # TODO: got rid of: detach required for copying over a skill?. Double check.
+        s_0_previous = states[:, 0, :] # TODO: got rid of: detach required for copying over a skill?. Double check.
 
-        z_mean_previous = z_means[:, 0, :] # TODO: detach required for copying over a skill? 
-        z_sig_previous = z_sigs[:, 0, :] # TODO: detach required for copying over a skill? 
+        z_mean_previous = z_means[:, 0, :] # TODO: got rid of: detach required for copying over a skill?. Double check.
+        z_sig_previous = z_sigs[:, 0, :] # TODO: got rid of: detach required for copying over a skill?. Double check.
 
         for i in range(time_steps):
             b_i = b[:, i, :] # (batch_size, 2)
@@ -1277,11 +1277,11 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
 
             copy, read = b_i[:, 0].unsqueeze(dim=-1), b_i[:, 1].unsqueeze(dim=-1) # (batch_size, 1)
 
-            z_i = (copy * z_i_previous) + (read.clone() * z_i_updated.clone()) # TODO: get rid of clone()
-            s_0 = (copy * s_0_previous) + (read.clone() * s_0_updated.clone()) # TODO: get rid of clone()
+            z_i = (copy * z_i_previous) + (read * z_i_updated) # TODO: got rid of clone(). Double check.
+            s_0 = (copy * s_0_previous) + (read * s_0_updated) # TODO: got rid of clone(). Double check.
 
-            z_mean = (copy * z_mean_previous) + (read.clone() * z_mean_updated.clone()) # TODO: get rid of clone()
-            z_sig = (copy * z_sig_previous) + (read.clone() * z_sig_updated.clone()) # TODO: get rid of clone()
+            z_mean = (copy * z_mean_previous) + (read * z_mean_updated) # TODO: got rid of clone(). Double check.
+            z_sig = (copy * z_sig_previous) + (read * z_sig_updated) # TODO: got rid of clone(). Double check.
 
             update = b_i[:, 1].bool()
 

@@ -36,7 +36,7 @@ def save_plots(skill_lens, skill_lens_test, n_skills, n_skills_test, base_path):
         'data_min': np.array(skill_lens['min']),
         'data_max': np.array(skill_lens['max']),
         'color': 'b',
-        'label': 'train',
+        'label': 'Train',
         'title': 'Skill Length',
         'xlabel': 'Training iteration',
         'ylabel': 'Skill length',
@@ -49,7 +49,7 @@ def save_plots(skill_lens, skill_lens_test, n_skills, n_skills_test, base_path):
         'min_max': True,
         'data_min': np.array(skill_lens_test['min']),
         'data_max': np.array(skill_lens_test['max']),
-        'color': 'b',
+        'color': 'r',
         'label': 'Test',
         'title': 'Skill Length',
         'xlabel': 'Training iteration',
@@ -85,7 +85,7 @@ def save_plots(skill_lens, skill_lens_test, n_skills, n_skills_test, base_path):
         'min_max': True,
         'data_min': np.array(n_skills_test['min']),
         'data_max': np.array(n_skills_test['max']),
-        'color': 'b',
+        'color': 'r',
         'label': 'Test',
         'title': 'Total executed skills per episode',
         'xlabel': 'Training iteration',
@@ -159,8 +159,8 @@ class Logger:
         self.train_ns_data = append_to_dict(self.train_ns_data, 'min', ns_min)
         self.train_ns_data = append_to_dict(self.train_ns_data, 'max', ns_max)
 
-        torch.save(self.test_sl_data, os.path.join(self.log_dir, 'train_sl_data.pt'))
-        torch.save(self.test_ns_data, os.path.join(self.log_dir, 'train_ns_data.pt'))
+        torch.save(self.train_sl_data, os.path.join(self.log_dir, 'train_sl_data.pt'))
+        torch.save(self.train_ns_data, os.path.join(self.log_dir, 'train_ns_data.pt'))
 
     def update_test(self, iteration_num, test_loss, test_s_T_loss, test_a_loss, test_kl_loss, test_s_T_ent, sl_loss, sl_mean, sl_std, sl_min, sl_max, ns_mean, ns_std, ns_min, ns_max):
 
