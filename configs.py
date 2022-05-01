@@ -4,7 +4,7 @@ import torch
 
 class HyperParams:
     def __init__(self):
-        self.batch_size = 16
+        self.batch_size = 32
         self.h_dim = 256
         self.z_dim = 256
         self.lr = 5e-5
@@ -23,7 +23,7 @@ class HyperParams:
         self.H_max = 40
         self.min_skill_len = 10
         self.max_skill_len = 40
-        self.max_skills_per_seq = 65
+        self.max_skills_per_seq = 65 # I want avg skill length to be around 15
         self.stride = 1
         self.n_epochs = 50000
         self.test_split = .2

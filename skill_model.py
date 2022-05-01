@@ -1263,7 +1263,7 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
         z_sig_previous = z_sigs[:, 0, :] # TODO: got rid of: detach required for copying over a skill?. Double check.
 
         for i in range(time_steps):
-            b_i = b[:, i, :] # (batch_size, 2)
+            b_i_ = b[:, i, :] # (batch_size, 2)
             z_i_updated = z_t[:, i, :] # (batch_size, z_dim)
             s_0_updated = states[:, i, :] # (batch_size, s_dim)
 
@@ -1271,9 +1271,31 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
             z_sig_updated = z_sigs[:, i, :] # (batch_size, z_dim)
 
             # Add termination inductive bias/prior here
-            # over_max_len_idxs = running_l >  self.max_skill_len
-            # below_min_len_idxs = running_l <  self.min_skill_len
-            # over_max_n_skills_idxs = executed_skills >= self.max_skills_per_seq
+            over_max_len_idxs = running_l > self.max_skill_len
+            below_min_len_idxs = running_l < self.min_skill_len
+            over_max_n_skills_idxs = n_executed_skills >= self.max_skills_per_seq
+
+            detach_idxs = torch.logical_or(torch.logical_or(over_max_len_idxs, below_min_len_idxs), over_max_n_skills_idxs)
+
+            # Overwrite b with prior
+            # Can't detach gradients selectively (for e.g., by indexing) from a tensor, 
+            # so stack (differentiable) slices wherever required
+            _b_i = []
+            _update = torch.tensor([0, 1], device=self.device).bool()
+            _copy = torch.tensor([1, 0], device=self.device).bool()
+            for j in range(batch_size):
+                if not detach_idxs[j]:
+                    _b_i.append(b_i_[j])
+                # skill_len > max_skill_len, update
+                if over_max_n_skills_idxs[j]:
+                    _b_i.append(_copy)
+                # skill_len < min_skill_len, copy
+                elif below_min_len_idxs[j]:
+                    _b_i.append(_copy)
+                # total executed skills > N max skills allowed, copy
+                elif over_max_len_idxs[j]:
+                    _b_i.append(_update)
+            b_i = torch.stack(_b_i)
 
             copy, read = b_i[:, 0].unsqueeze(dim=-1), b_i[:, 1].unsqueeze(dim=-1) # (batch_size, 1)
 
