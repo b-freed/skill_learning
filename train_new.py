@@ -58,7 +58,7 @@ def run_iteration(model, data_loader, model_optimizer=None, train_mode=False):
 
 		# Actually find the skills to be executed, i.e., use the termination events
 		# z_t, _, _ = model.update_skills(z_t_, b_post_means, b_post_sigs, greedy=False)
-		z_t, z_post_means, z_post_sigs, s0, _, _, skill_steps, skill_lens_data, n_executed_skills_data = model.update_skills(z_post_means_update, z_post_sigs_update, b_post_means, b_post_sigs, states, greedy=False)
+		z_t, z_post_means, z_post_sigs, s0, _termination_loss, _, skill_steps, skill_lens_data, n_executed_skills_data = model.update_skills(z_post_means_update, z_post_sigs_update, b_post_means, b_post_sigs, states, greedy=False)
 		skill_steps = skill_steps.detach()
 		# # z_t, b_t = model.update_skills(z_history, z_t, b_post_means, b_post_sigs, running_l, executed_skills, greedy=(not train_mode))
 
@@ -94,8 +94,9 @@ def run_iteration(model, data_loader, model_optimizer=None, train_mode=False):
 		a_loss = -torch.mean(torch.sum(a_dist.log_prob(actions), dim=-1)) 
 		# Compute KL Divergence between prior and posterior
 		kl_loss = torch.mean(torch.sum(KL.kl_divergence(z_post_dist, z_prior_dist), dim=-1)/skill_steps) # divide each skill by its length and take mean across batch
-
-		loss_tot = model.alpha*s_T_loss + a_loss + model.beta*kl_loss + model.ent_pen*s_T_ent
+		# Incentive for sticking with skills
+		termination_loss = torch.mean(_termination_loss)
+		loss_tot = model.alpha*s_T_loss + a_loss + model.beta*kl_loss + model.ent_pen*s_T_ent + model.gamma * termination_loss
 
 		# return  loss_tot, s_T_loss, a_loss, kl_loss, s_T_ent
 		if train_mode:
@@ -110,8 +111,7 @@ def run_iteration(model, data_loader, model_optimizer=None, train_mode=False):
 		s_T_losses.append(0)
 		# s_T_ents.append(s_T_ent.item())
 		s_T_ents.append(0)
-		# sl_losses.append(sl_loss.item())
-		sl_losses.append(0)
+		sl_losses.append(termination_loss.item())
 		a_losses.append(a_loss.item())
 		kl_losses.append(kl_loss.item())
 		sl_means.append(skill_lens_data['mean'])

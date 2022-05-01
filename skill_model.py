@@ -1248,8 +1248,7 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
         skill_lens = []
         skill_list = []
         s0_list = []
-        executed_skills = []
-        init_idxs = []
+        termination_tracker = 0
 
         z_means_list = []
         z_sigs_list = []
@@ -1281,8 +1280,8 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
             # Can't detach gradients selectively (for e.g., by indexing) from a tensor, 
             # so stack (differentiable) slices wherever required
             _b_i = []
-            _update = torch.tensor([0, 1], device=self.device).bool()
-            _copy = torch.tensor([1, 0], device=self.device).bool()
+            _update = torch.tensor([0, 1], device=self.device).float()
+            _copy = torch.tensor([1, 0], device=self.device).float()
             for j in range(batch_size):
                 if not detach_idxs[j]:
                     _b_i.append(b_i_[j])
@@ -1298,6 +1297,8 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
             b_i = torch.stack(_b_i)
 
             copy, read = b_i[:, 0].unsqueeze(dim=-1), b_i[:, 1].unsqueeze(dim=-1) # (batch_size, 1)
+
+            termination_tracker += torch.sum(read, dim=-1)
 
             z_i = (copy * z_i_previous) + (read * z_i_updated) # TODO: got rid of clone(). Double check.
             s_0 = (copy * s_0_previous) + (read * s_0_updated) # TODO: got rid of clone(). Double check.
@@ -1343,7 +1344,7 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
                 'max': np.max(n_executed_skills.tolist()),
             }
 
-        return z, z_post_means, z_post_sigs, s0, running_l, n_executed_skills, self.correct_for_zeros(self.skill_steps), skill_lens_data, n_executed_skills_data
+        return z, z_post_means, z_post_sigs, s0, termination_tracker, n_executed_skills, self.correct_for_zeros(self.skill_steps), skill_lens_data, n_executed_skills_data
 
     def update_skill_steps(self, time_idxs, batch_idxs):
         column_idxs = torch.arange(self.skill_steps.shape[1]).unsqueeze(dim=0).expand(self.skill_steps.shape[0], -1).to(self.device)
