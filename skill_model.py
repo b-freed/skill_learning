@@ -266,6 +266,82 @@ class LowLevelPolicy(nn.Module):
 		eps = torch.normal(torch.zeros(mean.size()).cuda(), torch.ones(mean.size()).cuda())
 		return mean + std*eps
 
+
+
+class AutoregressiveLowLevelPolicy(nn.Module):
+	'''
+	P(a_t|s_t,z) is our "low-level policy", so this is the feedback policy the agent runs while executing skill described by z.
+	See Encoder and Decoder for more description
+	'''
+	def __init__(self,state_dim,a_dim,z_dim,h_dim,max_sig=None,fixed_sig=None):
+
+		super(AutoregressiveLowLevelPolicy,self).__init__()
+
+		# we'll need a_dim different low-level policies, one for each action element
+		policy_components = nn.ModuleList([LowLevelPolicy(state_dim+i,1,z_dim,h_dim,a_dist='normal',max_sig=max_sig,fixed_sig=fixed_sig) for i in range(a_dim)])
+
+		self.a_dim = a_dim
+		
+
+
+	def forward(self,state,z):
+		'''
+		INPUTS:
+			state: batch_size x T x state_dim tensor of states 
+			action: batch_size x T x a_dim tensor of actions
+			z:     batch_size x 1 x z_dim tensor of states
+		OUTPUTS:
+			a_mean: batch_size x T x a_dim tensor of action means for each t in {0.,,,.T}
+			a_sig:  batch_size x T x a_dim tensor of action standard devs for each t in {0.,,,.T}
+		
+		Iterate through each low level policy component.
+		The ith element gets to condition on all elements up to but NOT including a_i
+		'''
+		# tile z along time axis so dimension matches state
+		z_tiled = z.tile([1,state.shape[-2],1]) #not sure about this 
+		a_means = []
+		a_sigs = []
+		for i in range(self.a_dim):
+			# Concat state, a up to i, and z_tiled
+			state_a_z = torch.cat([state,a[:,:,:i],z_tiled],dim=-1)
+			# pass through ith policy component
+			a_mean_i,a_sig_i = self.policy_components[i](state_a_z)  # these are batch_size x T x 1
+			# add to growing list of policy elements
+			a_means.append(a_mean_i)
+			a_sigs.append(a_sig_i)
+
+		a_means = torch.cat(a_means,dim=-1)
+		a_sigs  = torch.cat(a_sigs, dim=-1)
+		return a_means, a_sigs
+	
+	def sample(self,state,z):
+		# tile z along time axis so dimension matches state
+		z_tiled = z.tile([1,state.shape[-2],1]) #not sure about this 
+		actions = []
+		for i in range(self.a_dim):
+			# Concat state, a up to i, and z_tiled
+			state_a_z = torch.cat([state]+actions+[z_tiled],dim=-1)
+			# pass through ith policy component
+			a_mean_i,a_sig_i = self.policy_components[i](state_a_z)  # these are batch_size x T x 1
+			a_i = reparameterize(a_mean_i,a_sig_i)
+			actions.append(a_i)
+
+		return torch.cat(actions,dim=-1)
+
+	
+	def numpy_policy(self,state,z):
+		'''
+		maps state as a numpy array and z as a pytorch tensor to a numpy action
+		'''
+		state = torch.reshape(torch.tensor(state,device=torch.device('cuda:0'),dtype=torch.float32),(1,1,-1))
+		
+		action = self.sample(state,z)
+		action = action.detach().cpu().numpy()
+		
+		return action.reshape([self.a_dim,])
+	 
+	
+
 class LowLevelDynamicsFF(nn.Module):
 
 	def __init__(self,s_dim,a_dim,h_dim):
@@ -549,15 +625,20 @@ class Decoder(nn.Module):
 		else:
 			print('PICK VALID STATE DECODER TYPE!!!')
 			assert False
-		self.ll_policy = LowLevelPolicy(state_dim,a_dim,z_dim,h_dim, a_dist, max_sig = max_sig, fixed_sig=fixed_sig)
+		if a_dist != 'autotregressive':
+			self.ll_policy = LowLevelPolicy(state_dim,a_dim,z_dim,h_dim, a_dist, max_sig = max_sig, fixed_sig=fixed_sig)
+		else:
+			self.ll_policy = AutoregressiveLowLevelPolicy(state_dim,a_dim,z_dim,h_dim,max_sig=None,fixed_sig=None)
+
 		self.emb_layer  = nn.Linear(state_dim+z_dim,h_dim)
 		self.fc = nn.Sequential(nn.Linear(state_dim+z_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
 
 		self.state_dec_stop_grad = state_dec_stop_grad
 
 		self.state_decoder_type = state_decoder_type
-		
-	def forward(self,states,z):
+		self.a_dist = a_dist
+
+	def forward(self,states,actions,z):
 
 		'''
 		INPUTS: 
@@ -572,7 +653,11 @@ class Decoder(nn.Module):
 		
 		s_0 = states[:,0:1,:]
 		s_T = states[:,-1:,:]
-		a_mean,a_sig   = self.ll_policy(states,z)
+
+		if self.a_dist != 'autoregressive':
+			a_mean,a_sig = self.ll_policy(states,z)
+		else:
+			a_mean,a_sig = self.ll_policy(states,actions,z)
 
 		if self.state_dec_stop_grad:
 			z = z.detach()
@@ -752,7 +837,7 @@ class SkillModelStateDependentPrior(nn.Module):
 		z_sampled = self.reparameterize(z_post_means,z_post_sigs)
 
 		# STEP 3. Pass z_sampled and states through decoder 
-		s_T_mean, s_T_sig, a_means, a_sigs = self.decoder(states,z_sampled)
+		s_T_mean, s_T_sig, a_means, a_sigs = self.decoder(states,actions,z_sampled) # 5/4/22 add actions as argument here for autoregressive policy
 
 
 
@@ -1053,7 +1138,6 @@ class SkillModelStateDependentPrior(nn.Module):
 # 		pass
 	
 # 	class get_encoder2_loss(self):
-
 
 
 
