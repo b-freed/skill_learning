@@ -39,6 +39,7 @@ def cem_iter(x,cost_fn,frac_keep,l2_pen):
     
     # evaluate solution candidates, get sorted inds
     costs = cost_fn(x)
+    # print('costs: ', costs)
     l2_cost = l2_pen*torch.mean(torch.mean(x**2,dim=-1),dim=-1) 
     costs += l2_cost
     inds = torch.argsort(costs)
@@ -49,9 +50,11 @@ def cem_iter(x,cost_fn,frac_keep,l2_pen):
     cost_topk = torch.mean(costs[inds_keep])
     # take mean and stand dev of new solution population
     x_mean = torch.mean(x_topk,dim=0)
+    # print('x_mean: ', x_mean)
     x_std  = torch.std( x_topk,dim=0)
+    # print('x_std: ', x_std)
     # ipdb.set_trace()
-
+    print('torch.mean(costs): ', torch.mean(costs))
     return x_mean,x_std,cost_topk
 
 def cem(x_mean,x_std,cost_fn,pop_size,frac_keep,n_iters,l2_pen):
@@ -60,9 +63,8 @@ def cem(x_mean,x_std,cost_fn,pop_size,frac_keep,n_iters,l2_pen):
         x_shape = [pop_size]+list(x_mean.shape)
         x = x_mean + x_std*torch.randn(x_shape,device=device)
         x_mean,x_std,cost = cem_iter(x,cost_fn,frac_keep,l2_pen)
-        # print('i: ',i)
         # print('cost: ', cost)
-
+        # input("press enter")
 
     return x_mean,x_std
 
