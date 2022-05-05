@@ -711,13 +711,13 @@ class Decoder(nn.Module):
         self.a_dim = a_dim
         self.z_dim = z_dim
 
-        # if state_decoder_type == 'mlp':
-        #     self.abstract_dynamics = AbstractDynamics(state_dim,z_dim,h_dim)
+        if state_decoder_type == 'mlp':
+            self.abstract_dynamics = AbstractDynamics(state_dim,z_dim,h_dim)
         # elif state_decoder_type == 'autoregressive':
         #     self.abstract_dynamics = AutoregressiveStateDecoder(state_dim,z_dim,h_dim)
-        # else:
-        #     print('PICK VALID STATE DECODER TYPE!!!')
-        #     assert False
+        else:
+            print('PICK VALID STATE DECODER TYPE!!!')
+            assert False
         # self.ll_policy = LowLevelPolicyWithTermination(state_dim,a_dim,z_dim,h_dim, a_dist, max_sig = max_sig, fixed_sig=fixed_sig)
         self.ll_policy = LowLevelPolicy(state_dim,a_dim,z_dim,h_dim, a_dist, max_sig = max_sig, fixed_sig=fixed_sig)
         self.emb_layer  = nn.Linear(state_dim+z_dim,h_dim)
@@ -727,7 +727,7 @@ class Decoder(nn.Module):
 
         self.state_decoder_type = state_decoder_type
         
-    def forward(self,states,z):
+    def forward(self,states,z, s0):
 
         '''
         INPUTS: 
@@ -740,8 +740,8 @@ class Decoder(nn.Module):
             a_sig:  batch_size x T x a_dim tensor of action standard devs for each t in {0.,,,.T}
         '''
         
-        s_0 = states[:,0:1,:]
-        s_T = states[:,-1:,:]
+        # s_0 = states[:,0:1,:]
+        # s_T = states[:,-1:,:]
         a_mean,a_sig   = self.ll_policy(states,z)
         # a_mean, a_sig, b_mean, b_sig = self.ll_policy(states,z)
 
@@ -750,14 +750,14 @@ class Decoder(nn.Module):
         
         # if self.state_decoder_type == 'autoregressive':
         #     z_detached = z.detach()
-        #     sT_mean,sT_sig = self.abstract_dynamics(s_T,s_0,z)
-        # elif self.state_decoder_type == 'mlp':
-        #     sT_mean,sT_sig = self.abstract_dynamics(s_0,z)
-        # else:
-        #     print('PICK VALID STATE DECODER TYPE!!!')
-        #     assert False
+        #     sT_mean, sT_sig = self.abstract_dynamics(s_T, s_0, z)
+        if self.state_decoder_type == 'mlp':
+            sT_mean, sT_sig = self.abstract_dynamics(s0, z)
+        else:
+            print('PICK VALID STATE DECODER TYPE!!!')
+            assert False
         
-        return a_mean, a_sig
+        return sT_mean, sT_sig, a_mean, a_sig
 
 
 class Prior(nn.Module):
@@ -1248,6 +1248,8 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
         skill_lens = []
         skill_list = []
         s0_list = []
+        sT_list = [[] for _ in range(batch_size)]
+        skill_repetitions_list = [[] for _ in range(batch_size)]
         termination_tracker = 0
 
         z_means_list = []
@@ -1312,8 +1314,13 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
             skill_lens.extend(running_l[update].tolist())
 
             n_executed_skills[update] += 1
+            for j in range(batch_size):
+                if update[j]: skill_repetitions_list[j].append(running_l[j].item())
             running_l[update] = 1
             running_l[~update] += 1
+
+            for j in range(batch_size):
+                if update[j]: sT_list[j].append(s_0[j])  
 
             skill_list.append(z_i)
             s0_list.append(s_0)
@@ -1323,6 +1330,13 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
 
             z_i_previous = z_i
             s_0_previous = s_0
+
+        for j in range(batch_size):
+            sT_list[j].append(s_0_updated[j])
+
+        skill_repetitions = self.correct_last_skill_lens(skill_repetitions_list)
+
+        sT = self.create_full_sT(sT_list, skill_repetitions)
 
         z = torch.stack(skill_list, dim=1)
         s0 = torch.stack(s0_list, dim=1).detach() # we don't want any gradients from here. 
@@ -1344,7 +1358,7 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
                 'max': np.max(n_executed_skills.tolist()),
             }
 
-        return z, z_post_means, z_post_sigs, s0, termination_tracker, n_executed_skills, self.correct_for_zeros(self.skill_steps), skill_lens_data, n_executed_skills_data
+        return z, z_post_means, z_post_sigs, s0, sT, termination_tracker, n_executed_skills, self.correct_for_zeros(self.skill_steps), skill_lens_data, n_executed_skills_data
 
     def update_skill_steps(self, time_idxs, batch_idxs):
         column_idxs = torch.arange(self.skill_steps.shape[1]).unsqueeze(dim=0).expand(self.skill_steps.shape[0], -1).to(self.device)
@@ -1359,6 +1373,16 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
         """
         ip[ip==0] = (ip == 0).sum(dim=-1).repeat_interleave((ip == 0).sum(dim=-1))
         return ip
+
+    def create_full_sT(self, sT_list, repitions):
+        full_sT = torch.stack([torch.stack(sT_list[j]).repeat_interleave(repitions[j], dim=0) for j in range(len(sT_list))])
+        return full_sT
+
+    def correct_last_skill_lens(self, repitions):
+        _repetitions = torch.stack([
+                torch.tensor([*repitions[j], 1000 - sum(repitions[j])]) for j in range(len(repitions))
+            ])
+        return _repetitions
 
 
     def update_skills_legacy(self, z_history, z_updated, b_mean, b_sig, running_l, executed_skills, greedy=False):

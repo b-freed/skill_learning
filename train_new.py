@@ -58,12 +58,12 @@ def run_iteration(model, data_loader, model_optimizer=None, train_mode=False):
 
 		# Actually find the skills to be executed, i.e., use the termination events
 		# z_t, _, _ = model.update_skills(z_t_, b_post_means, b_post_sigs, greedy=False)
-		z_t, z_post_means, z_post_sigs, s0, _termination_loss, _, skill_steps, skill_lens_data, n_executed_skills_data = model.update_skills(z_post_means_update, z_post_sigs_update, b_post_means, b_post_sigs, states, greedy=False)
+		z_t, z_post_means, z_post_sigs, s0, sT_gt, _termination_loss, _, skill_steps, skill_lens_data, n_executed_skills_data = model.update_skills(z_post_means_update, z_post_sigs_update, b_post_means, b_post_sigs, states, greedy=False)
 		skill_steps = skill_steps.detach()
 		# # z_t, b_t = model.update_skills(z_history, z_t, b_post_means, b_post_sigs, running_l, executed_skills, greedy=(not train_mode))
 
 		# Pass through the action and terminal state generators (decoders)
-		a_means, a_sigs = model.decoder(states, z_t)
+		sT_mean, sT_sig, a_means, a_sigs = model.decoder(states, z_t, s0)
 
 		# Compute losses
 		# # compute skill prior
@@ -71,7 +71,7 @@ def run_iteration(model, data_loader, model_optimizer=None, train_mode=False):
 		z_prior_means, z_prior_sigs = model.prior(s0)
 
 		# # # Construct required distributions
-		# s_T_dist = Normal.Normal(s_T_mean, s_T_sig)
+		sT_dist = Normal.Normal(sT_mean, sT_sig)
 		z_post_dist = Normal.Normal(z_post_means, z_post_sigs)
 		z_prior_dist = Normal.Normal(z_prior_means, z_prior_sigs)
 
@@ -85,8 +85,8 @@ def run_iteration(model, data_loader, model_optimizer=None, train_mode=False):
 			assert False, f'{model.decoder.ll_policy.a_dist} not supported'
 
 		# Loss for predicting terminal state
-		# s_T_loss = -torch.mean(torch.sum(s_T_dist.log_prob(s_T_gt), dim=-1)/skill_steps) # divide each skill by its length and take mean across batch
-		s_T_loss = 0
+		sT_loss = -torch.mean(torch.sum(sT_dist.log_prob(sT_gt), dim=-1)/skill_steps) # divide each skill by its length and take mean across batch
+		# s_T_loss = 0
 		# Entropy corresponding to terminal state
 		# s_T_ent = torch.mean(torch.sum(s_T_dist.entropy(), dim=-1))/time_steps
 		s_T_ent = 0
@@ -96,7 +96,7 @@ def run_iteration(model, data_loader, model_optimizer=None, train_mode=False):
 		kl_loss = torch.mean(torch.sum(KL.kl_divergence(z_post_dist, z_prior_dist), dim=-1)/skill_steps) # divide each skill by its length and take mean across batch
 		# Incentive for sticking with skills
 		termination_loss = torch.mean(_termination_loss)
-		loss_tot = model.alpha*s_T_loss + a_loss + model.beta*kl_loss + model.ent_pen*s_T_ent + model.gamma * termination_loss
+		loss_tot = model.alpha*sT_loss + a_loss + model.beta*kl_loss + model.ent_pen*s_T_ent + model.gamma * termination_loss
 
 		# return  loss_tot, s_T_loss, a_loss, kl_loss, s_T_ent
 		if train_mode:
