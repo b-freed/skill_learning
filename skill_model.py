@@ -268,13 +268,16 @@ class LowLevelPolicy(nn.Module):
 
 class LowLevelDynamicsFF(nn.Module):
 
-	def __init__(self,s_dim,a_dim,h_dim):
+	def __init__(self,s_dim,a_dim,h_dim,deterministic=True):
 
 		super(LowLevelDynamicsFF,self).__init__()
 		
+		self.deterministic = deterministic
+		self.prior = None
 		self.layer1 = nn.Sequential(nn.Linear(s_dim+a_dim,h_dim),nn.ReLU())
 		self.mean_layer = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,s_dim))
-		self.sig_layer  = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,s_dim),nn.Softplus())
+		if not self.deterministic:
+			self.sig_layer  = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,s_dim),nn.Softplus())
 
 	   
 
@@ -293,17 +296,21 @@ class LowLevelDynamicsFF(nn.Module):
 		feats = self.layer1(state_actions)
 		delta_means = self.mean_layer(feats)
 		s_next_mean = delta_means + states
+		if self.deterministic:
+			return s_next_mean
+
 		s_next_sig = self.sig_layer(feats)
-
-
 
 		return s_next_mean, s_next_sig
 
 	def get_loss(self,states,actions,next_states):
+		if self.deterministic:
+			s_next_mean = self.forward(states,actions)
+			return torch.nn.functional.mse_loss(s_next_mean, next_states)
+
 		s_next_mean, s_next_sig = self.forward(states,actions)
 
 		s_next_dist = Normal.Normal(s_next_mean,s_next_sig)
-
 		return - torch.mean(s_next_dist.log_prob(next_states))
 
 	def sample_from_sT_dist(self,s0,z,ll_policy,H):
@@ -326,6 +333,52 @@ class LowLevelDynamicsFF(nn.Module):
 			s = reparameterize(s_mean,s_sig)
 
 		return s
+
+	def get_expected_cost_for_cem(self, s0, action_seq, goal_state, use_epsilon=False):
+		'''
+		s0 is initial state, batch_size x 1 x s_dim
+		skill sequence is a batch_size x skill_seq_len x z_dim tensor that representents a skill_seq_len sequence of skills
+		'''
+		# tile s0 along batch dimension
+		#s0_tiled = s0.tile([1,batch_size,1])
+		batch_size = s0.shape[0]
+		goal_state = torch.cat(batch_size * [goal_state],dim=0)
+		s_i = s0
+		
+		action_seq_len = action_seq.shape[1]
+		pred_states = [s_i]
+		# costs = torch.zeros(batch_size,device=s0.device)
+		costs = [torch.mean((s_i[:,:,:2] - goal_state[:,:,:2])**2,dim=-1).squeeze()]
+		# costs = (lengths == 0)*torch.mean((s_i[:,:,:2] - goal_state[:,:,:2])**2,dim=-1).squeeze()
+		var_cost = 0.0
+		for i in range(action_seq_len):
+			if use_epsilon:
+				mu_a, sigma_a = self.prior(s_i,goal_state.float())
+				
+				a_i = mu_a + sigma_a*action_seq[:,i:i+1,:]
+			else:
+				a_i = action_seq[:,i:i+1,:]
+			
+			s_mean, s_sig = self.forward(s_i,a_i)
+
+			#var_cost += var_pen*var_cost 
+			
+			# sample s_i+1 using reparameterize
+			s_sampled = s_mean
+			# s_sampled = self.reparameterize(s_mean, s_sig)
+			s_i = s_sampled
+
+			cost_i = torch.mean((s_i[:,:,:2] - goal_state[:,:,:2])**2,dim=-1).squeeze() #+ (i+1)*length_cost
+			costs.append(cost_i)
+			
+			pred_states.append(s_i)
+		
+		costs = torch.stack(costs,dim=1)  # should be a batch_size x T or batch_size x T 
+		costs,_ = torch.min(costs,dim=1)  # should be of size batch_size
+		# print('costs: ', costs)
+		# print('costs.shape: ', costs.shape)
+		
+		return costs #+ var_cost
 
 
 
@@ -607,20 +660,24 @@ class Prior(nn.Module):
 	-embed z
 	-Pass into fully connected network to get "state T features"
 	'''
-	def __init__(self,state_dim,z_dim,h_dim):
+	def __init__(self,state_dim,z_dim,h_dim,goal_conditioned=False,goal_dim=2):
 
 		super(Prior,self).__init__()
 		
 		self.state_dim = state_dim
 		self.z_dim = z_dim
-
-		self.layers = nn.Sequential(nn.Linear(state_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
+		self.goal_conditioned = goal_conditioned
+		if(self.goal_conditioned):
+			self.goal_dim = goal_dim
+		else:
+			self.goal_dim = 0
+		self.layers = nn.Sequential(nn.Linear(state_dim+self.goal_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
 		#self.mean_layer = nn.Linear(h_dim,z_dim)
 		self.mean_layer = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,z_dim))
 		#self.sig_layer  = nn.Sequential(nn.Linear(h_dim,z_dim),nn.Softplus())
 		self.sig_layer  = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,z_dim),nn.Softplus())
 		
-	def forward(self,s0):
+	def forward(self,s0,goal=None):
 
 		'''
 		INPUTS: 
@@ -631,12 +688,24 @@ class Prior(nn.Module):
 			z_sig:  batch_size x 1 x state_dim tensor of z standard devs
 			
 		'''
+		if(self.goal_conditioned):
+			s0 = torch.cat([s0,goal],dim=-1)
 		feats = self.layers(s0)
 		# get mean and stand dev of action distribution
 		z_mean = self.mean_layer(feats)
 		z_sig  = self.sig_layer(feats)
 
 		return z_mean, z_sig
+
+	def get_loss(self,states,actions,goal=None):
+		'''
+		To be used only for low level action Prior training
+		'''
+		a_mean, a_sig = self.forward(states,goal)
+
+		a_dist = Normal.Normal(a_mean,a_sig)
+		return - torch.mean(a_dist.log_prob(actions))
+
 
 class TerminalStateDependentPrior(nn.Module):
 	'''
