@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from torch.utils.data import TensorDataset
 from torch.utils.data.dataloader import DataLoader
 import torch.distributions.normal as Normal
-from skill_model import LowLevelDynamicsFF
+from skill_model import Prior
 import gym
 from mujoco_py import GlfwContext
 import clean_antmaze_dataset
@@ -21,12 +21,11 @@ def train(model,model_optimizer):
 	
 	losses = []
 	
-	for batch_id, (state,action,next_state) in enumerate(train_loader):
+	for batch_id, (state,goal,action) in enumerate(train_loader):
 		
 		state = state.cuda()
 		action = action.cuda()
-		next_state = next_state.cuda()
-		loss = model.get_loss(state, action, next_state)
+		loss = model.get_loss(state, action, goal)
 
 		model_optimizer.zero_grad()
 		loss.backward()
@@ -43,11 +42,10 @@ def test(model):
 	losses = []
 	
 	with torch.no_grad():
-		for batch_id, (state,action,next_state) in enumerate(test_loader):
+		for batch_id, (state,goal,action) in enumerate(test_loader):
 			state = state.cuda()
 			action = action.cuda()
-			next_state = next_state.cuda()
-			loss = model.get_loss(state, action, next_state)
+			loss = model.get_loss(state, action, goal)
 
 			# log losses
 			losses.append(loss.item())
@@ -67,7 +65,7 @@ dataset_file = None
 # dataset_file = 'datasets/maze2d-large-v1-noisy-2.hdf5'
 
 if dataset_file is None:
-	dataset = d4rl.qlearning_dataset(env) #env.get_dataset()
+	dataset = env.get_dataset()#d4rl.qlearning_dataset(env) #env.get_dataset()
 else:
 	dataset = d4rl.qlearning_dataset(env,h5py.File(dataset_file, "r"))  # Not sure if this will work
 
@@ -82,17 +80,19 @@ test_split = .2
 decay = True
 lr_decay = 0.1
 lr_decay_epochs_interval = 100
-			
+goal_conditioned = True
+		
 states = torch.tensor(dataset['observations'],dtype=torch.float32,device=device)
-next_states = torch.tensor(dataset['next_observations'],dtype=torch.float32,device=device)
+#next_states = torch.tensor(dataset['next_observations'],dtype=torch.float32,device=device)
 actions = torch.tensor(dataset['actions'],dtype=torch.float32,device=device)
-
-states, next_states, actions = clean_antmaze_dataset.clean_data(states, next_states, actions)
+goals = torch.tensor(dataset['infos/goal'],dtype=torch.float32,device=device)
+#states, next_states, actions = clean_antmaze_dataset.clean_data(states, next_states, actions)
 
 N = states.shape[0]
 
 state_dim = states.shape[1]
 a_dim = actions.shape[1]
+goal_dim = goals.shape[1]
 
 N_train = int((1-test_split)*N)
 N_test = N - N_train
@@ -104,7 +104,7 @@ experiment = Experiment(api_key = 'wb7Q8i6WX2nuxXfHJdBSs9PUV', project_name = 's
 
 
 
-filename = 'll_dynamics_'+str(env_name)+'_l2reg_'+str(wd)+'_lr_'+str(lr)+'_log'
+filename = 'll_prior_'+str(env_name)+'_l2reg_'+str(wd)+'_lr_'+str(lr)+'_log'
 
 
 # TODO delete irrelevant items
@@ -117,13 +117,15 @@ experiment.log_parameters({'lr':lr,
 							'filename':filename})
 
 # define model
-model = LowLevelDynamicsFF(state_dim,a_dim,h_dim,deterministic=False).cuda()
+model = Prior(state_dim,a_dim,h_dim,goal_conditioned).cuda()
 model_optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
 if decay == True:
 	lr_scheduler = torch.optim.lr_scheduler.StepLR(model_optimizer, 1, lr_decay)
 
-
-dataset = torch.utils.data.TensorDataset(states,actions,next_states)
+if(goal_conditioned):
+	dataset = torch.utils.data.TensorDataset(states,goals,actions)
+else:
+	dataset = torch.utils.data.TensorDataset(states,actions)
 # train_data, test_data = torch.utils.data.random_split(dataset, [int(0.8*dataset_size), int(dataset_size-int(0.8*dataset_size))])
 train_data, test_data = torch.utils.data.random_split(dataset, [N_train, N_test])
 
@@ -158,7 +160,7 @@ for i in range(n_epochs):
 	if i % 10 == 0:
 		
 			
-		checkpoint_path = 'checkpoints/'+ filename + '_hdim_512_Decay.pth'
+		checkpoint_path = 'checkpoints/'+ filename + '_hdim_512_GoalConditioned_Decay.pth'
 		torch.save({
 							'model_state_dict': model.state_dict(),
 							'model_optimizer_state_dict': model_optimizer.state_dict(),
@@ -168,6 +170,6 @@ for i in range(n_epochs):
 
 		
 			
-		checkpoint_path = 'checkpoints/'+ filename + '_hdim_512_Decay_best.pth'
+		checkpoint_path = 'checkpoints/'+ filename + '_hdim_512_GoalConditioned_Decay_best.pth'
 		torch.save({'model_state_dict': model.state_dict(),
 				'model_optimizer_state_dict': model_optimizer.state_dict()}, checkpoint_path)
