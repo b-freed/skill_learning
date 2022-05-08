@@ -1141,7 +1141,7 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
     def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal',state_dec_stop_grad=False,beta=1.0,alpha=1.0, \
                 gamma=1.0,temperature=1.0,max_sig=None,fixed_sig=None,ent_pen=0, \
                 encoder_type='state_action_sequence', state_decoder_type='mlp', min_skill_len=None, \
-                max_skill_len=None, max_skills_per_seq=None, grad_clip_threshold=1.0, device='cpu'):
+                max_skill_len=None, max_skills_per_seq=None, grad_clip_threshold=10.0, device='cpu'):
         super(SkillModelStateDependentPriorAutoTermination, self).__init__(state_dim,a_dim,z_dim,h_dim,a_dist,state_dec_stop_grad,beta,alpha,max_sig,fixed_sig,ent_pen,encoder_type,state_decoder_type)
 
         # Override the encoder module
@@ -1159,6 +1159,7 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
         self.min_skill_len = min_skill_len
         self.max_skill_len = max_skill_len
         self.max_skills_per_seq = max_skills_per_seq
+        self.grad_clip_threshod = grad_clip_threshold
 
 
     def forward(self, states, actions):        
@@ -1435,7 +1436,7 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
     def clip_gradients(self):
         """Clip gradients to avoid exploding gradients
         """
-        # torch.nn.utils.clip_grad_norm_(self.parameters(), self.grad_clip_threshod) # TODO: check if this is correct
+        torch.nn.utils.clip_grad_norm_(self.parameters(), self.grad_clip_threshod) # TODO: check if this is correct
         pass
 
 
