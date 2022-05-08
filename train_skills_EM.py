@@ -16,6 +16,7 @@ import h5py
 from utils import chunks
 import config
 import os
+from datetime import date
 
 def train(model,E_optimizer,M_optimizer):
 	
@@ -86,27 +87,27 @@ H = 40
 stride = 1
 n_epochs = 50000
 test_split = .2
-a_dist = 'normal' # 'tanh_normal' or 'normal'
+a_dist = 'normal' # 'autoregressive', 'tanh_normal' or 'normal'
 state_dependent_prior = True
 encoder_type = 'state_action_sequence' #'state_sequence'
 state_decoder_type = 'mlp' #'autoregressive'
 init_state_dependent = True
 load_from_checkpoint = False
-per_element_sigma = False
+per_element_sigma = True #False
 
-# env_name = 'antmaze-large-diverse-v0'
-env_name = 'kitchen-partial-v0'
+env_name = 'antmaze-large-diverse-v0'
+# env_name = 'kitchen-partial-v0'
 
-dataset_file = 'datasets/'+env_name+'.npz'
+dataset_file = None #'datasets/'+env_name+'.npz'
 #dataset_file = "datasets/maze2d-umaze-v1.hdf5"
 # dataset_file = 'datasets/maze2d-large-v1-noisy-2.hdf5'
 
 if dataset_file is None:
-	dataset = d4rl.qlearning_dataset(env) #env.get_dataset()
+	env = gym.make(env_name)
+	dataset = env.get_dataset()
 else:
 	if '.npz' in dataset_file:
 		# load numpy file
-		dataset = np.load
 		dataset = np.load(dataset_file)
 	elif '.hdf5' in dataset_file:
 		env = gym.make(env_name)
@@ -118,7 +119,6 @@ else:
 
 
 states = dataset['observations']
-next_states = dataset['next_observations']
 actions = dataset['actions']
 
 N = states.shape[0]
@@ -130,31 +130,29 @@ N_train = int((1-test_split)*N)
 N_test = N - N_train
 
 states_train  = states[:N_train,:]
-next_states_train = next_states[:N_train,:]
 actions_train = actions[:N_train,:]
 
 
 states_test  = states[N_train:,:]
-next_states_test = next_states[N_train:,:]
 actions_test = actions[N_train:,:]
 
 													#  obs,next_obs,actions,H,stride
-obs_chunks_train, action_chunks_train = chunks(states_train, next_states_train, actions_train, H, stride)
+obs_chunks_train, action_chunks_train = chunks(states_train, actions_train, H, stride)
 
 print('states_test.shape: ',states_test.shape)
 print('MAKIN TEST SET!!!')
 
-obs_chunks_test,  action_chunks_test  = chunks(states_test,  next_states_test,  actions_test,  H, stride)
+obs_chunks_test,  action_chunks_test  = chunks(states_test,  actions_test,  H, stride)
 
 
 experiment = Experiment(api_key = '9mxH2vYX20hn9laEr0KtHLjAa', project_name = 'skill-learning')
-# experiment.add_tag('noisy2')
+experiment.add_tag('fixed chunk 5/8/22')
 
 
 # First, instantiate a skill model
 
 if state_dependent_prior:
-	model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist='normal',state_dec_stop_grad=False,beta=beta,alpha=alpha,max_sig=None,fixed_sig=None,ent_pen=0,encoder_type='state_action_sequence',state_decoder_type=state_decoder_type,init_state_dependent=init_state_dependent,per_element_sigma=per_element_sigma).cuda()
+	model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist,state_dec_stop_grad=False,beta=beta,alpha=alpha,max_sig=None,fixed_sig=None,ent_pen=0,encoder_type='state_action_sequence',state_decoder_type=state_decoder_type,init_state_dependent=init_state_dependent,per_element_sigma=per_element_sigma).cuda()
 
 else:
 	raise NotImplementedError
@@ -163,7 +161,9 @@ else:
 E_optimizer = torch.optim.Adam(model.encoder.parameters(), lr=lr, weight_decay=wd)
 M_optimizer = torch.optim.Adam(model.gen_model.parameters(), lr=lr, weight_decay=wd)
 
-filename = 'EM_model_'+env_name+'state_dec_'+str(state_decoder_type)+'_init_state_dep_'+str(init_state_dependent)+'_H_'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_per_el_sig_'+str(per_element_sigma)+'_log'
+date =  date.today().strftime("%m_%d_%y")
+
+filename = 'EM_model_'+date+'_'+env_name+'state_dec_'+str(state_decoder_type)+'_init_state_dep_'+str(init_state_dependent)+'_H_'+str(H)+'_l2reg_'+str(wd)+'_a_'+str(alpha)+'_b_'+str(beta)+'_per_el_sig_'+str(per_element_sigma)+'_a_dist_'+str(a_dist)+'_log'
 
 if load_from_checkpoint:
 	PATH = os.path.join(config.ckpt_dir,filename+'_best_sT.pth')
@@ -190,8 +190,9 @@ experiment.log_parameters({'lr':lr,
 							'filename':filename,
 							'encoder_type':encoder_type,
 							'state_decoder_type':state_decoder_type,
-							'per_element_sigma':per_element_sigma})
-experiment.add_tag('fixed chunks')
+							'per_element_sigma':per_element_sigma,
+							'a_dist':a_dist})
+# experiment.add_tag('fixed chunks')
 
 # add chunks of data to a pytorch dataloader
 # inputs_train = torch.tensor(np.concatenate([obs_chunks_train, action_chunks_train],axis=-1),dtype=torch.float32) # array that is dataset_size x T x state_dim+action_dim

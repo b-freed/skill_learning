@@ -71,7 +71,46 @@ def stable_weighted_log_sum_exp(x,w,sum_dim):
 
 	return a + torch.log(weighted_sum)
 
-def chunks(obs,next_obs,actions,H,stride):
+# def chunks(obs,next_obs,actions,H,stride):
+# 	'''
+# 	obs is a N x 4 array
+# 	goals is a N x 2 array
+# 	H is length of chunck
+# 	stride is how far we move between chunks.  So if stride=H, chunks are non-overlapping.  If stride < H, they overlap
+# 	'''
+	
+# 	obs_chunks = []
+# 	action_chunks = []
+# 	N = obs.shape[0]
+# 	for i in range(N//stride - H):
+# 		start_ind = i*stride
+# 		end_ind = start_ind + H
+# 		# If end_ind = 4000000, it goes out of bounds
+# 		# this way start_ind is from 0-3999980 and end_ind is from 20-3999999
+# 		# if end_ind == N:
+# 		# 	end_ind = N-1
+		
+# 		obs_chunk = torch.tensor(obs[start_ind:end_ind,:],dtype=torch.float32)
+
+# 		action_chunk = torch.tensor(actions[start_ind:end_ind,:],dtype=torch.float32)
+		
+# 		# print('obs[start_ind+1:end_ind]: ',obs[start_ind+1:end_ind])
+# 		# print('next_obs[start_ind:end_ind-1]: ', next_obs[start_ind:end_ind-1])
+
+# 		if np.all(obs[start_ind+1:end_ind] == next_obs[start_ind:end_ind-1]): 
+# 			obs_chunks.append(obs_chunk)
+# 			action_chunks.append(action_chunk)
+# 		else:
+# 			pass
+# 			# print('NOT INCLUDING ',i)
+
+# 	print('len(obs_chunks): ',len(obs_chunks))
+# 	print('len(action_chunks): ',len(action_chunks))
+			
+	
+# 	return torch.stack(obs_chunks),torch.stack(action_chunks)
+
+def chunks(obs,actions,H,stride):
 	'''
 	obs is a N x 4 array
 	goals is a N x 2 array
@@ -94,18 +133,34 @@ def chunks(obs,next_obs,actions,H,stride):
 
 		action_chunk = torch.tensor(actions[start_ind:end_ind,:],dtype=torch.float32)
 		
-		# print('obs[start_ind+1:end_ind]: ',obs[start_ind+1:end_ind])
-		# print('next_obs[start_ind:end_ind-1]: ', next_obs[start_ind:end_ind-1])
+		
 
-		if np.all(obs[start_ind+1:end_ind] == next_obs[start_ind:end_ind-1]): 
+		# if np.all(obs[start_ind+1:end_ind] == next_obs[start_ind:end_ind-1]): 
+		# 	obs_chunks.append(obs_chunk)
+		# 	action_chunks.append(action_chunk)
+		# else:
+		# 	pass
+			# print('NOT INCLUDING ',i)
+
+		loc_deltas = obs_chunk[1:,:2] - obs_chunk[:-1,:2] 
+		norms = np.linalg.norm(loc_deltas,axis=-1)
+		if np.all(norms <= 0.5):
 			obs_chunks.append(obs_chunk)
 			action_chunks.append(action_chunk)
 		else:
+			# print('rejecting chunk')
 			pass
-			# print('NOT INCLUDING ',i)
+	
+
+
 
 	print('len(obs_chunks): ',len(obs_chunks))
 	print('len(action_chunks): ',len(action_chunks))
 			
 	
 	return torch.stack(obs_chunks),torch.stack(action_chunks)
+
+
+def z_score(x,mu,sig):
+
+	return torch.mean(((x-mu)/sig)**2)
