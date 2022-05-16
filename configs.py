@@ -5,18 +5,23 @@ import torch
 class HyperParams:
     def __init__(self):
         self.batch_size = 32
-        self.h_dim = 256
+        self.h_dim = 200
         self.z_dim = 256
-        self.lr = 5e-5
+        self.lr = 5e-4
         self.wd = 0.000
         self.state_dependent_prior = True
         self.term_state_dependent_prior = False
         self.state_dec_stop_grad = True
-        self.gamma = 0.02 # TODO
+        self.gamma = 0.0 # TODO
         self.beta = 0.1
         self.alpha = 1.0
         self.ent_pen = 0.0
-        self.temperature = 1.0 # gumbel-softmax temperature coeff
+
+        self.max_temperature = 1.0 # gumbel-softmax temperature coeff
+        self.min_temperature = 0.2
+        self.temperature_anneal = 0 # Set to 0 to disable annealing
+        self.temperature = self.max_temperature # initial temperature value
+
         self.max_sig = None
         self.fixed_sig = None
         self.H_min = 10
@@ -43,7 +48,7 @@ class HyperParams:
         else:
             self.msg = f'{self.env_name}_enc_type_{self.encoder_type}_state_dec_{self.state_decoder_type}_H_{self.H_max}_l2reg_{self.wd}_a_{self.alpha}_b_{self.beta}_sg_{self.state_dec_stop_grad}_max_sig_{self.max_sig}_fixed_sig_{self.fixed_sig}_ent_pen_{self.ent_pen}_log'
 
-        self.additional_msg = 'train with prior; sl loss'
+        self.additional_msg = ''
 
         date_time = time.asctime()[4:16].replace(' ', '_').replace(':', '_')[:6].replace('__', '_')
         self.log_dir = os.path.join('checkpoints', date_time)

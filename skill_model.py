@@ -477,116 +477,30 @@ class EncoderAutoTermination(nn.Module):
         self.a_dim = a_dim
         self.state_dim = state_dim
 
-        self.emb_layer    = nn.Sequential(nn.Linear(state_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
-        self.rnn          = nn.GRU(h_dim+a_dim,h_dim,batch_first=True,bidirectional=True,num_layers=n_gru_layers)
+        self.emb_layer    = nn.Sequential(nn.Linear(state_dim,h_dim), nn.LeakyReLU(negative_slope=0.02), nn.Linear(h_dim,h_dim), nn.LeakyReLU(negative_slope=0.02))
+        self.rnn          = nn.GRU(h_dim+a_dim, h_dim, batch_first=True, bidirectional=True, num_layers=n_gru_layers)
 
-        self.z_mean_layer = nn.Sequential(nn.Linear(2*h_dim, h_dim),nn.ReLU(),nn.Linear(h_dim, z_dim))
-        self.b_mean_layer = nn.Sequential(nn.Linear(2*h_dim, h_dim),nn.ReLU(),nn.Linear(h_dim, 2))
+        self.z_mean_layer = nn.Sequential(nn.Linear(2*h_dim, h_dim), nn.ReLU(), nn.Linear(h_dim, z_dim))
+        self.z_sig_layer  = nn.Sequential(nn.Linear(2*h_dim, h_dim), nn.ReLU(), nn.Linear(h_dim, z_dim), nn.Softplus())
 
-        self.z_sig_layer  = nn.Sequential(nn.Linear(2*h_dim, h_dim),nn.ReLU(),nn.Linear(h_dim, z_dim),nn.Softplus())
-        self.b_sig_layer  = nn.Sequential(nn.Linear(2*h_dim, h_dim),nn.ReLU(),nn.Linear(h_dim, 2),nn.Softplus())
-
-
-    def forward(self, states, actions, seq_lens=None, variable_length=True):
-        '''
-        Takes a sequence of states and actions, and infers the distribution over latent skill variable, z
-        
-        INPUTS:
-            states:  batch_size x t x state_dim state sequence tensor
-            actions: batch_size x t x a_dim action sequence tensor
-        OUTPUTS:
-            z_mean:  batch_size x 1 x z_dim tensor indicating mean of z distribution
-            z_sig:   batch_size x 1 x z_dim tensor indicating standard deviation of z distribution
-        '''
-        return self.forward2(states, actions)
-        """
-        if not variable_length: return self.forward_legacy(states, actions)
-        assert seq_lens is not None, "lens must be provided if variable_length is False"
-        # Assume that states and actions are padded
-
-        # Convert (padded) state sequence to embedding
-        s_emb = self.emb_layer(states)
-
-        # Extract features from embedding, action sequence
-        s_emb_a = torch.cat([s_emb, actions], dim=-1) # this is padded
-
-        # Pack the padded sequence
-        packed_emb = pack_padded_sequence(s_emb_a, seq_lens, batch_first=True, enforce_sorted=False)
-
-        packed_feats, _ = self.rnn(packed_emb)
-        # packed_op, (feats, _) = self.rnn(packed_emb)
+        self.b_layer      = nn.Sequential(nn.Linear(2*h_dim, h_dim), nn.LeakyReLU(negative_slope=0.02), nn.Linear(h_dim, 2))
 
 
-        # We want to play with the packed_op
-        # output, ip_sizes = pad_packed_sequence(packed_op, batch_first=True)
-        unpacked_feats, ip_sizes = pad_packed_sequence(packed_feats, batch_first=True)
-
-        # ipdb.set_trace()
-        # Use the final hidden state TODO: change from below
-        hn = unpacked_feats[:, -1:, :]
-
-        # get z_mean and z_sig by passing rnn output through mean_layer and sig_layer
-        z_mean = self.z_mean_layer(hn)
-        z_sig = self.z_sig_layer(hn)
-
-        # get b_mean and b_sig by passing rnn output through mean_layer and sig_layer
-        b_mean = self.b_mean_layer(hn)
-        b_sig = self.b_sig_layer(hn)
-        
-        return z_mean, z_sig, b_mean, b_sig
-        """
-
-    def forward_legacy(self, states, actions):
-        '''
-        Takes a sequence of states and actions, and infers the distribution over latent skill variable, z
-        
-        INPUTS:
-            states:  batch_size x t x state_dim state sequence tensor
-            actions: batch_size x t x a_dim action sequence tensor
-        OUTPUTS:
-            z_mean:  batch_size x 1 x z_dim tensor indicating mean of z distribution
-            z_sig:   batch_size x 1 x z_dim tensor indicating standard deviation of z distribution
-        '''
-        # Convert state sequence to embedding
+    def forward(self, states, actions):
         s_emb = self.emb_layer(states)
 
         # Extract features from embedding, action sequence
         s_emb_a = torch.cat([s_emb, actions], dim=-1)
         feats, _ = self.rnn(s_emb_a)
-
-        # Use the final hidden state
-        hn = feats[:, -1:, :]
-
-        # get z_mean and z_sig by passing rnn output through mean_layer and sig_layer
-        z_mean = self.z_mean_layer(hn)
-        z_sig = self.z_sig_layer(hn)
-
-        # get b_mean and b_sig by passing rnn output through mean_layer and sig_layer
-        b_mean = self.b_mean_layer(hn)
-        b_sig = self.b_sig_layer(hn)
-        
-        return z_mean, z_sig, b_mean, b_sig
-
-    def forward2(self, states, actions):
-        s_emb = self.emb_layer(states)
-
-        # Extract features from embedding, action sequence
-        s_emb_a = torch.cat([s_emb, actions], dim=-1)
-        feats, _ = self.rnn(s_emb_a)
-
-        # Use the final hidden state
-        # hn = feats[:, -1:, :]
 
         # get z_mean and z_sig by passing rnn output through mean_layer and sig_layer
         z_mean = self.z_mean_layer(feats)
         z_sig = self.z_sig_layer(feats)
 
-        # get b_mean and b_sig by passing rnn output through mean_layer and sig_layer
-        b_mean = self.b_mean_layer(feats)
-        b_sig = self.b_sig_layer(feats)
+        # get b_probabilities by passing rnn output through mean_layer and sig_layer
+        b_probabilities = self.b_layer(feats)
 
-        return z_mean, z_sig, b_mean, b_sig
-
+        return z_mean, z_sig, b_probabilities
 
 
 class StateSeqEncoder(nn.Module):
@@ -801,6 +715,39 @@ class Prior(nn.Module):
         z_sig  = self.sig_layer(feats)
 
         return z_mean, z_sig
+
+class TerminationPrior(nn.Module):
+    def __init__(self, state_dim, action_dim, z_dim, h_dim):
+        super(TerminationPrior, self).__init__()
+        
+        self.z_dim = z_dim
+        self.state_dim = state_dim
+        self.action_dim = action_dim
+
+        self.s_emb_layer = nn.Sequential(nn.Linear(state_dim, h_dim), nn.LeakyReLU(negative_slope=0.02), nn.Linear(h_dim, h_dim), nn.LeakyReLU(negative_slope=0.02))
+        self.a_emb_layer = nn.Sequential(nn.Linear(action_dim, h_dim), nn.LeakyReLU(negative_slope=0.02), nn.Linear(h_dim, h_dim), nn.LeakyReLU(negative_slope=0.02))
+
+        self.layers      = nn.Sequential(nn.Linear(2*h_dim, h_dim), nn.LeakyReLU(negative_slope=0.02), nn.Linear(h_dim, 2))
+
+        
+    def forward(self, states, actions):
+        """
+        Inputs: 
+            states: batch_size x T x state_dim state sequence tensor
+            actions: batch_size x T x state_dim state sequence tensor
+            
+        Outputs:
+            b_probabilities: batch_size x T x state_dim tensor of termination probabilities            
+        """
+        s_emb = self.s_emb_layer(states)
+        a_emb = self.a_emb_layer(actions)
+
+        embeddings = torch.cat([s_emb, a_emb], dim=-1)
+
+        b_prior_probabilities = self.layers(embeddings)
+
+        return b_prior_probabilities
+
 
 class TerminalStateDependentPrior(nn.Module):
     '''
@@ -1141,7 +1088,7 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
     def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal',state_dec_stop_grad=False,beta=1.0,alpha=1.0, \
                 gamma=1.0,temperature=1.0,max_sig=None,fixed_sig=None,ent_pen=0, \
                 encoder_type='state_action_sequence', state_decoder_type='mlp', min_skill_len=None, \
-                max_skill_len=None, max_skills_per_seq=None, grad_clip_threshold=10.0, device='cpu'):
+                max_skill_len=None, max_skills_per_seq=None, grad_clip_threshold=1.0, device='cpu'):
         super(SkillModelStateDependentPriorAutoTermination, self).__init__(state_dim,a_dim,z_dim,h_dim,a_dist,state_dec_stop_grad,beta,alpha,max_sig,fixed_sig,ent_pen,encoder_type,state_decoder_type)
 
         # Override the encoder module
@@ -1156,10 +1103,10 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
         self.grad_clip_threshold = grad_clip_threshold
 
         # Prior for termination
+        self.termination_prior = TerminationPrior(state_dim, a_dim, z_dim, h_dim)
         self.min_skill_len = min_skill_len
         self.max_skill_len = max_skill_len
         self.max_skills_per_seq = max_skills_per_seq
-        self.grad_clip_threshod = grad_clip_threshold
 
 
     def forward(self, states, actions):        
@@ -1178,7 +1125,7 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
         '''
 
         # Encode states and actions to get posterior over z
-        z_post_means, z_post_sigs, b_post_means, b_post_sigs = self.encoder(states, actions)
+        z_post_means, z_post_sigs, b_probabilities = self.encoder(states, actions)
 
         # Sample z from posterior 
         z_sampled = self.reparameterize(z_post_means, z_post_sigs)
@@ -1188,7 +1135,7 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
         # Pass z_sampled and states through decoder 
         s_T_mean, s_T_sig, a_means, a_sigs = self.decoder(states, z_sampled)
 
-        return s_T_mean, s_T_sig, a_means, a_sigs, z_post_means, z_post_sigs, b_post_means, b_post_sigs
+        return s_T_mean, s_T_sig, a_means, a_sigs, z_post_means, z_post_sigs, b_probabilities
 
 
     def compute_losses(self, s_T_mean, s_T_sig, a_means, a_sigs, 
@@ -1226,6 +1173,173 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
 
         return  loss_tot, s_T_loss, a_loss, kl_loss, s_T_ent
 
+    def regularize_termination(self, b, eps=1e-16):
+        """
+        Inputs:
+            b: batch_size, T (1000), 2
+        Returns: 
+            uses N_{max} and l_{min} to overwrite termination logits
+        """
+        regularized_b = []
+        batch_size, time_steps = b.shape[:2]
+
+        running_l = torch.ones(batch_size, dtype=torch.long, device=self.device)
+        n_executed_skills = torch.ones(batch_size, dtype=torch.float32, device=self.device)  # TODO: long used here. Double check.
+
+        for t in range(time_steps):
+            # Get update for termination
+            b_update = b[:, t, :] # (batch_size, 2)
+
+            _b_i = []
+            # TODO: low priority: anneal eps later. 
+            _update = torch.tensor([eps, 1-eps], device=self.device).float() # we don't want to blow up loss to infinity for zero-valued elements
+            _copy = torch.tensor([1-eps, eps], device=self.device).float()
+
+            # Overwrite b with prior
+            # Can't detach gradients selectively (for e.g., by indexing) from a tensor, 
+            # so stack (differentiable) slices wherever required
+
+            # Get overwrite indexes for all conditions
+            over_max_len_idxs = running_l > self.max_skill_len
+            below_min_len_idxs = running_l < self.min_skill_len
+            over_max_n_skills_idxs = n_executed_skills >= self.max_skills_per_seq
+
+            # Don't pass gradients through overwritten indexes
+            detach_idxs = torch.logical_or(torch.logical_or(over_max_len_idxs, below_min_len_idxs), over_max_n_skills_idxs)
+
+            for j in range(batch_size):
+                if not detach_idxs[j]:
+                    _b_i.append(b_update[j])
+                # skill_len > max_skill_len, update
+                if over_max_n_skills_idxs[j]:
+                    _b_i.append(_copy)
+                # skill_len < min_skill_len, copy
+                elif below_min_len_idxs[j]:
+                    _b_i.append(_copy)
+                # total executed skills > N max skills allowed, copy
+                elif over_max_len_idxs[j]:
+                    _b_i.append(_update)
+
+            # Assemble data
+            b_i = torch.stack(_b_i)
+            regularized_b.append(b_i)
+
+            # Update running variables
+            update = b_i[:, 1].bool()
+            n_executed_skills[update] += 1
+            running_l[update] = 1
+            running_l[~update] += 1
+
+        # Assemble and run sanity checks
+        regularized_b_tensor = torch.stack(regularized_b, dim=1)
+        assert regularized_b_tensor.shape == (batch_size, time_steps, 2)
+
+        return regularized_b_tensor, n_executed_skills
+
+
+    def update_skillsv2(self, z_means, z_sigs, b_probabilities, states, regularize_terminals=False, greedy=False):
+        batch_size, time_steps = b_probabilities.shape[:2]
+
+        # Gumbel-softmax (differential) sampling
+        b, b_logits = utils.boundary_sampler(b_probabilities.squeeze(dim=1), temperature=self.temperature)
+
+        if greedy:
+            b = torch.argmax(b, dim=-1) # batch_size, time_steps # TODO: double check
+
+        # self.skill_steps = torch.zeros(b_probabilities.shape[0], b_probabilities.shape[1], device=self.device, dtype=torch.long) # TODO: long used here. Double check.
+        self.exhausted_steps = torch.zeros(b_probabilities.shape[0], device=self.device, dtype=torch.long) # TODO: long used here. Double check.
+
+        if regularize_terminals:
+            b, n_executed_skills = self.regularize_termination(b)
+        else: 
+            b = b
+            n_executed_skills = torch.sum(b[:, :, 1], dim=-1) + 1 # TODO: double check
+
+        # (Re)set running variables
+        s0_list = []
+        skill_list = []
+        sT_list = [[] for _ in range(batch_size)]
+        skill_repetitions_list = [[] for _ in range(batch_size)]
+        termination_tracker = 0
+
+        running_l = torch.ones(batch_size, dtype=torch.long, device=self.device)
+
+        z_t = self.reparameterize(z_means, z_sigs)
+
+        z_i_previous = z_t[:, 0, :] # TODO: got rid of: detach required for copying over a skill?. Double check.
+        s_0_previous = states[:, 0, :] # TODO: got rid of: detach required for copying over a skill?. Double check.
+
+        for i in range(time_steps):
+            # Get updates for termination, skill, s0
+            b_update = b[:, i, :] # (batch_size, 2)
+            z_i_update = z_t[:, i, :] # (batch_size, z_dim)
+            s_0_update = states[:, i, :] # (batch_size, s_dim)
+
+            copy, read = b_update[:, 0].unsqueeze(dim=-1), b_update[:, 1].unsqueeze(dim=-1) # (batch_size, 1)
+
+            # (differentiable) Keep tracking of number of executed skills
+            termination_tracker += torch.sum(read, dim=-1)
+
+            # Update skill and s0
+            z_i = (copy * z_i_previous) + (read * z_i_update) 
+            s_0 = (copy * s_0_previous) + (read * s_0_update)
+
+            update = b_update[:, 1].bool()
+            
+            # (non-differentiable) Keep track of skill lengths
+            for j in range(batch_size):
+                if update[j]: skill_repetitions_list[j].append(running_l[j].item())
+
+            # Increment of non terminated skill
+            running_l[update] = 1
+            running_l[~update] += 1
+
+            # Stack sT
+            for j in range(batch_size):
+                if update[j]: sT_list[j].append(s_0_update[j]) # on termination, s0 is sT for prev seq
+
+            # Stack updated skill and s0
+            skill_list.append(z_i)
+            s0_list.append(s_0)
+
+            # Update previous skill and s0 tracker
+            z_i_previous = z_i
+            s_0_previous = s_0
+
+        # Add sT for the last skill (that might not be terminated)
+        for j in range(batch_size):
+            sT_list[j].append(s_0_update[j]) # on termination, s0 is sT for prev seq 
+
+        # Correct for skills that were not terminated (last skills) and assemble sT data
+        skill_lens, skill_repetitions = self.correct_last_skill_lens(skill_repetitions_list)
+        sT = self.create_full_sT(sT_list, skill_repetitions).detach() # We don't want any gradients from here
+
+        z = torch.stack(skill_list, dim=1)
+        s0 = torch.stack(s0_list, dim=1).detach() # TODO: we don't want any gradients from here
+
+        # Data for creating plots
+        skill_lens_data = {
+                'mean': np.mean(skill_lens),
+                'std': np.std(skill_lens),
+                'min': np.min(skill_lens),
+                'max': np.max(skill_lens),
+            }
+        n_executed_skills_data = {
+                'mean': np.mean(n_executed_skills.tolist()),
+                'std': np.std(n_executed_skills.tolist()),
+                'min': np.min(n_executed_skills.tolist()),
+                'max': np.max(n_executed_skills.tolist()),
+            }
+
+        return z, s0, sT, b[:, :, -1:], b_logits, termination_tracker, n_executed_skills, skill_lens_data, n_executed_skills_data
+
+
+    def log_density_concrete(self, log_alpha, log_sample):
+        exp_term = log_alpha - self.temperature * log_sample
+        log_prob = torch.sum(exp_term, -1) - 2.0 * torch.logsumexp(exp_term, -1)
+        return log_prob
+
+
     def update_skills(self, z_means, z_sigs, b_mean, b_sig, states, greedy=False):
         # (differentiably) sample from the termination distribution
 
@@ -1246,7 +1360,7 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
 
         running_l = torch.ones(batch_size, dtype=torch.long, device=self.device)
         n_executed_skills = torch.zeros(batch_size, dtype=torch.float32, device=self.device)  # TODO: long used here. Double check.
-        skill_lens = []
+        # skill_lens = []
         skill_list = []
         s0_list = []
         sT_list = [[] for _ in range(batch_size)]
@@ -1312,7 +1426,7 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
             update = b_i[:, 1].bool()
 
             self.update_skill_steps(running_l, update)
-            skill_lens.extend(running_l[update].tolist())
+            # skill_lens.extend(running_l[update].tolist())
 
             n_executed_skills[update] += 1
             for j in range(batch_size):
@@ -1335,7 +1449,7 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
         for j in range(batch_size):
             sT_list[j].append(s_0_updated[j])
 
-        skill_repetitions = self.correct_last_skill_lens(skill_repetitions_list)
+        skill_lens, skill_repetitions = self.correct_last_skill_lens(skill_repetitions_list)
 
         sT = self.create_full_sT(sT_list, skill_repetitions)
 
@@ -1380,10 +1494,13 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
         return full_sT
 
     def correct_last_skill_lens(self, repitions):
-        _repetitions = torch.stack([
-                torch.tensor([*repitions[j], 1000 - sum(repitions[j])]) for j in range(len(repitions))
-            ])
-        return _repetitions
+        _repetitions_tensor = []
+        _repetitions = []
+        for r_i in repitions:
+            r_i_corrected = [*r_i, 1000 - sum(r_i)]
+            _repetitions_tensor.append(torch.tensor(r_i_corrected, device=self.device))
+            _repetitions.extend(r_i_corrected)
+        return _repetitions, _repetitions_tensor
 
 
     def update_skills_legacy(self, z_history, z_updated, b_mean, b_sig, running_l, executed_skills, greedy=False):
@@ -1434,10 +1551,8 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
         return z, b
     
     def clip_gradients(self):
-        """Clip gradients to avoid exploding gradients
-        """
-        torch.nn.utils.clip_grad_norm_(self.parameters(), self.grad_clip_threshod) # TODO: check if this is correct
-        pass
+        """Clip gradients to avoid explosions"""
+        torch.nn.utils.clip_grad_norm_(self.parameters(), self.grad_clip_threshold)
 
 
 class SkillModelTerminalStateDependentPrior(SkillModelStateDependentPrior):

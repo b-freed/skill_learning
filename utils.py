@@ -22,6 +22,18 @@ from PIL import Image
 # from pygifsicle import optimize
 import imageio
 
+def kl_divergence_bernoulli(post_logits, prior_probs, eps=1e-16): 
+    """
+    PyTorch's torch.distributions.kl.kl_divergence seems to have issues in gradient computation 
+    with Bernoulli distribution - results into NaN gradients. Hence, the implementation.
+    """
+    post_probs = nn.Sigmoid()(post_logits)
+    log_post_probs = (post_probs + eps).log()
+    log_prior_probs = (prior_probs + eps).log()
+    kl_div = torch.sum(post_probs * (log_post_probs - log_prior_probs), dim=-1)
+
+    return kl_div
+
 # def save_frames_as_gif(frames, path='./', filename='gym_animation.gif'):
 
 # 	#Mess with this to change frame size

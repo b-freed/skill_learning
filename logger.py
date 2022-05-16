@@ -111,7 +111,7 @@ class Logger:
 
         self.log_dir = hp.log_dir
 
-        self.experiment = Experiment(api_key = 'Wlh5wstMNYkxV0yWRxN7JXZRu', project_name = 'dump')
+        self.experiment = Experiment(api_key='Wlh5wstMNYkxV0yWRxN7JXZRu', project_name='temp')
         self.experiment.set_name(hp.exp_name)
 
         self.experiment.log_parameters(hp.__dict__)
@@ -126,14 +126,15 @@ class Logger:
         self.test_ns_data = {}
         self.train_ns_data = {}
 
-    def update_train(self, iteration_num, loss, s_T_loss, a_loss, kl_loss, s_T_ent, sl_loss, sl_mean, sl_std, sl_min, sl_max, ns_mean, ns_std, ns_min, ns_max):
+    def update_train(self, iteration_num, loss, s_T_loss, a_loss, b_kl_loss, z_kl_loss, s_T_ent, sl_loss, sl_mean, sl_std, sl_min, sl_max, ns_mean, ns_std, ns_min, ns_max):
 
-        print(f'Exp: {self.hp.exp_name} | Iter: {iteration_num}')
+        print(f' Iter: {iteration_num} | {self.hp.exp_name} - {self.hp.additional_msg}')
         print("--------TRAIN---------")
         print('loss: ', loss)
         print('s_T_loss: ', s_T_loss)
         print('a_loss: ', a_loss)
-        print('kl_loss: ', kl_loss)
+        print('b_kl_loss: ', b_kl_loss)
+        print('z_kl_loss: ', z_kl_loss)
         print('s_T_ent: ', s_T_ent)
         print('sl_loss: ', sl_loss)
         print('sl_mean: ', sl_mean)
@@ -143,7 +144,8 @@ class Logger:
         self.experiment.log_metric("loss", loss, step=iteration_num)
         self.experiment.log_metric("s_T_loss", s_T_loss, step=iteration_num)
         self.experiment.log_metric("a_loss", a_loss, step=iteration_num)
-        self.experiment.log_metric("kl_loss", kl_loss, step=iteration_num)
+        self.experiment.log_metric("b_kl_loss", b_kl_loss, step=iteration_num)
+        self.experiment.log_metric("z_kl_loss", z_kl_loss, step=iteration_num)
         self.experiment.log_metric("s_T_ent", s_T_ent, step=iteration_num)
         self.experiment.log_metric("sl_loss", sl_loss, step=iteration_num)
         self.experiment.log_metric("sl_mean", sl_mean, step=iteration_num)
@@ -162,13 +164,14 @@ class Logger:
         torch.save(self.train_sl_data, os.path.join(self.log_dir, 'train_sl_data.pt'))
         torch.save(self.train_ns_data, os.path.join(self.log_dir, 'train_ns_data.pt'))
 
-    def update_test(self, iteration_num, test_loss, test_s_T_loss, test_a_loss, test_kl_loss, test_s_T_ent, sl_loss, sl_mean, sl_std, sl_min, sl_max, ns_mean, ns_std, ns_min, ns_max):
+    def update_test(self, iteration_num, test_loss, test_s_T_loss, test_a_loss, test_b_kl_loss, test_z_kl_loss, test_s_T_ent, sl_loss, sl_mean, sl_std, sl_min, sl_max, ns_mean, ns_std, ns_min, ns_max):
 
         print("--------TEST---------")
         print('loss: ', test_loss)
         print('s_T_loss: ', test_s_T_loss)
         print('a_loss: ', test_a_loss)
-        print('kl_loss: ', test_kl_loss)
+        print('b_kl_loss: ', test_b_kl_loss)
+        print('z_kl_loss: ', test_z_kl_loss)
         print('s_T_ent: ', test_s_T_ent)
         print('sl_loss: ', sl_loss)
         print('sl_mean: ', sl_mean)
@@ -178,7 +181,8 @@ class Logger:
         self.experiment.log_metric("test_loss", test_loss, step=iteration_num)
         self.experiment.log_metric("test_s_T_loss", test_s_T_loss, step=iteration_num)
         self.experiment.log_metric("test_a_loss", test_a_loss, step=iteration_num)
-        self.experiment.log_metric("test_kl_loss", test_kl_loss, step=iteration_num)
+        self.experiment.log_metric("test_b_kl_loss", test_b_kl_loss, step=iteration_num)
+        self.experiment.log_metric("test_z_kl_loss", test_z_kl_loss, step=iteration_num)
         self.experiment.log_metric("test_s_T_ent", test_s_T_ent, step=iteration_num)
         self.experiment.log_metric("test_sl_loss", sl_loss, step=iteration_num)
         self.experiment.log_metric("test_sl_mean", sl_mean, step=iteration_num)
