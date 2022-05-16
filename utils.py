@@ -26,6 +26,7 @@ def kl_divergence_bernoulli(post_logits, prior_probs, eps=1e-16):
     """
     PyTorch's torch.distributions.kl.kl_divergence seems to have issues in gradient computation 
     with Bernoulli distribution - results into NaN gradients. Hence, the implementation.
+    Reference: https://github.com/pytorch/pytorch/issues/15288
     """
     post_probs = nn.Sigmoid()(post_logits)
     log_post_probs = (post_probs + eps).log()
