@@ -268,7 +268,7 @@ class LowLevelPolicy(nn.Module):
 
 class LowLevelDynamicsFF(nn.Module):
 
-	def __init__(self,s_dim,a_dim,h_dim,deterministic=True):
+	def __init__(self,s_dim,a_dim,h_dim,deterministic=False):
 
 		super(LowLevelDynamicsFF,self).__init__()
 		

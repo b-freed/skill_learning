@@ -32,15 +32,15 @@ from statsmodels.stats.proportion import proportion_confint
 device = torch.device('cuda:0')
 
 #env = 'antmaze-large-diverse-v0'
-env = 'antmaze-medium-diverse-v0'
-# env = 'maze2d-large-v1'
+#env = 'antmaze-medium-diverse-v0'
+env = 'maze2d-large-v1'
 env_name = env
 env = gym.make(env)
 data = env.get_dataset()
 
 # vid = video_recorder.VideoRecorder(env,path="recording")
 
-action_seq_len = 20
+action_seq_len = 40
 H = 5
 replan_freq = H * 5
 state_dim = data['observations'].shape[1]
@@ -65,7 +65,8 @@ keep_frac = 0.5
 use_epsilon = True
 goal_conditioned = False
 max_ep = None
-cem_l2_pen = 50.0
+cem_l2_pen = 0.1 #(maze2d)
+#cem_l2_pen = 50 #(antmaze)
 var_pen = 0.0
 render = False
 variable_length = False
@@ -75,11 +76,12 @@ encoder_type = 'state_action_sequence'
 term_state_dependent_prior = False
 init_state_dependent = True
 
-
+PATH_DYNAMICS = 'checkpoints/ll_dynamics_maze2d-large-v1_l2reg_0.001_lr_0.0001_log_hdim_512_Decay_best.pth'
+PATH_PRIOR = 'checkpoints/ll_prior_maze2d-large-v1_l2reg_0.001_lr_0.0001_log_hdim_512_Decay_best.pth'
 #PATH_DYNAMICS = 'checkpoints/ll_dynamics_antmaze-large-diverse-v0_l2reg_0.001_lr_0.0001_log_hdim_512_Decay_best.pth'
 #PATH_PRIOR = 'checkpoints/ll_prior_antmaze-large-diverse-v0_l2reg_0.001_lr_0.0001_log_hdim_512_Decay_best.pth'
-PATH_DYNAMICS = 'checkpoints/ll_dynamics_antmaze-medium-diverse-v0_l2reg_0.001_lr_0.0001_log_hdim_512_Decay_best.pth'
-PATH_PRIOR = 'checkpoints/ll_prior_antmaze-medium-diverse-v0_l2reg_0.001_lr_0.0001_log_hdim_512_Decay_best.pth'
+#PATH_DYNAMICS = 'checkpoints/ll_dynamics_antmaze-medium-diverse-v0_l2reg_0.001_lr_0.0001_log_hdim_512_Decay_best.pth'
+#PATH_PRIOR = 'checkpoints/ll_prior_antmaze-medium-diverse-v0_l2reg_0.001_lr_0.0001_log_hdim_512_Decay_best.pth'
 #PATH_PRIOR = 'checkpoints/ll_prior_antmaze-medium-diverse-v0_l2reg_0.001_lr_0.0001_log_hdim_512_GoalConditioned_Decay_best.pth'
 dynamics_model = LowLevelDynamicsFF(state_dim,a_dim,h_dim,deterministic=False).cuda()
 checkpoint = torch.load(PATH_DYNAMICS)
@@ -91,7 +93,7 @@ if(use_epsilon):
 	dynamics_model.prior = prior
 
 #goal_state = np.array([10.0,10.0])
-#goal_state = np.array(env.target_goal)
+goal_state_original = np.array(env.get_target())
 #print('goal_state: ', goal_state)
 # env.set_target(goal_state[:2])
 #goal_seq = torch.tensor(goal_state, device=device).reshape(1,1,-1)
@@ -104,6 +106,7 @@ def convert_epsilon_to_a(epsilon,s0,goal_seq,model):
 		# get prior
 		mu_a, sigma_a = model.prior(s)
 		a_i = mu_a + sigma_a*action_seq[:,i:i+1,:]
+		print(sigma_a)
 		a_seq.append(a_i)
 		s_mean,_ = model(s,a_i)
 		s = s_mean
@@ -120,7 +123,8 @@ for trials in range(N_TRIALS):
 	print('TRIALS DONE: ',trials)
 	print('SUCCESS RATE: ',N_SUCCESS,'/',trials)
 	state_idx = np.random.randint(0,dataset_states.shape[0])
-	goal_state = dataset_states[state_idx,:2]
+	#goal_state = dataset_states[state_idx,:2]
+	goal_state = goal_state_original
 	goal_seq = torch.tensor(goal_state, device=device).reshape(1,1,-1)
 	action_seq = torch.zeros((1,action_seq_len,a_dim),device=device)
 	success_flag = False
@@ -137,8 +141,8 @@ for trials in range(N_TRIALS):
 		action_seq = convert_epsilon_to_a(action_seq,s_torch[:1,:,:],goal_seq[:1,:,:],dynamics_model)
 		#print(action_seq)
 		for k in range(H):
+			env.render()
 			action_seq_np = action_seq.detach().cpu().numpy()
-			#env.render()
 			state,_,_,_ = env.step(action_seq_np[k])
 			dist_to_goal = np.sum((state[:2]-goal_state)**2)
 			if(dist_to_goal <= 1.0):

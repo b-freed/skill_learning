@@ -9,7 +9,7 @@ import torch.distributions.normal as Normal
 from skill_model import LowLevelDynamicsFF
 import gym
 from mujoco_py import GlfwContext
-import clean_antmaze_dataset
+import clean_dataset
 GlfwContext(offscreen=True)
 import d4rl
 import ipdb
@@ -58,8 +58,10 @@ def test(model):
 # instantiating the environmnet, getting the dataset.
 # the data is in a big dictionary, containing long sequences of obs, rew, actions, goals
 # env_name = 'antmaze-medium-diverse-v0'  
-# env_name = 'maze2d-large-v1'
-env_name = 'antmaze-medium-diverse-v0'
+#env_name = 'maze2d-large-v1'
+#env_name = 'antmaze-medium-diverse-v0'
+#env_name = 'kitchen-complete-v0'
+env_name = 'kitchen-partial-v0'
 env = gym.make(env_name)
 
 dataset_file = None
@@ -88,7 +90,7 @@ next_states = torch.tensor(dataset['next_observations'],dtype=torch.float32,devi
 actions = torch.tensor(dataset['actions'],dtype=torch.float32,device=device)
 
 states, next_states, actions = clean_antmaze_dataset.clean_data(states, next_states, actions)
-
+print(states.shape)
 N = states.shape[0]
 
 state_dim = states.shape[1]
@@ -168,6 +170,6 @@ for i in range(n_epochs):
 
 		
 			
-		checkpoint_path = 'checkpoints/'+ filename + '_hdim_512_Decay_best.pth'
+		checkpoint_path = 'checkpoints/franka_ensemble/'+ filename + '_hdim_512_Decay_best_5.pth'
 		torch.save({'model_state_dict': model.state_dict(),
 				'model_optimizer_state_dict': model_optimizer.state_dict()}, checkpoint_path)

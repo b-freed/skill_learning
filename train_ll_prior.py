@@ -21,11 +21,11 @@ def train(model,model_optimizer):
 	
 	losses = []
 	
-	for batch_id, (state,goal,action) in enumerate(train_loader):
+	for batch_id, (state,action) in enumerate(train_loader):
 		
 		state = state.cuda()
 		action = action.cuda()
-		loss = model.get_loss(state, action, goal)
+		loss = model.get_loss(state, action)
 
 		model_optimizer.zero_grad()
 		loss.backward()
@@ -42,10 +42,10 @@ def test(model):
 	losses = []
 	
 	with torch.no_grad():
-		for batch_id, (state,goal,action) in enumerate(test_loader):
+		for batch_id, (state,action) in enumerate(test_loader):
 			state = state.cuda()
 			action = action.cuda()
-			loss = model.get_loss(state, action, goal)
+			loss = model.get_loss(state, action)
 
 			# log losses
 			losses.append(loss.item())
@@ -56,8 +56,10 @@ def test(model):
 # instantiating the environmnet, getting the dataset.
 # the data is in a big dictionary, containing long sequences of obs, rew, actions, goals
 # env_name = 'antmaze-medium-diverse-v0'  
-# env_name = 'maze2d-large-v1'
-env_name = 'antmaze-medium-diverse-v0'
+env_name = 'maze2d-large-v1'
+#env_name = 'antmaze-medium-diverse-v0'
+#env_name = 'kitchen-complete-v0'
+#env_name = 'kitchen-partial-v0'
 env = gym.make(env_name)
 
 dataset_file = None
@@ -79,20 +81,20 @@ n_epochs = 50000
 test_split = .2
 decay = True
 lr_decay = 0.1
-lr_decay_epochs_interval = 100
-goal_conditioned = True
+lr_decay_epochs_interval = 20#100
+goal_conditioned = False
 		
 states = torch.tensor(dataset['observations'],dtype=torch.float32,device=device)
 #next_states = torch.tensor(dataset['next_observations'],dtype=torch.float32,device=device)
 actions = torch.tensor(dataset['actions'],dtype=torch.float32,device=device)
-goals = torch.tensor(dataset['infos/goal'],dtype=torch.float32,device=device)
+#goals = torch.tensor(dataset['infos/goal'],dtype=torch.float32,device=device)
 #states, next_states, actions = clean_antmaze_dataset.clean_data(states, next_states, actions)
 
 N = states.shape[0]
 
 state_dim = states.shape[1]
 a_dim = actions.shape[1]
-goal_dim = goals.shape[1]
+#goal_dim = goals.shape[1]
 
 N_train = int((1-test_split)*N)
 N_test = N - N_train
@@ -160,7 +162,7 @@ for i in range(n_epochs):
 	if i % 10 == 0:
 		
 			
-		checkpoint_path = 'checkpoints/'+ filename + '_hdim_512_GoalConditioned_Decay.pth'
+		checkpoint_path = 'checkpoints/'+ filename + '_hdim_512_Decay.pth'
 		torch.save({
 							'model_state_dict': model.state_dict(),
 							'model_optimizer_state_dict': model_optimizer.state_dict(),
@@ -170,6 +172,6 @@ for i in range(n_epochs):
 
 		
 			
-		checkpoint_path = 'checkpoints/'+ filename + '_hdim_512_GoalConditioned_Decay_best.pth'
+		checkpoint_path = 'checkpoints/'+ filename + '_hdim_512_Decay_best.pth'
 		torch.save({'model_state_dict': model.state_dict(),
 				'model_optimizer_state_dict': model_optimizer.state_dict()}, checkpoint_path)
