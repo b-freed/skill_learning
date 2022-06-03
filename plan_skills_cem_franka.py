@@ -1,3 +1,4 @@
+from comet_ml import Experiment
 import numpy as np
 import torch
 import torch.nn as nn
@@ -82,14 +83,14 @@ if __name__ == '__main__':
 	
 	# env = 'antmaze-medium-diverse-v0'
 	# env = 'kitchen-partial-v0'
-	env = 'kitchen-complete-v0'
-	env = gym.make(env)
+	env_name = 'kitchen-complete-v0'
+	env = gym.make(env_name)
 	# env = FrankaSliceWrapper(gym.make(env))
 
 
 	data = env.get_dataset()
 	
-	H = 1
+	H = 10
 	state_dim = data['observations'].shape[1]
 	a_dim = data['actions'].shape[1]
 	h_dim = 256
@@ -100,18 +101,19 @@ if __name__ == '__main__':
 	beta = 1.0
 	alpha = 1.0
 	state_dependent_prior = True
-	a_dist = 'normal'
+	a_dist = 'autoregressive' #'normal'
 	max_sig = None
-	fixed_sig = 0.0
+	fixed_sig = None
 	state_dec_stop_grad = False # I don't think this really matters
-	skill_seq_len = 5
+	skill_seq_len = 50
 	keep_frac = 0.5
-	n_iters = 100
-	n_additional_iters = 20
-	cem_l2_pen = 0.005
-	replan_iters = 1000
+	n_iters = 5
+	n_additional_iters = 5
+	cem_l2_pen = 0
+	replan_iters = 500//H
 	per_element_sigma = False
-	render = True
+	render = False
+	warm_start = False
 
 
 
@@ -121,12 +123,18 @@ if __name__ == '__main__':
 	# 	filename = 'AntMaze_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
 	# filename = 'Franka_H'+str(H)+'_l2reg_'+str(wd)+'_log_best.pth'
 	# filename = 'EM_model_kitchen-partial-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_1.0_b_1.0_log_best.pth'
-	filename = 'EM_model_kitchen-partial-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_1.0_b_1.0_per_el_sig_False_log_best_sT.pth'
+	# filename = 'EM_model_kitchen-partial-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_1.0_b_1.0_per_el_sig_False_log_best_sT.pth'
 	# filename = 'EM_model_kitchen-partial-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_1.0_b_1.0_per_el_sig_False_log_best.pth'
 	# filename = 'EM_model_kitchen-partial-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_1.0_b_0.1_per_el_sig_False_log_best_sT.pth'
 	# filename = 'EM_model_kitchen-partial-v0_sliced_state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_1.0_b_1.0_per_el_sig_False_log_best_sT.pth'
 	# filename = 'kitchen-partial-v0_per_el_sig_False_enc_type_state_action_sequencestate_dec_mlp_H_40_l2reg_0.0_a_1.0_b_1.0_sg_False_max_sig_None_fixed_sig_None_ent_pen_0.0_log_best_sT.pth'
 	# filename = 'EM_model_kitchen-partial-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_1.0_b_0.5_per_el_sig_False_log_best_sT.pth'
+	# filename = 'EM_model_kitchen-partial-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_1.0_b_0.1_per_el_sig_False_a_dist_autoregressive_log_best.pth'
+	# filename = 'EM_model_05_24_22_kitchen-partial-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_1.0_b_1.0_per_el_sig_False_a_dist_autoregressive_log_best_sT.pth'
+	# filename = 'EM_model_05_24_22_kitchen-partial-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_1.0_b_1.0_per_el_sig_False_a_dist_autoregressive_log_best.pth'
+	# filename = 'EM_model_05_28_22_kitchen-partial-v0state_dec_mlp_init_state_dep_True_H_5_l2reg_0.0_a_1.0_b_1.0_per_el_sig_False_a_dist_autoregressive_log_best.pth'
+	# filename = 'EM_model_05_28_22_kitchen-partial-v0state_dec_mlp_init_state_dep_True_H_5_l2reg_0.0_a_1.0_b_0.1_per_el_sig_False_a_dist_autoregressive_log_best.pth'
+	filename = 'EM_model_05_28_22_kitchen-partial-v0state_dec_mlp_init_state_dep_True_H_10_l2reg_0.0_a_1.0_b_1.0_per_el_sig_False_a_dist_autoregressive_log_best.pth'
 
 
 	PATH = 'checkpoints/'+filename
@@ -148,42 +156,68 @@ if __name__ == '__main__':
 	# cost_fn = lambda skill_seq: franka_plan_cost_fn(prev_states,skill_seq,skill_model,use_eps=True)
 	# skill_seq,_ = cem(torch.zeros((skill_seq_len,z_dim),device=device),torch.ones((skill_seq_len,z_dim),device=device),cost_fn,batch_size,keep_frac,n_iters,l2_pen=cem_l2_pen)
 
-	initial_state = env.reset()
-	prev_states = np.expand_dims(initial_state,0)  # add dummy time dimension
-	frames = []
-	rewards = []
-	state = initial_state
-	for i in range(replan_iters):
-		print('==============================================')
-		print('i: ', i)
-		# print('np.stack(np.stack(prev_states)).shape: ', np.stack(np.stack(prev_states)).shape)
-		cost_fn = lambda skill_seq: franka_plan_cost_fn(prev_states,skill_seq,skill_model,use_eps=True)
-		# run CEM on this cost fn
-		if i == 0:
-			skill_seq,_ = cem(torch.zeros((skill_seq_len,z_dim),device=device),torch.ones((skill_seq_len,z_dim),device=device),cost_fn,batch_size,keep_frac,n_iters,l2_pen=cem_l2_pen)		
-		else:
-			 
-			# skill_seq = torch.cat([skill_seq[1:,:],torch.zeros_like(skill_seq[:1,:])])
-			init_sig =  torch.ones_like(skill_seq)
-			# init_sig[:-1,:] = .1*init_sig[:-1,:]
-			skill_seq,_ = cem(skill_seq,init_sig,cost_fn,batch_size,keep_frac,n_additional_iters,l2_pen=cem_l2_pen)
-		
-		
-		# run first skill
-		
+	# create experiment
+	experiment = Experiment(api_key = '9mxH2vYX20hn9laEr0KtHLjAa', project_name = 'skill-learning')
+	experiment.log_parameters({'env_name':env_name,
+						   'filename':filename,
+						   'H':H,
+						   'fixed_sig':fixed_sig,
+						   'max_sig':max_sig,
+						   'cem_l2_pen':cem_l2_pen,
+						   'n_iters':n_iters,
+						   'n_additional_iters':n_additional_iters,
+						   'skill_seq_len':skill_seq_len,
+						   'warm_start':warm_start
+						  })
 
-		z = skill_seq[:1,:]
-		
-		state,states_actual,actions,skill_rewards,skill_frames = run_skill(skill_model, state,z,env,H,render,use_epsilon=True)
-		prev_states = np.concatenate([prev_states,states_actual[1:,:]],axis=0)
-		print('states_actual.shape: ', states_actual.shape)
-		frames += skill_frames
-		rewards.append(skill_rewards)
-		print('np.sum(rewards): ', np.sum(rewards))
-		# make_video(frames,'franka_'+str(i))
-		make_video(frames,'franka_H_'+str(H)+filename)
+	ep_rewards = []
+	for j in range(1000):
+		initial_state = env.reset()
+		prev_states = np.expand_dims(initial_state,0)  # add dummy time dimension
+		frames = []
+		rewards = []
+		t_since_last_save = 0
+		state = initial_state
+		for i in range(replan_iters):
+			print('==============================================')
+			print('i: ', i)
+			# print('np.stack(np.stack(prev_states)).shape: ', np.stack(np.stack(prev_states)).shape)
+			cost_fn = lambda skill_seq: franka_plan_cost_fn(prev_states,skill_seq,skill_model,use_eps=True)
+			# run CEM on this cost fn
+			if i == 0:
+				skill_seq,_ = cem(torch.zeros((skill_seq_len,z_dim),device=device),torch.ones((skill_seq_len,z_dim),device=device),cost_fn,batch_size,keep_frac,n_iters,l2_pen=cem_l2_pen)		
+			else:
+				if not warm_start: 
+					skill_seq,_ = cem(torch.zeros((skill_seq_len,z_dim),device=device),torch.ones((skill_seq_len,z_dim),device=device),cost_fn,batch_size,keep_frac,n_iters,l2_pen=cem_l2_pen)		
+				else:
+					skill_seq = torch.cat([skill_seq[1:,:],torch.zeros_like(skill_seq[:1,:])])
+					init_sig =  torch.ones_like(skill_seq)
+					init_sig[:-1,:] = .1*init_sig[:-1,:]
 
+					skill_seq,_ = cem(skill_seq,init_sig,cost_fn,batch_size,keep_frac,n_additional_iters,l2_pen=cem_l2_pen)
+			
+			
+			# run first skill
+			
 
+			z = skill_seq[:1,:]
+			# skill_seq = skill_seq[1:,:]
+			
+			state,states_actual,actions,skill_rewards,skill_frames = run_skill(skill_model, state,z,env,H,render,use_epsilon=True)
+			prev_states = np.concatenate([prev_states,states_actual[1:,:]],axis=0)
+			print('states_actual.shape: ', states_actual.shape)
+			frames += skill_frames
+			rewards.append(skill_rewards)
+			print('np.sum(rewards): ', np.sum(rewards))
+			# make_video(frames,'franka_'+str(i))
+			t_since_last_save += H
+			if t_since_last_save >= 50 and render:
+				make_video(frames,'franka_H_'+str(H)+filename)
+				t_since_last_save = 0
+
+		experiment.log_metric('reward',np.sum(rewards),step=j)
+		ep_rewards.append(np.sum(rewards))
+		experiment.log_metric('mean_reward',np.mean(ep_rewards),step=j)
 	# actual_states = []
 	# rewards = []
 	# terminal_states = []
