@@ -31,8 +31,8 @@ from statsmodels.stats.proportion import proportion_confint
 
 device = torch.device('cuda:0')
 
-env = 'antmaze-large-diverse-v0'
-# env = 'antmaze-medium-diverse-v0'
+# env = 'antmaze-large-diverse-v0'
+env = 'antmaze-medium-diverse-v0'
 # env = 'maze2d-large-v1'
 env_name = env
 env = gym.make(env)
@@ -40,7 +40,7 @@ data = env.get_dataset()
 
 # vid = video_recorder.VideoRecorder(env,path="recording")
 
-skill_seq_len = 10
+skill_seq_len = 10 # 40 #
 H = 10
 replan_freq = H * 5
 state_dim = data['observations'].shape[1]
@@ -69,11 +69,12 @@ cem_l2_pen = 0.0
 var_pen = 0.0
 render = False
 variable_length = False
-max_replans = 200
+max_replans = 2000 // H # run max 200 timesteps
 plan_length_cost = 0.0
 encoder_type = 'state_action_sequence'
 term_state_dependent_prior = False
 init_state_dependent = True
+random_goal = False # determines if we select a goal at random from dataset (random_goal=True) or use pre-set one from environment
 # start_ind = 937278
 
 # import glob
@@ -100,7 +101,11 @@ else:
 # filename = 'EM_model_antmaze-large-diverse-v0state_dec_mlp_init_state_dep_False_H_40_l2reg_0.0_a_2.0_b_1.0_log_best.pth'	
 # filename = 'EM_model_antmaze-large-diverse-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_5.0_b_1.0_log_best.pth'
 # filename = 'EM_model_antmaze-large-diverse-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_1.0_b_1.0_log_best.pth'
-filename = 'EM_model_antmaze-large-diverse-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_2.0_b_1.0_log_best.pth'
+# filename = 'EM_model_antmaze-large-diverse-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_2.0_b_1.0_log_best.pth'
+# filename = 'EM_model_05_08_22_antmaze-large-diverse-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_1.0_b_1.0_per_el_sig_True_a_dist_normal_log_best_sT.pth'
+# filename = 'EM_model_05_08_22_antmaze-large-diverse-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_1.0_b_1.0_per_el_sig_True_a_dist_normal_log_best.pth'
+filename = 'EM_model_06_01_22_antmaze-medium-diverse-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_1.0_b_1.0_per_el_sig_True_a_dist_normal_log_best_sT.pth'
+# filename = 'EM_model_06_03_22_antmaze-medium-diverse-v0state_dec_mlp_init_state_dep_True_H_10_l2reg_0.0_a_1.0_b_1.0_per_el_sig_True_a_dist_normal_log_best_sT.pth'
 
 PATH = 'checkpoints/'+filename
 
@@ -114,57 +119,16 @@ else:
 checkpoint = torch.load(PATH)
 skill_model.load_state_dict(checkpoint['model_state_dict'])
 
-# initialize skill sequence
-# skill_seq = torch.randn((1,skill_seq_len,z_dim), device=device, requires_grad=True)
-# s0 = env.reset()
-# initial_loc = s0[:2]
-# env.env.reset_to_location
-# print('s0: ', s0)
-# s0_torch = torch.tensor(s0,dtype=torch.float32).cuda().reshape(1,1,-1)
+experiment = Experiment(api_key = '9mxH2vYX20hn9laEr0KtHLjAa', project_name = 'skill-learning')
+
 
 s0_torch = torch.cat([torch.tensor(env.reset(),dtype=torch.float32).cuda().reshape(1,1,-1) for _ in range(batch_size)])
 
-# z_mean,z_sig = skill_model.prior(s0_torch)
-# print('z_mean: ', z_mean)
-# print('z_sig: ', z_sig)
-# skill_seq = z_mean.detach() + z_sig.detach() * torch.randn((1,skill_seq_len,z_dim), device=device)
-# skill_seq = torch.randn((1,skill_seq_len,z_dim), device=device)
 skill_seq = torch.zeros((1,skill_seq_len,z_dim),device=device)
 print('skill_seq.shape: ', skill_seq.shape)
 skill_seq.requires_grad = True
 
-# s0_torch = torch.stack(batch_size*[torch.tensor(s0,dtype=torch.float32).cuda().unsqueeze(0)])
 
-# s0 = torch.zeros((batch_size,1,state_dim), device=device)
-
-# s0_torch = torch.stack([env.reset_to_location(initial_loc)])
-# initialize optimizer for skill sequence
-# determine waypoints
-goal_state = np.array(env.target_goal)#random.choice(data['observations'])
-print('goal_state: ', goal_state)
-# env.set_target(goal_state[:2])
-goal_seq = torch.tensor(goal_state, device=device).reshape(1,1,-1)
-#goal_seq = 2*torch.rand((1,skill_seq_len,state_dim), device=device) - 1
-
-# experiment = Experiment(api_key = 'yQQo8E8TOCWYiVSruS7nxHaB5', project_name = 'skill-learning', workspace="anirudh-27")
-# experiment.add_tag('Skill PLanning for '+env_name)
-# experiment.log_parameters({'lr':lr,
-# 							   'h_dim':h_dim,
-# 							   'state_dependent_prior':state_dependent_prior,
-# 							   'z_dim':z_dim,
-# 				 						   'skill_seq_len':skill_seq_len,
-# 			  				   'H':H,
-# 			  				   'a_dim':a_dim,
-# 			  				   'state_dim':state_dim,
-# 			  				   'l2_reg':wd})
-#experiment.log_metric('Goals', goal_seq)
-
-
-# def make_gif(frame_folder):
-#     frames = [Image.open(image) for image in glob.glob(f"{frame_folder}/*.JPG")]
-#     frame_one = frames[0]
-#     frame_one.save("my_awesome.gif", format="GIF", append_images=frames,
-#                save_all=True, duration=100, loop=0)
 
 def convert_epsilon_to_z(epsilon,s0,model):
 
@@ -387,10 +351,31 @@ def run_skill_seq(skill_seq,env,s0,model,use_epsilon):
 # 	np.save('min_dists_list_n_iters'+str(n_iters)+'_l2pen_'+str(cem_l2_pen),min_dists_list)
 
 
+experiment.log_parameters({'env_name':env_name,
+						   'filename':filename,
+						   'H':H,
+						   'fixed_sig':fixed_sig,
+						   'max_sig':max_sig,
+						   'random_goal':random_goal
+						  })
+experiment.add_tag('goal resets')
+
 execute_n_skills = 1
 
 min_dists_list = []
 for j in range(1000):
+	env.set_target() # this randomizes goal locations between trials, so that we're actualy averaging over the goal distribution
+	# otherwise, same goal is kept across resets
+	if not random_goal:
+		
+		goal_state = np.array(env.target_goal)#random.choice(data['observations'])
+		print('goal_state: ', goal_state)
+	else:
+		N = data['observations'].shape[0]
+		ind = np.random.randint(low=0,high=N)
+		goal_state = data['observations'][ind,:]
+	goal_seq = torch.tensor(goal_state, device=device).reshape(1,1,-1)
+
 	state = env.reset()
 	goal_loc = goal_state[:2]
 	min_dist = 10**10
@@ -404,23 +389,29 @@ for j in range(1000):
 		state,states = run_skill_seq(skill_seq,env,state,skill_model,use_epsilon=False)
 		# print('states.shape: ', states.shape)
 
-		dists = np.sum((states[0,:,:2] - goal_loc)**2,axis=-1)
+		dists = np.sqrt(np.sum((states[0,:,:2] - goal_loc)**2,axis=-1))
 
 		if np.min(dists) < min_dist:
 			min_dist = np.min(dists)
 
-		if min_dist < 1.0:
+		if min_dist < 0.5:
 			break
 	
 	min_dists_list.append(min_dist)
-	np.save('min_dists_list_'+filename, min_dists_list)
+	# np.save('min_dists_list_'+filename, min_dists_list)
+	experiment.log_metric("min_dist", min_dist, step=j)
 	# print('min_dists_list: ', min_dists_list)
 	n_success = np.sum(np.array(min_dists_list) <= 1.0)
 	n_tot = len(min_dists_list)
+	experiment.log_metric("n_success", n_success, step=j)
+	experiment.log_metric("n_tot", n_tot, step=j)
 
 	ci = proportion_confint(n_success,n_tot)
 	print('ci: ', ci)
 	print('mean: ',n_success/n_tot)
+	experiment.log_metric('success_rate',n_success/n_tot,step=j)
+	experiment.log_metric("lcb", ci[0], step=j)
+	experiment.log_metric("ucb", ci[1], step=j)
 
 
 
