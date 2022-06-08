@@ -147,7 +147,7 @@ for trials in range(N_TRIALS):
 			action_seq_np = action_seq.detach().cpu().numpy()
 			state,_,_,_ = env.step(action_seq_np[k])
 			dist_to_goal = np.sum((state[:2]-goal_state)**2)
-			if(dist_to_goal <= 0.3):
+			if(dist_to_goal <= 0.5):
 				N_SUCCESS += 1
 				success_flag = True
 				print('Trial successful')
