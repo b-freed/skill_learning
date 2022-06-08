@@ -1107,6 +1107,10 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
         self.min_skill_len = min_skill_len
         self.max_skill_len = max_skill_len
         self.max_skills_per_seq = max_skills_per_seq
+        # self.init_termination = torch.zeros(1, 1000, 2, dtype=torch.float, device=self.device)
+        # self.init_termination[:, 14::15, 1] = 1
+        self.init_termination = torch.zeros(1, 20, 2, dtype=torch.float, device=self.device)
+        self.init_termination[:, -1, 1] = 1
 
 
     def forward(self, states, actions):        
@@ -1237,7 +1241,7 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
         return regularized_b_tensor, n_executed_skills
 
 
-    def update_skillsv2(self, z_means, z_sigs, b_probabilities, states, regularize_terminals=False, greedy=False):
+    def update_skillsv2(self, z_means, z_sigs, b_probabilities, states, regularize_terminals=False, greedy=False, train_phase=0):
         batch_size, time_steps = b_probabilities.shape[:2]
 
         # Gumbel-softmax (differential) sampling
@@ -1248,6 +1252,11 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
 
         # self.skill_steps = torch.zeros(b_probabilities.shape[0], b_probabilities.shape[1], device=self.device, dtype=torch.long) # TODO: long used here. Double check.
         self.exhausted_steps = torch.zeros(b_probabilities.shape[0], device=self.device, dtype=torch.long) # TODO: long used here. Double check.
+
+        if train_phase == 0:
+            # If train phase is zero, overwrite terminations
+            b = self.init_termination.expand(batch_size, -1, -1)
+            n_executed_skills = torch.sum(b[:, :, 1], dim=-1) + 1
 
         if regularize_terminals:
             b, n_executed_skills = self.regularize_termination(b)
@@ -1261,6 +1270,7 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
         sT_list = [[] for _ in range(batch_size)]
         skill_repetitions_list = [[] for _ in range(batch_size)]
         termination_tracker = 0
+        sl_tracker = 0
 
         running_l = torch.ones(batch_size, dtype=torch.long, device=self.device)
 
@@ -1279,6 +1289,9 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
 
             # (differentiable) Keep tracking of number of executed skills
             termination_tracker += torch.sum(read, dim=-1)
+
+            # (differentiable) Keep track of sticking to one skill (copy) variable
+            sl_tracker += torch.sum(copy, dim=-1)
 
             # Update skill and s0
             z_i = (copy * z_i_previous) + (read * z_i_update) 
@@ -1331,7 +1344,7 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
                 'max': np.max(n_executed_skills.tolist()),
             }
 
-        return z, s0, sT, b[:, :, -1:], b_logits, termination_tracker, n_executed_skills, skill_lens_data, n_executed_skills_data
+        return z, s0, sT, b[:, :, -1:], b_logits, termination_tracker, sl_tracker, n_executed_skills, skill_lens_data, n_executed_skills_data
 
 
     def log_density_concrete(self, log_alpha, log_sample):
@@ -1497,7 +1510,8 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
         _repetitions_tensor = []
         _repetitions = []
         for r_i in repitions:
-            r_i_corrected = [*r_i, 1000 - sum(r_i)]
+            # r_i_corrected = [*r_i, 1000 - sum(r_i)]
+            r_i_corrected = [*r_i, 20 - sum(r_i)]
             _repetitions_tensor.append(torch.tensor(r_i_corrected, device=self.device))
             _repetitions.extend(r_i_corrected)
         return _repetitions, _repetitions_tensor

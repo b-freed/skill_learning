@@ -25,7 +25,18 @@ from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence
 import torch.distributions.kl as KL
 
 
-def run_iteration(model, data_loader, model_optimizer=None, train_mode=False):
+def get_train_phase(i):
+	"""
+	For initial n iteration, don't train termination model. Afterwards, train both the modules. 
+	"""
+	phase_zero_iterations = 10000
+	if i < phase_zero_iterations:
+		return 0
+	else: 
+		return 1
+
+
+def run_iteration(i, model, data_loader, model_optimizer=None, train_mode=False):
 	losses = []
 	s_T_losses = []
 	a_losses = []
@@ -45,6 +56,7 @@ def run_iteration(model, data_loader, model_optimizer=None, train_mode=False):
 	ns_maxs = []
 
 	model.train() if train_mode else model.eval()
+	train_phase = get_train_phase(i)
 
 	for batch_id, data_ in tqdm.tqdm(enumerate(data_loader), desc=f"Progress"):
 		data_ = data_.to(model.device) # (batch_size, 1000, state_dim + action_dim)
@@ -54,18 +66,21 @@ def run_iteration(model, data_loader, model_optimizer=None, train_mode=False):
 		z_post_means, z_post_sigs, b_post = model.encoder(states, actions)
 
 		# Sequentially update z_t using termination events
-		z_t, s0, sT_gt, read, b_post_sampled_logits, _termination_loss, n_executed_skills, skill_lens_data, \
-			n_executed_skills_data = model.update_skillsv2(z_post_means, z_post_sigs, b_post, states)
+		z_t, s0, sT_gt, read, b_post_sampled_logits, _termination_loss, _sl_loss, n_executed_skills, skill_lens_data, \
+			n_executed_skills_data = model.update_skillsv2(z_post_means, z_post_sigs, b_post, states, train_phase=train_phase)
 
 		# Use skills and states to generate action and terminal state sequence
 		sT_mean, sT_sig, a_means, a_sigs = model.decoder(states, z_t, s0)
 
 		# Compute skill and termination prior
 		z_prior_means, z_prior_sigs = model.prior(s0)
-		b_prior = model.termination_prior(states, actions) # TODO: these inputs for termination prior?
+		if train_phase == 0:
+			b_prior = b_post.clone()
+		elif train_phase == 1:
+			b_prior = model.termination_prior(states, actions) # TODO: these inputs for termination prior?
 
-		# Regularize termination prior
-		b_prior, b_prior_sampled_logits = model.regularize_termination(b_prior)
+		# Regularize termination prior (if train phase is not zero)
+		if train_phase == 1: b_prior, b_prior_sampled_logits = model.regularize_termination(b_prior)
 		read_prior = b_prior[..., -1:]
 
 		# Construct required distributions
@@ -95,7 +110,7 @@ def run_iteration(model, data_loader, model_optimizer=None, train_mode=False):
 		a_loss = -torch.mean(torch.sum(a_dist.log_prob(actions), dim=-1)) # mean over time steps and batch
 
 		# KL divergence between skill prior and posterior
-		z_kl_loss = torch.mean(torch.sum(KL.kl_divergence(z_post_dist, z_prior_dist), dim=-1) * read.squeeze()) # mean over time steps and batch
+		z_kl_loss = torch.mean(torch.sum(KL.kl_divergence(z_post_dist, z_prior_dist), dim=-1) * read.detach().squeeze()) # mean over time steps and batch
 
 		# KL divergence between termiation prior and posterior
 		# TODO: decide a method for computing bernoulli kl divergence
@@ -103,12 +118,15 @@ def run_iteration(model, data_loader, model_optimizer=None, train_mode=False):
 		# b_post_log_density = model.log_density_concrete(b_prior, b_post_sampled_logits)
 		# b_prior_log_density = model.log_density_concrete(b_post, b_post_sampled_logits)
 		# b_kl_loss = torch.mean(b_post_log_density - b_prior_log_density) # mean over time steps and batch
-		b_kl_loss = torch.mean(utils.kl_divergence_bernoulli(b_post, b_prior)) # mean over time steps and batch
+		b_kl_loss = torch.mean(utils.kl_divergence_bernoulli(b_post, b_prior)) if train_phase == 1 else torch.zeros(1, device=model.device) # mean over time steps and batch
 
 		# Loss for number of terminations
 		termination_loss = torch.mean(_termination_loss) # mean over batch
 
-		loss_tot = model.alpha * s_T_loss + a_loss + model.beta * (z_kl_loss + b_kl_loss) + model.gamma * termination_loss
+		# Loss for sticking with the same skills
+		skill_len_loss = torch.mean(_sl_loss) # mean over batch
+
+		loss_tot = model.alpha * s_T_loss + a_loss + model.beta * (z_kl_loss + b_kl_loss) + model.gamma * skill_len_loss
 
 		if train_mode:
 			model_optimizer.zero_grad()
@@ -117,11 +135,10 @@ def run_iteration(model, data_loader, model_optimizer=None, train_mode=False):
 			model_optimizer.step()
 
 		losses.append(loss_tot.item())
-		# s_T_losses.append(s_T_loss.item())
-		s_T_losses.append(0)
+		s_T_losses.append(s_T_loss.item())
 		# s_T_ents.append(s_T_ent.item())
 		s_T_ents.append(0)
-		sl_losses.append(termination_loss.item())
+		sl_losses.append(skill_len_loss.item())
 		a_losses.append(a_loss.item())
 		b_kl_losses.append(b_kl_loss.item())
 		z_kl_losses.append(z_kl_loss.item())
@@ -152,8 +169,8 @@ if __name__ == '__main__':
 
 	# Load the dataset files
 	raw_data = np.load(os.path.join(hp.data_dir, f'{hp.env_name}.npz'))
-	inputs_train = torch.from_numpy(raw_data['inputs_train'])
-	inputs_test  = torch.from_numpy(raw_data['inputs_test'])
+	inputs_train = torch.from_numpy(raw_data['inputs_train']).reshape(-1, 20, 37)
+	inputs_test  = torch.from_numpy(raw_data['inputs_test']).reshape(-1, 20, 37)
 
 	train_loader = DataLoader(
 		inputs_train,
@@ -175,8 +192,8 @@ if __name__ == '__main__':
 					a_dist=hp.a_dist, state_dec_stop_grad=hp.state_dec_stop_grad, beta=hp.beta, alpha=hp.alpha, \
 					temperature=hp.temperature, gamma=hp.gamma, max_sig=hp.max_sig, fixed_sig=hp.fixed_sig, \
 					ent_pen=hp.ent_pen, encoder_type=hp.encoder_type, state_decoder_type=hp.state_decoder_type, \
-					min_skill_len=hp.min_skill_len, max_skill_len=hp.max_skill_len, \
-                    max_skills_per_seq=hp.max_skills_per_seq, device=hp.device).to(hp.device)
+					min_skill_len=hp.min_skill_len, grad_clip_threshold=hp.grad_clip_threshold, \
+					max_skill_len=hp.max_skill_len, max_skills_per_seq=hp.max_skills_per_seq, device=hp.device).to(hp.device)
 	else:
 		model = SkillModel(state_dim, a_dim, hp.z_dim, hp.h_dim, a_dist=hp.a_dist).to(hp.device)
 		
@@ -186,7 +203,7 @@ if __name__ == '__main__':
 	for i in range(hp.n_epochs):
 		# Run training loop
 		loss, s_T_loss, a_loss, b_kl_loss, z_kl_loss, s_T_ent, sl_loss, sl_mean, sl_std, sl_min, sl_max, \
-			ns_mean, ns_std, ns_min, ns_max = run_iteration(model, train_loader, model_optimizer=model_optimizer, train_mode=True)
+			ns_mean, ns_std, ns_min, ns_max = run_iteration(i, model, train_loader, model_optimizer=model_optimizer, train_mode=True)
 
 		# Update logger
 		logger.update_train(i, loss, s_T_loss, a_loss, b_kl_loss, z_kl_loss, s_T_ent, sl_loss, sl_mean, sl_std, sl_min, sl_max, ns_mean, ns_std, ns_min, ns_max)
@@ -194,7 +211,7 @@ if __name__ == '__main__':
 		# Run evaluation loop
 		with torch.no_grad():
 			test_loss, test_s_T_loss, test_a_loss, test_b_kl_loss, test_z_kl_loss, test_s_T_ent, sl_loss, sl_mean, sl_std, sl_min, sl_max, \
-			ns_mean, ns_std, ns_min, ns_max = run_iteration(model, test_loader, train_mode=False)
+			ns_mean, ns_std, ns_min, ns_max = run_iteration(i, model, test_loader, train_mode=False)
 
 		# Update logger
 		logger.update_test(i, test_loss, test_s_T_loss, test_a_loss, test_b_kl_loss, test_z_kl_loss, test_s_T_ent, sl_loss, sl_mean, sl_std, sl_min, sl_max, ns_mean, ns_std, ns_min, ns_max)
