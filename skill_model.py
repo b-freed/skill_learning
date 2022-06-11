@@ -9,7 +9,7 @@ import torch.distributions.normal as Normal
 import torch.distributions.categorical as Categorical
 import torch.distributions.mixture_same_family as MixtureSameFamily
 import torch.distributions.kl as KL
-import ipdb
+#import ipdb
 import matplotlib.pyplot as plt
 from utils import reparameterize
 
@@ -68,6 +68,7 @@ class AbstractDynamics(nn.Module):
 
 		return sT_mean,sT_sig
 
+
 class AutoregressiveStateDecoder(nn.Module):
 	def __init__(self,state_dim,z_dim,h_dim):
 		super(AutoregressiveStateDecoder,self).__init__()
@@ -84,12 +85,10 @@ class AutoregressiveStateDecoder(nn.Module):
 	def forward(self,sT,s0,z):
 		'''
 		returns the log probability of the terminal state sT given the initial state s0 and skill z
-
 		INPUTS:
 			sT: batch_size x 1 x state_dim terminal state
 			s0: batch_size x 1 x state_dim initial state
 			z:  batch_size x 1 x z_dim skill vector
-
 		OUTPUTS:
 			log_probs: batch_size x 1 x state_dim tensor of log probabilities for each element
 		'''
@@ -124,11 +123,9 @@ class AutoregressiveStateDecoder(nn.Module):
 	def sample_from_sT_dist(self,s0,z,temp=1.0):
 		'''
 		Given an initial state s0 and skill z, sample from predicted terminal state distribution
-
 		INPUTS:
 			s0: batch_size x 1 x state_dim
 			z:  batch_size x 1 x z_dim
-
 		OUTPUTS:
 			sT: batch_size x 1 x state_dim
 		'''
@@ -161,9 +158,6 @@ class AutoregressiveStateDecoder(nn.Module):
 
 		return onehot
 	
-
-
-
 
 # class DeadReckonStateDecoder(nn.Module):
 
@@ -423,6 +417,83 @@ class LowLevelDynamics(nn.Module):
 		return s_next_mean, s_next_sig, h
 
 
+class AutoregressiveLowLevelPolicy(nn.Module):
+	'''
+	P(a_t|s_t,z) is our "low-level policy", so this is the feedback policy the agent runs while executing skill described by z.
+	See Encoder and Decoder for more description
+	'''
+	def __init__(self,state_dim,a_dim,z_dim,h_dim,max_sig=None,fixed_sig=None):
+
+		super(AutoregressiveLowLevelPolicy,self).__init__()
+
+		# we'll need a_dim different low-level policies, one for each action element
+		self.policy_components = nn.ModuleList([LowLevelPolicy(state_dim+i,1,z_dim,h_dim,a_dist='normal',max_sig=max_sig,fixed_sig=fixed_sig) for i in range(a_dim)])
+
+		self.a_dim = a_dim
+
+		self.a_dist = 'autoregressive'
+
+		print('!!!!!!!!!!!! CREATING AUTOREGRESSIVE LL POLICY!!!!!!!!!!!!!!!!!!!')
+		
+
+
+	def forward(self,state,actions,z):
+		'''
+		INPUTS:
+			state: batch_size x T x state_dim tensor of states 
+			action: batch_size x T x a_dim tensor of actions
+			z:     batch_size x 1 x z_dim tensor of states
+		OUTPUTS:
+			a_mean: batch_size x T x a_dim tensor of action means for each t in {0.,,,.T}
+			a_sig:  batch_size x T x a_dim tensor of action standard devs for each t in {0.,,,.T}
+		
+		Iterate through each low level policy component.
+		The ith element gets to condition on all elements up to but NOT including a_i
+		'''
+		# tile z along time axis so dimension matches state
+		# z_tiled = z.tile([1,state.shape[-2],1]) #not sure about this 
+		a_means = []
+		a_sigs = []
+		for i in range(self.a_dim):
+			# Concat state, and a up to i.  state_a takes place of state in orginary policy.
+			state_a = torch.cat([state,actions[:,:,:i]],dim=-1)
+			# pass through ith policy component
+			a_mean_i,a_sig_i = self.policy_components[i](state_a,z)  # these are batch_size x T x 1
+			# add to growing list of policy elements
+			a_means.append(a_mean_i)
+			a_sigs.append(a_sig_i)
+
+		a_means = torch.cat(a_means,dim=-1)
+		a_sigs  = torch.cat(a_sigs, dim=-1)
+		return a_means, a_sigs
+	
+	def sample(self,state,z):
+		# tile z along time axis so dimension matches state
+		# z_tiled = z.tile([1,state.shape[-2],1]) #not sure about this 
+		actions = []
+		for i in range(self.a_dim):
+			# Concat state, a up to i, and z_tiled
+			state_a = torch.cat([state]+actions,dim=-1)
+			# pass through ith policy component
+			a_mean_i,a_sig_i = self.policy_components[i](state_a,z)  # these are batch_size x T x 1
+			a_i = reparameterize(a_mean_i,a_sig_i)
+			actions.append(a_i)
+
+		return torch.cat(actions,dim=-1)
+
+	
+	def numpy_policy(self,state,z):
+		'''
+		maps state as a numpy array and z as a pytorch tensor to a numpy action
+		'''
+		state = torch.reshape(torch.tensor(state,device=torch.device('cuda:0'),dtype=torch.float32),(1,1,-1))
+		
+		action = self.sample(state,z)
+		action = action.detach().cpu().numpy()
+		
+		return action.reshape([self.a_dim,])
+
+
 class Encoder(nn.Module):
 	'''
 	Encoder module.
@@ -591,6 +662,7 @@ class Decoder(nn.Module):
 
 		super(Decoder,self).__init__()
 		
+		print('in decoder a_dist: ', a_dist)
 		self.state_dim = state_dim
 		self.a_dim = a_dim
 		self.z_dim = z_dim
@@ -602,15 +674,22 @@ class Decoder(nn.Module):
 		else:
 			print('PICK VALID STATE DECODER TYPE!!!')
 			assert False
-		self.ll_policy = LowLevelPolicy(state_dim,a_dim,z_dim,h_dim, a_dist, max_sig = max_sig, fixed_sig=fixed_sig)
+		if a_dist != 'autoregressive':
+			self.ll_policy = LowLevelPolicy(state_dim,a_dim,z_dim,h_dim, a_dist, max_sig = max_sig, fixed_sig=fixed_sig)
+		else:
+			print('making autoregressive policy')
+			self.ll_policy = AutoregressiveLowLevelPolicy(state_dim,a_dim,z_dim,h_dim,max_sig=None,fixed_sig=None)
+
 		self.emb_layer  = nn.Linear(state_dim+z_dim,h_dim)
 		self.fc = nn.Sequential(nn.Linear(state_dim+z_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
 
 		self.state_dec_stop_grad = state_dec_stop_grad
 
 		self.state_decoder_type = state_decoder_type
+		self.a_dist = a_dist
+
 		
-	def forward(self,states,z):
+	def forward(self,states,actions,z):
 
 		'''
 		INPUTS: 
@@ -625,7 +704,11 @@ class Decoder(nn.Module):
 		
 		s_0 = states[:,0:1,:]
 		s_T = states[:,-1:,:]
-		a_mean,a_sig   = self.ll_policy(states,z)
+
+		if self.a_dist != 'autoregressive':
+			a_mean,a_sig = self.ll_policy(states,z)
+		else:
+			a_mean,a_sig = self.ll_policy(states,actions,z)
 
 		if self.state_dec_stop_grad:
 			z = z.detach()
@@ -768,10 +851,12 @@ class GenerativeModel(nn.Module):
 	def forward(self):
 		pass
 
+
 class SkillModelStateDependentPrior(nn.Module):
 	def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist='normal',state_dec_stop_grad=False,beta=1.0,alpha=1.0,max_sig=None,fixed_sig=None,ent_pen=0,encoder_type='state_action_sequence',state_decoder_type='mlp',init_state_dependent=True,per_element_sigma=True):
 		super(SkillModelStateDependentPrior, self).__init__()
 
+		print('a_dist: ', a_dist)
 		self.state_dim = state_dim # state dimension
 		self.a_dim = a_dim # action dimension
 		self.encoder_type = encoder_type
@@ -821,7 +906,7 @@ class SkillModelStateDependentPrior(nn.Module):
 		z_sampled = self.reparameterize(z_post_means,z_post_sigs)
 
 		# STEP 3. Pass z_sampled and states through decoder 
-		s_T_mean, s_T_sig, a_means, a_sigs = self.decoder(states,z_sampled)
+		s_T_mean, s_T_sig, a_means, a_sigs = self.decoder(states,actions,z_sampled) # 5/4/22 add actions as argument here for autoregressive policy
 
 
 
@@ -840,7 +925,7 @@ class SkillModelStateDependentPrior(nn.Module):
 		z_sampled = self.reparameterize(z_post_means,z_post_sigs)
 
 		z_prior_means,z_prior_sigs = self.prior(states[:,0:1,:]) 
-		a_means,a_sigs = self.decoder.ll_policy(states,z_sampled)
+		a_means,a_sigs = self.decoder.ll_policy(states,actions,z_sampled)
 
 		post_dist = Normal.Normal(z_post_means,z_post_sigs)
 		a_dist    = Normal.Normal(a_means,a_sigs)
@@ -863,7 +948,7 @@ class SkillModelStateDependentPrior(nn.Module):
 		z_sampled = self.reparameterize(z_post_means,z_post_sigs)
 
 		z_prior_means,z_prior_sigs = self.prior(states[:,0:1,:]) 
-		sT_mean, sT_sig, a_means, a_sigs = self.decoder(states,z_sampled)
+		sT_mean, sT_sig, a_means, a_sigs = self.decoder(states,actions,z_sampled)
 
 		sT_dist  = Normal.Normal(sT_mean,sT_sig)
 		a_dist    = Normal.Normal(a_means,a_sigs)
@@ -891,7 +976,7 @@ class SkillModelStateDependentPrior(nn.Module):
 		s_T_mean, s_T_sig, a_means, a_sigs, z_post_means, z_post_sigs  = self.forward(states,actions)
 
 		s_T_dist = Normal.Normal(s_T_mean, s_T_sig )
-		if self.decoder.ll_policy.a_dist == 'normal':
+		if self.decoder.ll_policy.a_dist == 'normal' or 'autoregressive':
 			a_dist = Normal.Normal(a_means, a_sigs)
 		elif self.decoder.ll_policy.a_dist == 'tanh_normal':
 			base_dist = Normal.Normal(a_means, a_sigs)
@@ -1036,6 +1121,87 @@ class SkillModelStateDependentPrior(nn.Module):
 		
 		
 		return costs + var_cost
+
+	def get_expected_cost_for_mppi(self, s0, skill_seq, goal_state, use_epsilons=True, plot=False, length_cost=0, var_pen=0.0):
+		'''
+		s0 is initial state, batch_size x 1 x s_dim
+		skill sequence is a batch_size x skill_seq_len x z_dim tensor that representents a skill_seq_len sequence of skills
+		'''
+		# tile s0 along batch dimension
+		#s0_tiled = s0.tile([1,batch_size,1])
+		z_arr = []
+		delta_z_arr = []
+		
+		batch_size = s0.shape[0]
+		goal_state = torch.cat(batch_size * [goal_state],dim=0)
+		s_i = s0
+		
+		skill_seq_len = skill_seq.shape[1]
+		pred_states = [s_i]
+		# costs = torch.zeros(batch_size,device=s0.device)
+		costs = [torch.mean((s_i[:,:,:2] - goal_state[:,:,:2])**2,dim=-1).squeeze()]
+		# costs = (lengths == 0)*torch.mean((s_i[:,:,:2] - goal_state[:,:,:2])**2,dim=-1).squeeze()
+		var_cost = 0.0
+		for i in range(skill_seq_len):
+			
+			# z_i = skill_seq[:,i:i+1,:] # might need to reshape
+			if use_epsilons:
+				mu_z, sigma_z = self.prior(s_i)
+				z_arr.append(mu_z[:,0,:])
+				
+				z_i = mu_z + sigma_z*skill_seq[:,i:i+1,:]
+				delta_z_arr.append((z_i-mu_z)[:,0,:])
+			else:
+				z_i = skill_seq[:,i:i+1,:]
+			
+			s_mean, s_sig = self.decoder.abstract_dynamics(s_i,z_i)
+
+			var_cost += var_pen*var_cost 
+			
+			# sample s_i+1 using reparameterize
+			s_sampled = s_mean
+			# s_sampled = self.reparameterize(s_mean, s_sig)
+			s_i = s_sampled
+
+			cost_i = torch.mean((s_i[:,:,:2] - goal_state[:,:,:2])**2,dim=-1).squeeze() + (i+1)*length_cost
+			costs.append(cost_i)
+			
+			pred_states.append(s_i)
+		
+		costs = torch.stack(costs,dim=1)  # should be a batch_size x T or batch_size x T 
+		costs,_ = torch.min(costs,dim=1)  # should be of size batch_size
+		z_arr = torch.stack(z_arr)
+		delta_z_arr = torch.stack(delta_z_arr)
+		# print('costs: ', costs)
+		# print('costs.shape: ', costs.shape)
+
+		if plot:
+			plt.figure()
+			plt.scatter(s0[0,0,0].detach().cpu().numpy(),s0[0,0,1].detach().cpu().numpy(), label='init state')
+			plt.scatter(goal_state[0,0,0].detach().cpu().numpy(),goal_state[0,0,1].detach().cpu().numpy(),label='goal',s=300)
+			plt.xlim([-1,38])
+			plt.ylim([-1,30])
+			pred_states = torch.cat(pred_states,1)
+			
+			plt.plot(pred_states[:,:,0].T.detach().cpu().numpy(),pred_states[:,:,1].T.detach().cpu().numpy())
+				
+			plt.savefig('pred_states_cem')
+
+
+			# plt.figure()
+			# plt.scatter(s0[0,0,0].detach().cpu().numpy(),s0[0,0,1].detach().cpu().numpy(), label='init state')
+			# plt.scatter(goal_state[0,0,0].detach().cpu().numpy(),goal_state[0,0,1].detach().cpu().numpy(),label='goal',s=300)
+			# # plt.xlim([0,25])
+			# # plt.ylim([0,25])
+			# # pred_states = torch.cat(pred_states,1)
+			# for i in range(batch_size):
+			#     # ipdb.set_trace()
+			#     plt.plot(pred_states[i,:,0].detach().cpu().numpy(),pred_states[i,:,1].detach().cpu().numpy())
+				
+			# plt.savefig('pred_states_cem_variable_length_FULL_SEQ')
+		
+		
+		return costs + var_cost, z_arr, delta_z_arr
 	
 	def get_expected_cost_variable_length(self, s0, skill_seq, lengths, goal_state, use_epsilons=True, plot=False):
 		'''

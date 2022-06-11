@@ -65,17 +65,22 @@ X,Y = np.meshgrid(x_grid,y_grid)
 abs_stat = []
 #print(x_grid.shape)
 
-def run_skill_seq(ax,skill_seq,env,s0,model,use_epsilon,use_dynamics_model=False,dynamics_model=None,init_state_arr=[],term_state_arr=[],abs_term_state_arr=[],ll_term_state_arr=[],plot_abstract=False,ITER=0):
+def run_skill_seq(ax,skill_seq,env,s0,model,use_epsilon,use_dynamics_model=True,dynamics_model=None,init_state_arr=[],term_state_arr=[],abs_term_state_arr=[],ll_term_state_arr=[],plot_abstract=False,ITER=0):
 	'''
 	'''
 	#ax.set_xlim([-3,3])
-	env.env.set_state(s0[:15],s0[15:])
+	#print(s0)
+	#exit()
+	#env.reset_to_location(np.array([36,24]))
 	state = s0
 	# s0_torch = torch.tensor(s0,dtype=torch.float32).cuda().reshape((1,1,-1))
 
 	pred_states = []
 	pred_sigs = []
-	states = []
+	states = np.zeros((0,4))
+	ll_states = np.zeros((0,4))
+	abs_states = np.zeros((0,state.shape[0]))
+	abs_states = np.vstack([abs_states,state])
 	# plt.figure()
 	for i in range(skill_seq.shape[1]):
 		# get the skill
@@ -86,34 +91,40 @@ def run_skill_seq(ax,skill_seq,env,s0,model,use_epsilon,use_dynamics_model=False
 		else:
 			z = skill_seq[:,i:i+1,:]
 		skill_seq_states = []
-		state_torch = torch.tensor(state,dtype=torch.float32).cuda().reshape((1,1,-1))
+		state_torch = torch.tensor(abs_states[i],dtype=torch.float32).cuda().reshape((1,1,-1))
 		s_mean, s_sig = model.decoder.abstract_dynamics(state_torch,z)
 		pred_state = s_mean.squeeze().detach().cpu().numpy()
+		abs_states = np.vstack([abs_states,pred_state])
 		pred_sig = s_sig.squeeze().detach().cpu().numpy()
 		pred_states.append(pred_state)
 		pred_sigs.append(pred_sig)
 		pred_sig_matrix = np.diag(pred_sig[:2])
-		
-		state_pred = torch.reshape(torch.tensor(state,device=torch.device('cuda:0'),dtype=torch.float32),(1,1,-1))
+		if(i==0):
+			state_pred = torch.reshape(torch.tensor(state,device=torch.device('cuda:0'),dtype=torch.float32),(1,1,-1))
 		# run skill for H timesteps
 		min_log_prob = 1000000
-		for j in range(6*H):
-			#env.render()
-			if(not use_dynamics_model):
+		min_state = state
+		for j in range(H):
+			env.render()
+			if(True):
 				action = model.decoder.ll_policy.numpy_policy(state,z)
-			else:
+				state,_,_,_ = env.step(action)
+			#else:
 				action = model.decoder.ll_policy.numpy_policy(state_pred[0,0,:].detach().cpu().numpy(),z)
 				action_torch = torch.reshape(torch.tensor(action,device=torch.device('cuda:0'),dtype=torch.float32),(1,1,-1))
 				state_pred_mean,state_pred_sig = dynamics_model(state_pred,action_torch)
 				eps = torch.normal(torch.zeros(state_pred_mean.size()).cuda(), torch.ones(state_pred_mean.size()).cuda())
 				state_pred = state_pred_mean + eps*state_pred_sig
-				pred_s = state_pred[0,0,:2].detach().cpu().numpy()
+				pred_s = state_pred[0,0,:4].detach().cpu().numpy()
+				ll_states = np.vstack([ll_states,pred_s])
+				pred_s = pred_s[:2]
 				log_prob = (np.expand_dims(pred_s.T-pred_state[:2].T,axis=0)@np.linalg.inv(pred_sig_matrix)@np.expand_dims(pred_s.T-pred_state[:2].T,axis=0).T)[0]
 				if(log_prob<min_log_prob):
 					min_log_prob = log_prob
 					min_state = pred_s
 				#ax.scatter(state_pred[0,0,0].detach().cpu().numpy(),state_pred[0,0,1].detach().cpu().numpy(), label='Trajectory',c='b')
-			state,_,_,_ = env.step(action)
+
+			states = np.vstack([states,state])
 			if(not use_dynamics_model):
 				#print(np.expand_dims(state[:2].T-pred_state[:2].T,axis=0).shape)
 				#print(np.linalg.inv(pred_sig_matrix).shape)
@@ -130,7 +141,7 @@ def run_skill_seq(ax,skill_seq,env,s0,model,use_epsilon,use_dynamics_model=False
 				else:
 					ax.scatter(state[0],state[1], c='orange')
 			'''
-		states.append(skill_seq_states)
+		#states.append(skill_seq_states)
 		if(use_dynamics_model):
 			pred_term_states_x.append(state_pred[0,0,0].detach().cpu().numpy())
 			pred_term_states_y.append(state_pred[0,0,1].detach().cpu().numpy())
@@ -157,19 +168,19 @@ def run_skill_seq(ax,skill_seq,env,s0,model,use_epsilon,use_dynamics_model=False
 		#ax.savefig('plots/plot.png')
 		#plt.close()
 
-	states = np.stack(states)
+	#states = np.stack(states)
 	goals = goal_seq.detach().cpu().numpy()
 	goals = np.stack(goals)
 	pred_states = np.stack(pred_states)
 	pred_sigs = np.stack(pred_sigs)
 
-	return state,states
+	return state,states,ll_states,abs_states
 
 device = torch.device('cuda:0')
 
-env = 'antmaze-large-diverse-v0'
+#env = 'antmaze-large-diverse-v0'
 # env = 'antmaze-medium-diverse-v0'
-# env = 'maze2d-large-v1'
+env = 'maze2d-large-v1'
 env_name = env
 env = gym.make(env)
 data = env.get_dataset()
@@ -180,7 +191,7 @@ state_dim = data['observations'].shape[1]
 a_dim = data['actions'].shape[1]
 h_dim = 256
 z_dim = 256
-batch_size = 1#100
+batch_size = 1000
 lr = 1e-4
 wd = 0.0
 state_dependent_prior = True
@@ -189,12 +200,10 @@ beta = 1.0
 alpha = 1.0
 ent_pen = 0
 max_sig = None
-fixed_sig =  None
+fixed_sig =  0.0
 n_iters = 100
 a_dist = 'normal'
-keep_frac = 0.5
-a_dist = 'normal'
-keep_frac = 0.5
+keep_frac = 0.1
 
 use_epsilon = True
 max_ep = None
@@ -208,8 +217,8 @@ encoder_type = 'state_action_sequence'
 term_state_dependent_prior = False
 init_state_dependent = True
 
-filename = 'EM_model_05_08_22_antmaze-large-diverse-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_1.0_b_1.0_per_el_sig_True_a_dist_normal_log_best_sT.pth'
-PATH = 'checkpoints/'+filename
+filename = 'EM_model_maze2d-large-v1state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_1.0_b_1.0_per_el_sig_True_log_best.pth'
+PATH = 'checkpoints/maze2d_skill_models/'+filename
 
 if term_state_dependent_prior:
 	skill_model = SkillModelTerminalStateDependentPrior(state_dim,a_dim,z_dim,h_dim,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,fixed_sig=fixed_sig).cuda()
@@ -223,8 +232,8 @@ skill_model.load_state_dict(checkpoint['model_state_dict'])
 h_dim = 512
 goal_conditioned = False
 
-PATH_DYNAMICS = 'checkpoints/ll_dynamics_antmaze-large-diverse-v0_l2reg_0.001_lr_0.0001_log_hdim_512_Decay_best.pth'
-PATH_PRIOR = 'checkpoints/ll_prior_antmaze-large-diverse-v0_l2reg_0.001_lr_0.0001_log_hdim_512_Decay_best.pth'
+PATH_DYNAMICS = 'checkpoints/ll_dynamics_maze2d-large-v1_l2reg_0.001_lr_0.0001_log_hdim_512_Decay_best.pth'
+PATH_PRIOR = 'checkpoints/ll_prior_maze2d-large-v1_l2reg_0.001_lr_0.0001_log_hdim_512_Decay_best.pth'
 
 dynamics_model = LowLevelDynamicsFF(state_dim,a_dim,h_dim,deterministic=False).cuda()
 checkpoint = torch.load(PATH_DYNAMICS)
@@ -238,49 +247,54 @@ if(use_epsilon):
 s0_torch = torch.cat([torch.tensor(env.reset(),dtype=torch.float32).cuda().reshape(1,1,-1) for _ in range(batch_size)])
 skill_seq = torch.zeros((1,skill_seq_len,z_dim),device=device)
 skill_seq.requires_grad = True
-#goal_state = np.array(env.target_goal)
-goal_state = np.array([0.0,8])
+goal_state = np.array(env.get_target())
+#goal_state = np.array([0.0,8])
 goal_seq = torch.tensor(goal_state, device=device).reshape(1,1,-1)
 
-execute_n_skills = 1
+execute_n_skills = 10
 fig, ax = plt.subplots()
 
 print('RUNNING SKILLS WITH TRUE STATES')
-init_state = env.reset()
-#init_state[:2] = np.array([10.0,9])
-state_idx = np.random.randint(0,data['observations'].shape[0])
-init_state = data['observations'][state_idx]
-for j in range(30):
-	#print(init_state[:2])
+
+#init_state[:2] = np.array([0.0,0])
+#state_idx = np.random.randint(0,data['observations'].shape[0])
+#init_state = data['observations'][state_idx]
+for j in range(5):
+	state = env.reset()
+	env.reset_to_location(np.array([1,1]))
+	state[:2] = np.array([1,1])
 	for i in range(max_replans):
-		s_torch = torch.cat(batch_size*[torch.tensor(init_state,dtype=torch.float32,device=device).reshape((1,1,-1))])
+		s_torch = torch.cat(batch_size*[torch.tensor(state,dtype=torch.float32,device=device).reshape((1,1,-1))])
 		cost_fn = lambda skill_seq: skill_model.get_expected_cost_for_cem(s_torch, skill_seq, goal_seq, var_pen = var_pen)
 		if(j==0):
-			#skill_seq,_ = cem(torch.zeros((skill_seq_len,z_dim),device=device),torch.ones((skill_seq_len,z_dim),device=device),cost_fn,batch_size,keep_frac,n_iters,l2_pen=cem_l2_pen)
-			skill_seq_mean,skill_seq_sig = skill_model.prior(s_torch.cuda())
-			epsilon = 0*torch.normal(torch.zeros(skill_seq_mean.size()).cuda(), torch.ones(skill_seq_mean.size()).cuda())
-			skill_seq = (skill_seq_mean + skill_seq_sig*epsilon).cuda()
-			#skill_seq = skill_seq[:execute_n_skills,:]
-			#skill_seq = skill_seq.unsqueeze(0)	
+			skill_seq,_ = cem(torch.zeros((skill_seq_len,z_dim),device=device),torch.ones((skill_seq_len,z_dim),device=device),cost_fn,batch_size,keep_frac,n_iters,l2_pen=cem_l2_pen)
+			#skill_seq_mean,skill_seq_sig = skill_model.prior(s_torch.cuda())
+			#epsilon = 0*torch.normal(torch.zeros(skill_seq_mean.size()).cuda(), torch.ones(skill_seq_mean.size()).cuda())
+			#skill_seq = (skill_seq_mean + skill_seq_sig*epsilon).cuda()
+			skill_seq = skill_seq[:execute_n_skills,:]
+			skill_seq = skill_seq.unsqueeze(0)	
 			skill_seq = convert_epsilon_to_z(skill_seq,s_torch[:1,:,:],skill_model)
 		if(j==0):
-			state,states = run_skill_seq(ax,skill_seq,env,init_state,skill_model,use_epsilon=False,plot_abstract=True,ITER=j)
+			state,states,ll_states,abs_states = run_skill_seq(ax,skill_seq,env,state,skill_model,dynamics_model=dynamics_model,use_epsilon=False,plot_abstract=True,ITER=j)
 		else:
-			state,states = run_skill_seq(ax,skill_seq,env,init_state,skill_model,use_epsilon=False,ITER=j)
+			state,states,ll_states,abs_states = run_skill_seq(ax,skill_seq,env,state,skill_model,dynamics_model=dynamics_model,use_epsilon=False,ITER=j)
+		plt.plot(states[:,0],states[:,1],color='red')
+		plt.plot(ll_states[:,0],ll_states[:,1],color='blue')
 	#print(state[:2])
-
+plt.scatter(abs_states[:,0],abs_states[:,1],color='green')
 #fig.savefig('plots/plot.png')
-
+'''
 s0_torch = torch.cat([torch.tensor(env.reset(),dtype=torch.float32).cuda().reshape(1,1,-1) for _ in range(batch_size)])
 #skill_seq = torch.zeros((1,skill_seq_len,z_dim),device=device)
 #skill_seq.requires_grad = True
 print('RUNNING SKILLS WITH LOW LEVEL DYNAMICS MODEL')
 for j in range(30):
-	#init_state = env.reset()
-	#print(init_state[:2])
+	state = env.reset()
+	env.reset_to_location(np.array([1,1]))
+	state[:2] = np.array([1,1])
 	for i in range(max_replans):
-		s_torch = torch.cat(batch_size*[torch.tensor(init_state,dtype=torch.float32,device=device).reshape((1,1,-1))])
-		state,states = run_skill_seq(ax,skill_seq,env,init_state,skill_model,use_epsilon=False,use_dynamics_model=True,dynamics_model=dynamics_model,ITER=j)
+		s_torch = torch.cat(batch_size*[torch.tensor(state,dtype=torch.float32,device=device).reshape((1,1,-1))])
+		state,states = run_skill_seq(ax,skill_seq,env,state,skill_model,use_epsilon=False,use_dynamics_model=True,dynamics_model=dynamics_model,ITER=j)
 	#print(state[:2])
 #ax.scatter(pred_term_states_x,pred_term_states_y, label='Pred term states(LL dynamics)',c='blue')
 mean_x = np.mean(pred_term_states_x)
@@ -296,6 +310,7 @@ std_y = np.std(term_states_y)
 #ax.scatter(mean_x,mean_y, label='True term state distr',c='purple')
 #ax.errorbar(mean_x,mean_y,xerr=std_x,yerr=std_y,c='purple')
 '''
+'''
 kde = KernelDensity(bandwidth=0.04, metric="haversine", kernel="gaussian", algorithm="ball_tree")
 kde.fit(term_states)
 xy = np.vstack([Y.ravel(), X.ravel()]).T
@@ -304,6 +319,7 @@ Z = np.exp(kde.score_samples(xy))
 Z = Z.reshape(X.shape)
 levels = np.linspace(0, Z.max(), 25)
 ax.contourf(X, Y, Z, levels=levels, cmap=plt.cm.Reds)
+'''
 '''
 #print(term_states)
 #geyser = sns.load_dataset("geyser")
@@ -316,17 +332,19 @@ sns.kdeplot(data=pred_term_data,x='x',y='y', color='blue',levels=6, fill=False)
 plt.scatter(abs_stat[0][0],abs_stat[0][1],c='g')
 plt.errorbar(abs_stat[0][0],abs_stat[0][1],xerr=abs_stat[1][0],yerr=abs_stat[1][1],c='g')
 print(abs_stat[0][0],abs_stat[0][1])
-plt.scatter(init_state[0],init_state[1],c='orange')
-
-red_key = mlines.Line2D([], [], color='red', marker='s', ls='', label='True terminal state density')
-blue_key = mlines.Line2D([], [], color='blue', marker='s', ls='', label='Pred terminal state density(LL dynamics)')
-green_key = mlines.Line2D([], [], color='green', marker='s', ls='', label='Pred terminal state distr(Abs dynamics)')
+'''
+plt.scatter(7,1,c='orange')
+plt.scatter(env.get_target()[0],env.get_target()[1],c='purple')
+red_key = mlines.Line2D([], [], color='red', marker='s', ls='', label='True trajectories')
+blue_key = mlines.Line2D([], [], color='blue', marker='s', ls='', label='Pred trajectories(LL dynamics)')
+green_key = mlines.Line2D([], [], color='green', marker='s', ls='', label='Pred trajectory(Abs dynamics)')
 orange_key = mlines.Line2D([], [], color='orange', marker='s', ls='', label='Initial state')
-plt.legend(handles=[red_key,blue_key,green_key,orange_key])
+purple_key = mlines.Line2D([], [], color='orange', marker='s', ls='', label='Goal state')
+plt.legend(handles=[red_key,blue_key,green_key,orange_key,purple_key])
 #plt.xlim([-8,8])
 #plt.ylim([-1,15])
 plt.axis('equal')
-plt.savefig('plots/antmaze_plots/plot_13.png')
+plt.savefig('plots/maze_plots/plot1.png')
 #lgd = ax.legend(bbox_to_anchor=(1.04,1), loc="upper center")
 #ax.axis('scaled')
 #ax.set_xlim([-10,10])
