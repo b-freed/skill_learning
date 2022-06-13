@@ -12,6 +12,7 @@ import ipdb
 import d4rl
 import random
 import gym
+import os
 from mujoco_py import GlfwContext
 GlfwContext(offscreen=True)
 import matplotlib
@@ -20,8 +21,6 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 import matplotlib.transforms as transforms
 from math import pi
-
-device = torch.device('cuda:0')
 
 
 def cem_iter(x,cost_fn,frac_keep,l2_pen):
@@ -58,7 +57,7 @@ def cem(x_mean,x_std,cost_fn,pop_size,frac_keep,n_iters,l2_pen):
 
     for i in range(n_iters):
         x_shape = [pop_size]+list(x_mean.shape)
-        x = x_mean + x_std*torch.randn(x_shape,device=device)
+        x = x_mean + x_std*torch.randn(x_shape, device=os.environ["_DEVICE"])
         x_mean,x_std,cost = cem_iter(x,cost_fn,frac_keep,l2_pen)
         # print('i: ',i)
         # print('cost: ', cost)
