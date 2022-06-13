@@ -55,6 +55,40 @@ class AbstractDynamics(nn.Module):
 
         return sT_mean,sT_sig
 
+class TerminationDecoder(nn.Module):
+    '''Termination prediction model: P(b=1|s, z)
+    Predicts the probability of termination given a skill and state 
+    '''
+    def __init__(self, state_dim, z_dim, h_dim):
+
+        super(TerminationDecoder,self).__init__()        
+        self.layers = nn.Sequential(
+                        nn.Linear(state_dim + z_dim, h_dim), 
+                        nn.ReLU(), 
+                        nn.Linear(h_dim, h_dim), 
+                        nn.ReLU(),
+                        nn.Linear(h_dim, 1), 
+                        nn.Sigmoid()
+                        )
+
+    def forward(self, states, z):
+        '''
+        INPUTS:
+            states: batch_size x t x state_dim state sequence
+            z:  batch_size x 1 x z_dim "skill"/z
+        OUTPUTS: 
+            b:  batch_size x t x 1 tensor of termination probabilities
+        '''
+        z_tiled = z.tile([1, states.shape[-2], 1])
+
+        # concatenate states and z_tiled
+        sz = torch.cat([states, z_tiled],dim=-1)
+
+        # pass s0_z through layers
+        b = self.layers(sz)
+        return b
+
+
 class AutoregressiveStateDecoder(nn.Module):
     def __init__(self,state_dim,z_dim,h_dim):
         super(AutoregressiveStateDecoder,self).__init__()
@@ -218,8 +252,8 @@ class LowLevelPolicy(nn.Module):
         '''
 
         # tile z along time axis so dimension matches state
-        # z_tiled = z.tile([1,state.shape[-2],1]) #not sure about this - I am. Haha.
-        z_tiled = z
+        z_tiled = z.tile([1,state.shape[-2],1]) #not sure about this - I am. Haha.
+        # z_tiled = z
 
         # Concat state and z_tiled
         state_z = torch.cat([state,z_tiled],dim=-1)
@@ -673,6 +707,56 @@ class Decoder(nn.Module):
         
         return sT_mean, sT_sig, a_mean, a_sig
 
+class DecoderAutoTermination(nn.Module):
+    '''
+    Auto termination decoder module.
+    Decoder takes states, actions, and a sampled z and outputs parameters of P(s_T|s_0,z) and P(a_t|s_t,z) for all t in {0,...,T}
+    P(s_T|s_0,z) is our "abstract dynamics model", because it predicts the resulting state transition over T timesteps given a skill 
+    (so similar to regular dynamics model, but in skill space and also temporally extended)
+    P(a_t|s_t,z) is our "low-level policy", so this is the feedback policy the agent runs while executing skill described by z.
+    We can try the following architecture:
+    -embed z
+    -Pass into fully connected network to get "state T features"
+    '''
+    def __init__(self,state_dim,a_dim,z_dim,h_dim, a_dist,state_dec_stop_grad, max_sig, fixed_sig, state_decoder_type):
+
+        super(DecoderAutoTermination,self).__init__()
+        
+        self.state_dim = state_dim
+        self.a_dim = a_dim
+        self.z_dim = z_dim
+
+        self.ll_policy = LowLevelPolicy(state_dim, a_dim, z_dim, h_dim, a_dist, max_sig=max_sig, fixed_sig=fixed_sig)
+        self.termination_decoder = TerminationDecoder(state_dim, z_dim, h_dim)
+        self.abstract_dynamics = AbstractDynamics(state_dim, z_dim, h_dim)
+
+        self.state_dec_stop_grad = state_dec_stop_grad
+
+        self.state_decoder_type = state_decoder_type
+        
+    def forward(self, states, z, s0):
+
+        '''
+        INPUTS: 
+            states: batch_size x T x state_dim state sequence tensor
+            z:      batch_size x 1 x z_dim sampled z/skill variable
+        OUTPUTS:
+            sT_mean: batch_size x 1 x state_dim tensor of terminal (time=T) state means
+            sT_sig:  batch_size x 1 x state_dim tensor of terminal (time=T) state standard devs
+            a_mean: batch_size x T x a_dim tensor of action means for each t in {0.,,,.T}
+            a_sig:  batch_size x T x a_dim tensor of action standard devs for each t in {0.,,,.T}
+        '''
+        
+        a_mean, a_sig = self.ll_policy(states, z)
+
+        if self.state_dec_stop_grad:
+            z_detached = z.detach()
+        
+        b = self.termination_decoder(states, z_detached) # TODO: z or z_detached?
+        sT_mean, sT_sig = self.abstract_dynamics(s0, z_detached)
+        
+        return sT_mean, sT_sig, a_mean, a_sig, b
+
 
 class Prior(nn.Module):
     '''
@@ -985,17 +1069,17 @@ class SkillModelStateDependentPrior(nn.Module):
         # print('costs: ', costs)
         # print('costs.shape: ', costs.shape)
 
-        if plot:
-            plt.figure()
-            plt.scatter(s0[0,0,0].detach().cpu().numpy(),s0[0,0,1].detach().cpu().numpy(), label='init state')
-            plt.scatter(goal_state[0,0,0].detach().cpu().numpy(),goal_state[0,0,1].detach().cpu().numpy(),label='goal',s=300)
-            # plt.xlim([0,25])
-            # plt.ylim([0,25])
-            pred_states = torch.cat(pred_states,1)
+        # if plot:
+            # plt.figure()
+            # plt.scatter(s0[0,0,0].detach().cpu().numpy(),s0[0,0,1].detach().cpu().numpy(), label='init state')
+            # plt.scatter(goal_state[0,0,0].detach().cpu().numpy(),goal_state[0,0,1].detach().cpu().numpy(),label='goal',s=300)
+            # # plt.xlim([0,25])
+            # # plt.ylim([0,25])
+            # pred_states = torch.cat(pred_states,1)
             
-            plt.plot(pred_states[:,:,0].T.detach().cpu().numpy(),pred_states[:,:,1].T.detach().cpu().numpy())
+            # plt.plot(pred_states[:,:,0].T.detach().cpu().numpy(),pred_states[:,:,1].T.detach().cpu().numpy())
                 
-            plt.savefig('pred_states_cem')
+            # plt.savefig('pred_states_cem')
 
 
             # plt.figure()
@@ -1050,31 +1134,31 @@ class SkillModelStateDependentPrior(nn.Module):
             
             pred_states.append(s_i)
         
-        if plot:
-            plt.figure()
-            plt.scatter(s0[0,0,0].detach().cpu().numpy(),s0[0,0,1].detach().cpu().numpy(), label='init state')
-            plt.scatter(goal_state[0,0,0].detach().cpu().numpy(),goal_state[0,0,1].detach().cpu().numpy(),label='goal',s=300)
-            # plt.xlim([0,25])
-            # plt.ylim([0,25])
-            pred_states = torch.cat(pred_states,1)
-            for i in range(batch_size):
-                # ipdb.set_trace()
-                plt.plot(pred_states[i,:lengths[i].item()+1,0].detach().cpu().numpy(),pred_states[i,:lengths[i].item()+1,1].detach().cpu().numpy())
+        # if plot:
+        #     plt.figure()
+        #     plt.scatter(s0[0,0,0].detach().cpu().numpy(),s0[0,0,1].detach().cpu().numpy(), label='init state')
+        #     plt.scatter(goal_state[0,0,0].detach().cpu().numpy(),goal_state[0,0,1].detach().cpu().numpy(),label='goal',s=300)
+        #     # plt.xlim([0,25])
+        #     # plt.ylim([0,25])
+        #     pred_states = torch.cat(pred_states,1)
+        #     for i in range(batch_size):
+        #         # ipdb.set_trace()
+        #         plt.plot(pred_states[i,:lengths[i].item()+1,0].detach().cpu().numpy(),pred_states[i,:lengths[i].item()+1,1].detach().cpu().numpy())
                 
-            plt.savefig('pred_states_cem_variable_length')
+        #     plt.savefig('pred_states_cem_variable_length')
 
 
-            plt.figure()
-            plt.scatter(s0[0,0,0].detach().cpu().numpy(),s0[0,0,1].detach().cpu().numpy(), label='init state')
-            plt.scatter(goal_state[0,0,0].detach().cpu().numpy(),goal_state[0,0,1].detach().cpu().numpy(),label='goal',s=300)
-            # plt.xlim([0,25])
-            # plt.ylim([0,25])
-            # pred_states = torch.cat(pred_states,1)
-            for i in range(batch_size):
-                # ipdb.set_trace()
-                plt.plot(pred_states[i,:,0].detach().cpu().numpy(),pred_states[i,:,1].detach().cpu().numpy())
+        #     plt.figure()
+        #     plt.scatter(s0[0,0,0].detach().cpu().numpy(),s0[0,0,1].detach().cpu().numpy(), label='init state')
+        #     plt.scatter(goal_state[0,0,0].detach().cpu().numpy(),goal_state[0,0,1].detach().cpu().numpy(),label='goal',s=300)
+        #     # plt.xlim([0,25])
+        #     # plt.ylim([0,25])
+        #     # pred_states = torch.cat(pred_states,1)
+        #     for i in range(batch_size):
+        #         # ipdb.set_trace()
+        #         plt.plot(pred_states[i,:,0].detach().cpu().numpy(),pred_states[i,:,1].detach().cpu().numpy())
                 
-            plt.savefig('pred_states_cem_variable_length_FULL_SEQ')
+        #     plt.savefig('pred_states_cem_variable_length_FULL_SEQ')
         return costs
     
     def reparameterize(self, mean, std):
@@ -1091,11 +1175,8 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
                 max_skill_len=None, max_skills_per_seq=None, grad_clip_threshold=1.0, device='cpu'):
         super(SkillModelStateDependentPriorAutoTermination, self).__init__(state_dim,a_dim,z_dim,h_dim,a_dist,state_dec_stop_grad,beta,alpha,max_sig,fixed_sig,ent_pen,encoder_type,state_decoder_type)
 
-        # Override the encoder module
-        if encoder_type == 'state_action_sequence':
-            self.encoder = EncoderAutoTermination(state_dim,a_dim,z_dim,h_dim)
-        else: 
-            raise NotImplementedError
+        # Override the decoder module
+        self.decoder = DecoderAutoTermination(state_dim,a_dim,z_dim,h_dim, a_dist, state_dec_stop_grad,max_sig=max_sig,fixed_sig=fixed_sig,state_decoder_type=state_decoder_type)
 
         self.device = device
         self.gamma = gamma # skill length penalty
@@ -1103,14 +1184,9 @@ class SkillModelStateDependentPriorAutoTermination(SkillModelStateDependentPrior
         self.grad_clip_threshold = grad_clip_threshold
 
         # Prior for termination
-        self.termination_prior = TerminationPrior(state_dim, a_dim, z_dim, h_dim)
         self.min_skill_len = min_skill_len
         self.max_skill_len = max_skill_len
         self.max_skills_per_seq = max_skills_per_seq
-        # self.init_termination = torch.zeros(1, 1000, 2, dtype=torch.float, device=self.device)
-        # self.init_termination[:, 14::15, 1] = 1
-        self.init_termination = torch.zeros(1, 20, 2, dtype=torch.float, device=self.device)
-        self.init_termination[:, -1, 1] = 1
 
 
     def forward(self, states, actions):        
@@ -1652,17 +1728,17 @@ class SkillModelTerminalStateDependentPrior(SkillModelStateDependentPrior):
         # print('costs: ', costs)
         # print('costs.shape: ', costs.shape)
 
-        if plot:
-            plt.figure()
-            plt.scatter(s0[0,0,0].detach().cpu().numpy(),s0[0,0,1].detach().cpu().numpy(), label='init state')
-            plt.scatter(goal_state[0,0,0].detach().cpu().numpy(),goal_state[0,0,1].detach().cpu().numpy(),label='goal',s=300)
-            # plt.xlim([0,25])
-            # plt.ylim([0,25])
-            pred_states = torch.cat(pred_states,1)
+        # if plot:
+        #     plt.figure()
+        #     plt.scatter(s0[0,0,0].detach().cpu().numpy(),s0[0,0,1].detach().cpu().numpy(), label='init state')
+        #     plt.scatter(goal_state[0,0,0].detach().cpu().numpy(),goal_state[0,0,1].detach().cpu().numpy(),label='goal',s=300)
+        #     # plt.xlim([0,25])
+        #     # plt.ylim([0,25])
+        #     pred_states = torch.cat(pred_states,1)
             
-            plt.plot(pred_states[:,:,0].T.detach().cpu().numpy(),pred_states[:,:,1].T.detach().cpu().numpy())
+        #     plt.plot(pred_states[:,:,0].T.detach().cpu().numpy(),pred_states[:,:,1].T.detach().cpu().numpy())
                 
-            plt.savefig('pred_states_cem')
+        #     plt.savefig('pred_states_cem')
         
         return costs
 

@@ -4,15 +4,15 @@ import torch
 
 class HyperParams:
     def __init__(self):
-        self.batch_size = 256
+        self.batch_size = 4096
         self.h_dim = 200
         self.z_dim = 256
-        self.lr = 5e-3
-        self.wd = 0.000
+        self.lr = 5e-4
+        self.wd = 0.0
         self.state_dependent_prior = True
         self.term_state_dependent_prior = False
         self.state_dec_stop_grad = True
-        self.gamma = 0.0 # TODO
+        self.gamma = 1.0 # TODO
         self.beta = 0.1
         self.alpha = 1.0
         self.ent_pen = 0.0
@@ -49,7 +49,7 @@ class HyperParams:
         else:
             self.msg = f'{self.env_name}_enc_type_{self.encoder_type}_state_dec_{self.state_decoder_type}_H_{self.H_max}_l2reg_{self.wd}_a_{self.alpha}_b_{self.beta}_sg_{self.state_dec_stop_grad}_max_sig_{self.max_sig}_fixed_sig_{self.fixed_sig}_ent_pen_{self.ent_pen}_log'
 
-        self.additional_msg = 'Try learning stuff with fixed skill length. shorter seqs'
+        self.additional_msg = f'_msg_ | LR: {self.lr} | BS: {self.batch_size}'
 
         date_time = time.asctime()[4:16].replace(' ', '_').replace(':', '_')[:6].replace('__', '_')
         self.log_dir = os.path.join('checkpoints', date_time)
