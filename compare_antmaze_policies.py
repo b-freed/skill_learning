@@ -23,9 +23,7 @@ from sklearn.neighbors import KernelDensity
 import seaborn as sns
 import pandas as pd
 import matplotlib.lines as mlines
-import time
-
-torch.cuda.set_per_process_memory_fraction(0.8, device=None)
+import matplotlib.mlab as mlab
 
 def convert_epsilon_to_z(epsilon,s0,model):
 
@@ -42,8 +40,7 @@ def convert_epsilon_to_z(epsilon,s0,model):
 	return torch.cat(z_seq,dim=1)
 
 def convert_epsilon_to_a(epsilon,s0,model):
-	states = np.zeros((0,4))
-	states = np.vstack([states,s0[0].detach().cpu().numpy()])
+
 	s = s0
 	a_seq = []
 	for i in range(epsilon.shape[1]):
@@ -53,9 +50,8 @@ def convert_epsilon_to_a(epsilon,s0,model):
 		a_seq.append(a_i)
 		s_mean,_ = model(s,a_i)
 		s = s_mean
-		states = np.vstack([states,s[0].detach().cpu().numpy()])
 
-	return torch.cat(a_seq,dim=1)[0],states
+	return torch.cat(a_seq,dim=1)[0]
 
 pred_term_states_x = []
 pred_term_states_y = []
@@ -71,16 +67,14 @@ abs_stat = []
 #print(x_grid.shape)
 
 def run_skill_seq(ax,skill_seq,env,s0,model,use_epsilon,use_dynamics_model=True,dynamics_model=None,init_state_arr=[],term_state_arr=[],abs_term_state_arr=[],ll_term_state_arr=[],plot_abstract=False,ITER=0):
-
 	state = s0
-	# s0_torch = torch.tensor(s0,dtype=torch.float32).cuda().reshape((1,1,-1))
-
 	pred_states = []
 	pred_sigs = []
-	states = np.zeros((0,4))
-	ll_states = np.zeros((0,4))
+	states = np.zeros((0,state.shape[0]))
+	ll_states = np.zeros((0,state.shape[0]))
 	abs_states = np.zeros((0,state.shape[0]))
 	abs_states = np.vstack([abs_states,state])
+	abs_sigs = np.zeros((0,state.shape[0]))
 	states = np.vstack([states,state])
 	# plt.figure()
 	for i in range(skill_seq.shape[1]):
@@ -97,6 +91,7 @@ def run_skill_seq(ax,skill_seq,env,s0,model,use_epsilon,use_dynamics_model=True,
 		pred_state = s_mean.squeeze().detach().cpu().numpy()
 		abs_states = np.vstack([abs_states,pred_state])
 		pred_sig = s_sig.squeeze().detach().cpu().numpy()
+		abs_sigs = np.vstack([abs_sigs,pred_sig])
 		pred_states.append(pred_state)
 		pred_sigs.append(pred_sig)
 		pred_sig_matrix = np.diag(pred_sig[:2])
@@ -115,8 +110,8 @@ def run_skill_seq(ax,skill_seq,env,s0,model,use_epsilon,use_dynamics_model=True,
 				action_torch = torch.reshape(torch.tensor(action,device=torch.device('cuda:0'),dtype=torch.float32),(1,1,-1))
 				state_pred_mean,state_pred_sig = dynamics_model(state_pred,action_torch)
 				eps = torch.normal(torch.zeros(state_pred_mean.size()).cuda(), torch.ones(state_pred_mean.size()).cuda())
-				state_pred = state_pred_mean + eps*state_pred_sig
-				pred_s = state_pred[0,0,:4].detach().cpu().numpy()
+				state_pred = state_pred_mean #+ eps*state_pred_sig
+				pred_s = state_pred[0,0,:].detach().cpu().numpy()
 				ll_states = np.vstack([ll_states,pred_s])
 				pred_s = pred_s[:2]
 				log_prob = (np.expand_dims(pred_s.T-pred_state[:2].T,axis=0)@np.linalg.inv(pred_sig_matrix)@np.expand_dims(pred_s.T-pred_state[:2].T,axis=0).T)[0]
@@ -175,25 +170,24 @@ def run_skill_seq(ax,skill_seq,env,s0,model,use_epsilon,use_dynamics_model=True,
 	pred_states = np.stack(pred_states)
 	pred_sigs = np.stack(pred_sigs)
 
-	return state,states,ll_states,abs_states
+	return state,states,ll_states,abs_states,abs_sigs
 
 device = torch.device('cuda:0')
 
-#env = 'antmaze-large-diverse-v0'
+env = 'antmaze-large-diverse-v0'
 # env = 'antmaze-medium-diverse-v0'
-env = 'maze2d-large-v1'
+#env = 'maze2d-large-v1'
 env_name = env
 env = gym.make(env)
 data = env.get_dataset()
 
-action_seq_len = 400
-skill_seq_len = 10
+skill_seq_len = 8#10
 H = 40
 state_dim = data['observations'].shape[1]
 a_dim = data['actions'].shape[1]
 h_dim = 256
 z_dim = 256
-batch_size = 1000
+batch_size = 100
 lr = 1e-4
 wd = 0.0
 state_dependent_prior = True
@@ -202,10 +196,10 @@ beta = 1.0
 alpha = 1.0
 ent_pen = 0
 max_sig = None
-fixed_sig =  0.0
+fixed_sig =  None#0.0
 n_iters = 100
 a_dist = 'normal'
-keep_frac = 0.1
+keep_frac = 0.5
 
 use_epsilon = True
 max_ep = None
@@ -219,8 +213,8 @@ encoder_type = 'state_action_sequence'
 term_state_dependent_prior = False
 init_state_dependent = True
 
-filename = 'EM_model_maze2d-large-v1state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_1.0_b_1.0_per_el_sig_True_log_best.pth'
-PATH = 'checkpoints/maze2d_skill_models/'+filename
+filename = 'EM_model_05_08_22_antmaze-large-diverse-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_1.0_b_1.0_per_el_sig_True_a_dist_normal_log_best_sT.pth'
+PATH = 'checkpoints/antmaze_skill_models/'+filename
 
 if term_state_dependent_prior:
 	skill_model = SkillModelTerminalStateDependentPrior(state_dim,a_dim,z_dim,h_dim,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,fixed_sig=fixed_sig).cuda()
@@ -234,8 +228,8 @@ skill_model.load_state_dict(checkpoint['model_state_dict'])
 h_dim = 512
 goal_conditioned = False
 
-PATH_DYNAMICS = 'checkpoints/ll_dynamics_maze2d-large-v1_l2reg_0.001_lr_0.0001_log_hdim_512_Decay_best.pth'
-PATH_PRIOR = 'checkpoints/ll_prior_maze2d-large-v1_l2reg_0.001_lr_0.0001_log_hdim_512_Decay_best.pth'
+PATH_DYNAMICS = 'checkpoints/ll_dynamics_antmaze-large-diverse-v0_l2reg_0.001_lr_0.0001_log_hdim_512_Decay_best.pth'
+PATH_PRIOR = 'checkpoints/ll_prior_antmaze-large-diverse-v0_l2reg_0.001_lr_0.0001_log_hdim_512_Decay_best.pth'
 
 dynamics_model = LowLevelDynamicsFF(state_dim,a_dim,h_dim,deterministic=False).cuda()
 checkpoint = torch.load(PATH_DYNAMICS)
@@ -249,87 +243,60 @@ if(use_epsilon):
 s0_torch = torch.cat([torch.tensor(env.reset(),dtype=torch.float32).cuda().reshape(1,1,-1) for _ in range(batch_size)])
 skill_seq = torch.zeros((1,skill_seq_len,z_dim),device=device)
 skill_seq.requires_grad = True
-#env.set_target(np.array([7,1]))
-goal_state = np.array(env.get_target())
+goal_state = np.array([4,24])#np.array(env.target_goal)
+env.target_goal = goal_state
 #goal_state = np.array([0.0,8])
 goal_seq = torch.tensor(goal_state, device=device).reshape(1,1,-1)
 
-execute_n_skills = 10
+execute_n_skills = 8#10
 fig, ax = plt.subplots()
 
 print('RUNNING SKILLS WITH TRUE STATES')
 
-cem_time_skill = []
-cem_time_ll = []
+init_state = env.reset()
+init_state[:2] = np.array([0,0])
 
-for j in range(2):
+for j in range(10):
 	state = env.reset()
-	env.reset_to_location(np.array([1,1]))
-	state[:2] = np.array([1,1])
-	if(j<1):
-		for i in range(max_replans):
-			s_torch = torch.cat(batch_size*[torch.tensor(state,dtype=torch.float32,device=device).reshape((1,1,-1))])
-			cost_fn = lambda skill_seq: skill_model.get_expected_cost_for_cem(s_torch, skill_seq, goal_seq, var_pen = var_pen)
-			if(j==0):
-				skill_seq,_ = cem(torch.zeros((skill_seq_len,z_dim),device=device),torch.ones((skill_seq_len,z_dim),device=device),cost_fn,batch_size,keep_frac,n_iters,l2_pen=cem_l2_pen)
-				#skill_seq_mean,skill_seq_sig = skill_model.prior(s_torch.cuda())
-				#epsilon = 0*torch.normal(torch.zeros(skill_seq_mean.size()).cuda(), torch.ones(skill_seq_mean.size()).cuda())
-				#skill_seq = (skill_seq_mean + skill_seq_sig*epsilon).cuda()
-				skill_seq = skill_seq[:execute_n_skills,:]
-				skill_seq = skill_seq.unsqueeze(0)	
-				skill_seq = convert_epsilon_to_z(skill_seq,s_torch[:1,:,:],skill_model)
-			if(j==0):
-				state,states,ll_states,abs_states = run_skill_seq(ax,skill_seq,env,state,skill_model,dynamics_model=dynamics_model,use_epsilon=False,plot_abstract=True,ITER=j)
-			else:
-				state,states,ll_states,abs_states = run_skill_seq(ax,skill_seq,env,state,skill_model,dynamics_model=dynamics_model,use_epsilon=False,ITER=j)
-			plt.plot(states[:,0],states[:,1],color='red')
-	else:
-		s_torch = torch.cat((batch_size//10)*[torch.tensor(state,dtype=torch.float32,device=device).reshape((1,1,-1))])
-		cost_fn = lambda action_seq: dynamics_model.get_expected_cost_for_cem(s_torch, action_seq, goal_seq, use_epsilon)
-		for k in range(50):
-			t1 = time.time()
-			action_seq,_ = cem(torch.zeros((action_seq_len,a_dim),device=device),torch.ones((action_seq_len,a_dim),device=device),cost_fn,batch_size//10,keep_frac,n_iters,l2_pen=0.0)
-			cem_time_ll.append(time.time()-t1)
-		print(np.mean(cem_time_ll),np.std(cem_time_ll,ddof=1))
-		exit()
-		action_seq = action_seq.unsqueeze(0)	
-		action_seq,states = convert_epsilon_to_a(action_seq,s_torch[:1,:,:],dynamics_model)
-		plt.plot(states[:,0],states[:,1],color='pink')
-		states = np.zeros((0,4))
-		states = np.vstack([states,state])
-		for k in range(300):
-			env.render()
-			action_seq_np = action_seq.detach().cpu().numpy()
-			state,_,_,_ = env.step(action_seq_np[k])
-			states = np.vstack([states,state])
-			dist_to_goal = np.sum((state[:2]-goal_state)**2)
-			if(dist_to_goal <= 0.5):
-				N_SUCCESS += 1
-				success_flag = True
-				print('Trial successful')
-				break
-		plt.plot(states[:,0],states[:,1],color='blue')
-		#plt.plot(ll_states[:,0],ll_states[:,1],color='blue')
+	env.env.set_state(init_state[:15],init_state[15:])
+	state = init_state
+
+	for i in range(max_replans):
+		s_torch = torch.cat(batch_size*[torch.tensor(state,dtype=torch.float32,device=device).reshape((1,1,-1))])
+		cost_fn = lambda skill_seq: skill_model.get_expected_cost_for_cem(s_torch, skill_seq, goal_seq, var_pen = var_pen)
+		if(j==0):
+			skill_seq,_ = cem(torch.zeros((skill_seq_len,z_dim),device=device),torch.ones((skill_seq_len,z_dim),device=device),cost_fn,batch_size,keep_frac,n_iters,l2_pen=cem_l2_pen)
+			skill_seq = skill_seq[:execute_n_skills,:]
+			skill_seq = skill_seq.unsqueeze(0)	
+			skill_seq = convert_epsilon_to_z(skill_seq,s_torch[:1,:,:],skill_model)
+		if(j==0):
+			state,states,ll_states,abs_states,abs_sigs = run_skill_seq(ax,skill_seq,env,state,skill_model,dynamics_model=dynamics_model,use_epsilon=False,plot_abstract=True,ITER=j)
+		else:
+			state,states,ll_states,abs_states,abs_sigs = run_skill_seq(ax,skill_seq,env,state,skill_model,dynamics_model=dynamics_model,use_epsilon=False,ITER=j)
+		plt.plot(states[:,0],states[:,1],color='red')
+		plt.plot(ll_states[:,0],ll_states[:,1],color='blue')
 	#print(state[:2])
-plt.scatter(abs_states[1:,0],abs_states[1:,1],color='green')
-img = plt.imread('plots/maze_plots/maze2d_grid.jpeg')
-plt.imshow(img,extent = [-0.6,8.4,-0.75,11.25])
+#plt.scatter(abs_states[1:,0],abs_states[1:,1],color='green')
+for i in range(execute_n_skills):
+	n = 10000
+	mean = [abs_states[1+i,0],abs_states[1+i,1]]
+	cov = [[abs_sigs[i,0],0],[0,abs_sigs[i,1]]]
+	rng = np.random.RandomState(0)
+	x, y = rng.multivariate_normal(mean, cov, n).T
+	sns.kdeplot(x=x, y=y, levels=4, color="green", fill=True)
+
+img = plt.imread('plots/antmaze_plots/antmaze.jpeg')
+plt.imshow(img,extent = [-6,42,-6,30])
 #plt.scatter(7,9,c='purple')
-plt.scatter(1,1,c='orange')
-plt.scatter(env.get_target()[0],env.get_target()[1],c='purple',marker='x')
-red_key = mlines.Line2D([], [], color='red', marker='s', ls='', label='Executed traj(skill plan)')
-blue_key = mlines.Line2D([], [], color='blue', marker='s', ls='', label='Executed traj(Low-level plan)')
-green_key = mlines.Line2D([], [], color='green', marker='s', ls='', label='Planned traj(Abs dynamics)')
-pink_key = mlines.Line2D([], [], color='pink', marker='s', ls='', label='Planned traj(Low-level planning)')
+plt.scatter(0,0,c='orange')
+plt.scatter(env.target_goal[0],env.target_goal[1],c='purple',marker='x')
+red_key = mlines.Line2D([], [], color='red', marker='s', ls='', label='True trajectories')
+blue_key = mlines.Line2D([], [], color='blue', marker='s', ls='', label='Pred trajectories(LL dynamics)')
+green_key = mlines.Line2D([], [], color='green', marker='s', ls='', label='Pred trajectory distr(Abs dynamics)')
 orange_key = mlines.Line2D([], [], color='orange', marker='s', ls='', label='Initial state')
 purple_key = mlines.Line2D([], [], color='purple', marker='s', ls='', label='Goal state')
-plt.legend(handles=[red_key,blue_key,green_key,pink_key,orange_key,purple_key],loc='lower right')
-plt.xlim([-0.5,8.5])
-plt.ylim([-0.5,11.5])
+plt.legend(handles=[red_key,green_key,blue_key,orange_key,purple_key],loc='lower right')
+plt.xlim([-6,42])
+plt.ylim([-6,30])
 plt.axis('equal')
-plt.savefig('plots/maze_plots/maze2d_compare_plan7.pdf')
-#lgd = ax.legend(bbox_to_anchor=(1.04,1), loc="upper center")
-#ax.axis('scaled')
-#ax.set_xlim([-10,10])
-#ax.set_ylim([0,20])
-#fig.savefig('plots/plot.png',bbox_extra_artists=(lgd,), bbox_inches='tight')
+plt.savefig('plots/antmaze_pdf_plots/antmaze_final_goal.pdf')
