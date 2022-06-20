@@ -18,16 +18,22 @@ from statsmodels.stats.proportion import proportion_confint
 
 to_numpy = lambda x: x.detach().cpu().numpy() if isinstance(x, torch.Tensor) else x
 
+def get_random_target(dataset):
+	maze_locations = dataset['observations'][:, :2]
+	target_idx = np.random.randint(len(maze_locations))
+	return maze_locations[target_idx]
 
-def run_skills_iterative_replanning(env, model, hp, planning_args, ep_num):	
+
+def run_skills_iterative_replanning(env, model, hp, planning_args, ep_num, dataset=None):	
 	device = planning_args.device
 	state = s0 = env.reset()
 	env.set_target()
+	target = env.target_goal if not planning_args.random_target else get_random_target(dataset)
 	trajectory = [s0]
 	frames = []
 
 	to_torch = lambda x, d=device: torch.tensor(x, dtype=torch.float, device=d)
-	goal = to_torch(np.array(env.target_goal)).reshape(1, 1, -1)
+	goal = to_torch(np.array(target)).reshape(1, 1, -1)
 	reached_goal = lambda s, g=goal, t=planning_args.goal_threshold: \
 		np.sum((to_numpy(s.squeeze())[:2] - to_numpy(g.squeeze())[:2])**2) <= t
 
@@ -130,7 +136,7 @@ if __name__ == '__main__':
 	parser.add_argument('-n', '--n_iters', default=20, help='number of iterations')
 	parser.add_argument('-k', '--keep_frac', default=0.02, help='keep frequency')
 	parser.add_argument('-c', '--cem_l2_pen', default=0.0, help='L2 penalty on CEM')
-	parser.add_argument('--skill_std', default=0.3, help='std of skill space to be searched over')
+	parser.add_argument('--skill_std', default=0.5, help='std of skill space to be searched over')
 	parser.add_argument('--max_ep_len', default=1000, help='Max time steps to plan')
 	parser.add_argument('--device', default='cuda:0', help='Device to run eval on')
 	parser.add_argument('--n_samples', default=4096, help='Number of CEM samples/candidates')
@@ -140,6 +146,7 @@ if __name__ == '__main__':
 	parser.add_argument('--execution_len', default=40, help='')
 	parser.add_argument('--n_evals', default=300, help='Number of times to evaluate')
 	parser.add_argument('--bg_img_path', default='antmaze_medium.jpg')
+	parser.add_argument('--random_target', default=False)
 	parser.add_argument('--debug', default=False)
 	parser.add_argument('--msg', default='')
 
@@ -163,6 +170,7 @@ if __name__ == '__main__':
 	os.environ["_DEVICE"] = _device
 
 	env = gym.make('antmaze-medium-play-v0') # gym.make(hp.env_name)
+	dataset = env.get_dataset() if args.random_target else None # Load dataset only if required
 	state_dim = env.observation_space.shape[0]
 	action_dim = env.action_space.shape[0]
 
@@ -189,7 +197,7 @@ if __name__ == '__main__':
 	}
 
 	for i in tqdm(range(args.n_evals), desc=f'Eval: {args.log_dir}'):
-		trajectory, goal, success, frames = run_skills_iterative_replanning(env, skill_model, hp, args, i)
+		trajectory, goal, success, frames = run_skills_iterative_replanning(env, skill_model, hp, args, i, dataset=dataset)
 
 		eval_data['success_history'].append(success)
 		eval_data['total_steps'].append(len(trajectory))
@@ -201,10 +209,11 @@ if __name__ == '__main__':
 		eval_data['mean_success'] = total_success / total_runs
 		eval_data['confidence_lower'], eval_data['confidence_upper'] = ci
 
+		# Save this all times to plot heatmaps
+		eval_data['init'].append(trajectory[0])
+		eval_data['goal'].append(goal)
 		if args.render or args.save_video:
 			eval_data['executed_trajectory'].append(trajectory)
-			eval_data['init'].append(trajectory[0])
-			eval_data['goal'].append(goal)
 			# plot_path = None if args.render else os.path.join(args.save_dir, f'trajectory.png')
 			plot_path = os.path.join(args.save_dir, f'trajectory.png')
 			plot_trajectory(trajectory, goal, bg_img_path=args.bg_img_path, save_path=plot_path)
