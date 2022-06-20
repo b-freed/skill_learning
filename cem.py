@@ -13,8 +13,8 @@ import d4rl
 import random
 import gym
 import os
-from mujoco_py import GlfwContext
-GlfwContext(offscreen=True)
+# from mujoco_py import GlfwContext
+# GlfwContext(offscreen=True)
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt

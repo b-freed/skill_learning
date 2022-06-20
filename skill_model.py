@@ -36,15 +36,18 @@ class AbstractDynamics(nn.Module):
 
         '''
         INPUTS:
-            s0: batch_size x 1 x state_dim initial state (first state in execution of skill)
-            z:  batch_size x 1 x z_dim "skill"/z
+            s0: batch_size x (1 or k) x state_dim initial state (first state in execution of skill)
+            z:  batch_size x (1 or k) x z_dim "skill"/z
         OUTPUTS: 
-            sT_mean: batch_size x 1 x state_dim tensor of terminal (time=T) state means
-            sT_sig:  batch_size x 1 x state_dim tensor of terminal (time=T) state standard devs
+            sT_mean: batch_size x (1 or k) x state_dim tensor of terminal (time=T) state means
+            sT_sig:  batch_size x (1 or k) x state_dim tensor of terminal (time=T) state standard devs
         '''
 
         # concatenate s0 and z
-        s0_z = torch.cat([s0,z],dim=-1)
+        if s0.shape[-2] != 1:
+            z = z.tile([1, s0.shape[-2], 1])
+
+        s0_z = torch.cat([s0, z],dim=-1)
 
         # pass s0_z through layers
         feats = self.layers(s0_z)
