@@ -1,5 +1,3 @@
-'''File where we will sample a set of waypionts, and plan a sequence of skills to have our pointmass travel through those waypoints'''
-
 from tokenize import ContStr
 from comet_ml import Experiment
 import numpy as np
@@ -73,15 +71,17 @@ encoder_type = 'state_action_sequence'
 term_state_dependent_prior = False
 init_state_dependent = True
 
-PATH_DYNAMICS = 'checkpoints/ll_dynamics_maze2d-medium-v1_l2reg_0.001_lr_0.0001_log_hdim_512_Decay_best.pth'
-PATH_PRIOR = 'checkpoints/ll_prior_maze2d-medium-v1_l2reg_0.001_lr_0.0001_log_hdim_512_Decay_best.pth'
+random_goals = True
+
+#PATH_DYNAMICS = 'checkpoints/ll_dynamics_maze2d-medium-v1_l2reg_0.001_lr_0.0001_log_hdim_512_Decay_best.pth'
+#PATH_PRIOR = 'checkpoints/ll_prior_maze2d-medium-v1_l2reg_0.001_lr_0.0001_log_hdim_512_Decay_best.pth'
 #PATH_DYNAMICS = 'checkpoints/ll_dynamics_maze2d-large-v1_l2reg_0.001_lr_0.0001_log_hdim_512_Decay_best.pth'
 #PATH_PRIOR = 'checkpoints/ll_prior_maze2d-large-v1_l2reg_0.001_lr_0.0001_log_hdim_512_Decay_best.pth'
 #PATH_DYNAMICS = 'checkpoints/ll_dynamics_antmaze-large-diverse-v0_l2reg_0.001_lr_0.0001_log_hdim_512_Decay_best.pth'
 #PATH_PRIOR = 'checkpoints/ll_prior_antmaze-large-diverse-v0_l2reg_0.001_lr_0.0001_log_hdim_512_Decay_best.pth'
-#PATH_DYNAMICS = 'checkpoints/ll_dynamics_antmaze-medium-diverse-v0_l2reg_0.001_lr_0.0001_log_hdim_512_Decay_best.pth'
-#PATH_PRIOR = 'checkpoints/ll_prior_antmaze-medium-diverse-v0_l2reg_0.001_lr_0.0001_log_hdim_512_Decay_best.pth'
-#PATH_PRIOR = 'checkpoints/ll_prior_antmaze-medium-diverse-v0_l2reg_0.001_lr_0.0001_log_hdim_512_GoalConditioned_Decay_best.pth'
+PATH_DYNAMICS = 'checkpoints/ll_dynamics_antmaze-medium-diverse-v0_l2reg_0.001_lr_0.0001_log_hdim_512_Decay_best.pth'
+PATH_PRIOR = 'checkpoints/ll_prior_antmaze-medium-diverse-v0_l2reg_0.001_lr_0.0001_log_hdim_512_Decay_best.pth'
+
 dynamics_model = LowLevelDynamicsFF(state_dim,a_dim,h_dim,deterministic=False).cuda()
 checkpoint = torch.load(PATH_DYNAMICS)
 dynamics_model.load_state_dict(checkpoint['model_state_dict'])
@@ -91,11 +91,7 @@ if(use_epsilon):
 	prior.load_state_dict(checkpoint['model_state_dict'])
 	dynamics_model.prior = prior
 
-#goal_state = np.array([10.0,10.0])
 goal_state_original = env.get_target()
-#print('goal_state: ', goal_state)
-# env.set_target(goal_state[:2])
-#goal_seq = torch.tensor(goal_state, device=device).reshape(1,1,-1)
 
 def convert_epsilon_to_a(epsilon,s0,goal_seq,model):
 
@@ -115,10 +111,7 @@ def convert_epsilon_to_a(epsilon,s0,goal_seq,model):
 N_TRIALS = 300
 N_SUCCESS = 0
 
-#dataset_states = np.load('antmaze-large-diverse-v0/observations.npy')
 dataset_states = data['observations']
-
-random_goals = True
 
 for trials in range(N_TRIALS):
 	#env.set_target()

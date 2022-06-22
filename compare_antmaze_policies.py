@@ -105,7 +105,6 @@ def run_skill_seq(ax,skill_seq,env,s0,model,use_epsilon,use_dynamics_model=True,
 			if(True):
 				action = model.decoder.ll_policy.numpy_policy(state,z)
 				state,_,_,_ = env.step(action)
-			#else:
 				action = model.decoder.ll_policy.numpy_policy(state_pred[0,0,:].detach().cpu().numpy(),z)
 				action_torch = torch.reshape(torch.tensor(action,device=torch.device('cuda:0'),dtype=torch.float32),(1,1,-1))
 				state_pred_mean,state_pred_sig = dynamics_model(state_pred,action_torch)
@@ -118,51 +117,31 @@ def run_skill_seq(ax,skill_seq,env,s0,model,use_epsilon,use_dynamics_model=True,
 				if(log_prob<min_log_prob):
 					min_log_prob = log_prob
 					min_state = pred_s
-				#ax.scatter(state_pred[0,0,0].detach().cpu().numpy(),state_pred[0,0,1].detach().cpu().numpy(), label='Trajectory',c='b')
 
 			states = np.vstack([states,state])
 			if(not use_dynamics_model):
-				#print(np.expand_dims(state[:2].T-pred_state[:2].T,axis=0).shape)
-				#print(np.linalg.inv(pred_sig_matrix).shape)
-				#print(np.expand_dims(state[:2].T-pred_state[:2].T,axis=0).T.shape)
+
 				log_prob = (np.expand_dims(state[:2].T-pred_state[:2].T,axis=0)@np.linalg.inv(pred_sig_matrix)@np.expand_dims(state[:2].T-pred_state[:2].T,axis=0).T)[0]
 				if(log_prob<min_log_prob):
 					min_log_prob = log_prob
 					min_state = state[:2]
 			skill_seq_states.append(state)
-			'''
-			if(not use_dynamics_model):
-				if(plot_abstract and j==0):
-					ax.scatter(state[0],state[1], label='Executed Trajectories',c='orange')
-				else:
-					ax.scatter(state[0],state[1], c='orange')
-			'''
-		#states.append(skill_seq_states)
+
 		if(use_dynamics_model):
 			pred_term_states_x.append(state_pred[0,0,0].detach().cpu().numpy())
 			pred_term_states_y.append(state_pred[0,0,1].detach().cpu().numpy())
 			pred_term_states[ITER,0] = min_state[0]#state_pred[0,0,0].detach().cpu().numpy()
 			pred_term_states[ITER,1] = min_state[1]#state_pred[0,0,1].detach().cpu().numpy()
-		#	ax.scatter(state[0],state[1], label='Trajectory',c='purple')
 
 		if(not use_dynamics_model):
-			'''
-			if(plot_abstract):
-				ax.scatter(state[0],state[1], label='True term states',c='r')
-			else:
-				ax.scatter(state[0],state[1], c='r')
-			'''
+
 			term_states_x.append(state[0])
 			term_states_y.append(state[1])
 			term_states[ITER] = min_state[:2]
 			
 			if(plot_abstract):
-				#ax.scatter(pred_state[0],pred_state[1], label='Pred term state distr(Abstract dynamics)',c='g')
-				#ax.errorbar(pred_state[0],pred_state[1],xerr=pred_sig[0],yerr=pred_sig[1],c='g')
 				abs_stat.append(pred_state[:2])
 				abs_stat.append(pred_sig[:2])
-		#ax.savefig('plots/plot.png')
-		#plt.close()
 
 	#states = np.stack(states)
 	goals = goal_seq.detach().cpu().numpy()
@@ -243,9 +222,8 @@ if(use_epsilon):
 s0_torch = torch.cat([torch.tensor(env.reset(),dtype=torch.float32).cuda().reshape(1,1,-1) for _ in range(batch_size)])
 skill_seq = torch.zeros((1,skill_seq_len,z_dim),device=device)
 skill_seq.requires_grad = True
-goal_state = np.array([4,24])#np.array(env.target_goal)
+goal_state = np.array(env.target_goal)
 env.target_goal = goal_state
-#goal_state = np.array([0.0,8])
 goal_seq = torch.tensor(goal_state, device=device).reshape(1,1,-1)
 
 execute_n_skills = 8#10
@@ -275,8 +253,7 @@ for j in range(10):
 			state,states,ll_states,abs_states,abs_sigs = run_skill_seq(ax,skill_seq,env,state,skill_model,dynamics_model=dynamics_model,use_epsilon=False,ITER=j)
 		plt.plot(states[:,0],states[:,1],color='red')
 		plt.plot(ll_states[:,0],ll_states[:,1],color='blue')
-	#print(state[:2])
-#plt.scatter(abs_states[1:,0],abs_states[1:,1],color='green')
+
 for i in range(execute_n_skills):
 	n = 10000
 	mean = [abs_states[1+i,0],abs_states[1+i,1]]

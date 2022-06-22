@@ -159,39 +159,6 @@ class AutoregressiveStateDecoder(nn.Module):
 		return onehot
 	
 
-# class DeadReckonStateDecoder(nn.Module):
-
-#     def __init__(self,state_dim,a_dim,z_dim,h_dim,n_gru_layers=4):
-
-#         self.state_dim = state_dim # state dimension
-#         self.a_dim = a_dim # action dimension
-
-#         self.s_emb_layer  = nn.Sequential(nn.Linear(state_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
-#         self.a_emb_layer  = nn.Sequential(nn.Linear(a_dim,    h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
-#         self.rnn        = nn.GRU(2*h_dim,h_dim,batch_first=True,bidirectional=True,num_layers=n_gru_layers)
-#         #self.mean_layer = nn.Linear(h_dim,z_dim)
-#         self.mean_layer = nn.Sequential(nn.Linear(2*h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,z_dim))
-#         #self.sig_layer  = nn.Sequential(nn.Linear(h_dim,z_dim),nn.Softplus())  # using softplus to ensure stand dev is positive
-#         self.sig_layer  = nn.Sequential(nn.Linear(2*h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,z_dim),nn.Softplus())
-
-#     def forward(self,s0,actions):
-
-#         s0_emb = self.s_emb_layer(s0)
-#         s0_emb_tiled = 
-#         a_emb = self.a_emb_layer(actions)
-#         emb = torch.cat([s0_emb_tiled,a_emb],dim=-1)
-#         feats,_ = self.rnn(s_emb_a)
-#         hn = feats[:,-1:,:]
-#         # hn = hn.transpose(0,1) # use final hidden state, as this should be an encoding of all states and actions previously.
-#         # get z_mean and z_sig by passing rnn output through mean_layer and sig_layer
-#         sT_mean = self.mean_layer(hn)
-#         sT_sig = self.sig_layer(hn)
-		
-#         return sT_mean, sT_sig
-
-
-
-
 
 class LowLevelPolicy(nn.Module):
 	'''

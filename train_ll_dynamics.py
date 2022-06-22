@@ -54,25 +54,22 @@ def test(model):
 
 	return np.mean(losses)
 
-
-# instantiating the environmnet, getting the dataset.
-# the data is in a big dictionary, containing long sequences of obs, rew, actions, goals
-# env_name = 'antmaze-medium-diverse-v0'  
+#env_name = 'antmaze-medium-diverse-v0'  
 #env_name = 'maze2d-large-v1'
-#env_name = 'antmaze-medium-diverse-v0'
+#env_name = 'antmaze-large-diverse-v0'
 #env_name = 'kitchen-complete-v0'
-env_name = 'kitchen-partial-v0'
+#env_name = 'kitchen-partial-v0'
+env_name = 'kitchen-mixed-v0'
+#env_name = 'maze2d-medium-v1'
+
 env = gym.make(env_name)
 
 dataset_file = None
-#dataset_file = "datasets/maze2d-umaze-v1.hdf5"
-# dataset_file = 'datasets/maze2d-large-v1-noisy-2.hdf5'
 
 if dataset_file is None:
-	dataset = d4rl.qlearning_dataset(env) #env.get_dataset()
+	dataset = d4rl.qlearning_dataset(env)
 else:
-	dataset = d4rl.qlearning_dataset(env,h5py.File(dataset_file, "r"))  # Not sure if this will work
-
+	dataset = d4rl.qlearning_dataset(env,h5py.File(dataset_file, "r"))
 
 batch_size = 100
 
@@ -88,9 +85,9 @@ lr_decay_epochs_interval = 100
 states = torch.tensor(dataset['observations'],dtype=torch.float32,device=device)
 next_states = torch.tensor(dataset['next_observations'],dtype=torch.float32,device=device)
 actions = torch.tensor(dataset['actions'],dtype=torch.float32,device=device)
+terminals = dataset['terminals']
+states, next_states, actions = clean_dataset.clean_data(states, next_states, actions)
 
-states, next_states, actions = clean_antmaze_dataset.clean_data(states, next_states, actions)
-print(states.shape)
 N = states.shape[0]
 
 state_dim = states.shape[1]
@@ -99,24 +96,7 @@ a_dim = actions.shape[1]
 N_train = int((1-test_split)*N)
 N_test = N - N_train
 
-
-
-experiment = Experiment(api_key = 'wb7Q8i6WX2nuxXfHJdBSs9PUV', project_name = 'skill-learning')
-# experiment.add_tag('noisy2')
-
-
-
 filename = 'll_dynamics_'+str(env_name)+'_l2reg_'+str(wd)+'_lr_'+str(lr)+'_log'
-
-
-# TODO delete irrelevant items
-experiment.log_parameters({'lr':lr,
-							'h_dim':h_dim,
-							'a_dim':a_dim,
-							'state_dim':state_dim,
-							'l2_reg':wd,
-							'env_name':env_name,
-							'filename':filename})
 
 # define model
 model = LowLevelDynamicsFF(state_dim,a_dim,h_dim,deterministic=False).cuda()
@@ -126,7 +106,6 @@ if decay == True:
 
 
 dataset = torch.utils.data.TensorDataset(states,actions,next_states)
-# train_data, test_data = torch.utils.data.random_split(dataset, [int(0.8*dataset_size), int(dataset_size-int(0.8*dataset_size))])
 train_data, test_data = torch.utils.data.random_split(dataset, [N_train, N_test])
 
 
@@ -146,16 +125,13 @@ for i in range(n_epochs):
 	
 	print('train_loss: ', train_loss)
 
-	experiment.log_metric("train_loss", train_loss, step=i)
-	
 
 	test_loss = test(model)
 	
 	print("--------TEST---------")
 	
 	print('test_loss: ', test_loss)
-	
-	experiment.log_metric("test_loss", test_loss, step=i)
+
 	
 	if i % 10 == 0:
 		
@@ -170,6 +146,6 @@ for i in range(n_epochs):
 
 		
 			
-		checkpoint_path = 'checkpoints/franka_ensemble/'+ filename + '_hdim_512_Decay_best_5.pth'
+		checkpoint_path = 'checkpoints/'+ filename + '_hdim_512_Decay_best.pth'
 		torch.save({'model_state_dict': model.state_dict(),
 				'model_optimizer_state_dict': model_optimizer.state_dict()}, checkpoint_path)
