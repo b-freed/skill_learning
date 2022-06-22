@@ -1,4 +1,5 @@
 import os
+from comet_ml import Experiment
 
 from sklearn.metrics import accuracy_score 
 os.environ['D4RL_SUPPRESS_IMPORT_ERROR'] = '1'
@@ -59,35 +60,42 @@ def run_iteration(i, model, data_loader, model_optimizer=None, train_mode=False)
 	b_losses = []
 	s_T_ents = []
 
+	device = model.device
+	horizon_length = model.max_skill_len
+
 	model.train() if train_mode else model.eval()
 	train_phase = get_train_phase(i)
 
 	b_criterion = torch.nn.BCELoss(reduction='none')
-	horizon_length = 20
+	get_masked_loss = lambda raw_loss, data_lens_tensor, mask, bs: (1/bs)*torch.sum(torch.sum(torch.sum(raw_loss, dim=-1) * mask, dim=-1)/data_lens_tensor)
 
-	for batch_id, data_ in tqdm.tqdm(enumerate(data_loader), desc=f"Progress"):
-
+	for batch_id, (data_, data_lens) in tqdm.tqdm(enumerate(data_loader), desc=f"Progress"):
 		batch_size = len(data_)
+		data_lens_tensor = torch.tensor(data_lens, device=device)
 
-		b_gt = torch.zeros(batch_size, horizon_length).to(model.device).float()
-		b_gt[:, -1] = 1
+		loss_mask = torch.arange(horizon_length, device=device).repeat(batch_size, 1)
+		loss_mask = loss_mask < data_lens_tensor.unsqueeze(dim=-1)
+
+		b_gt = torch.zeros(batch_size, horizon_length).to(device).float()
+		b_gt[torch.arange(batch_size, device=device), data_lens_tensor-1] = 1
 		b_loss_weight = torch.zeros_like(b_gt)
 
-		b_loss_weight[:, :-1] = 0.5 / (horizon_length - 1)
-		b_loss_weight[:, -1] = 0.5
+		# b_loss_weight[:, :] = 0.5 / (data_lens_tensor - 1)
+		b_loss_weight = 0.5 / (data_lens_tensor.unsqueeze(dim=-1).repeat(1, horizon_length) - 1)
+		b_loss_weight[torch.arange(batch_size, device=device), data_lens_tensor-1] = 0.5
 
-		data_ = data_.to(model.device) # (batch_size, 1000, state_dim + action_dim)
+		data_ = data_.to(device) # (batch_size, 1000, state_dim + action_dim)
 		states, actions = data_[:, :, :state_dim], data_[:, :, state_dim:]
 
 		# Infer skills for the data
-		z_post_means, z_post_sigs = model.encoder(states, actions)
+		z_post_means, z_post_sigs = model.encoder(states, actions, unequal_subtraj_lens=True, data_lens=data_lens)
 
 		# sample z_ts from the posterior
 		z_t = model.reparameterize(z_post_means, z_post_sigs)
 
 		# Extract s0 and sT ground truths from the data sequence
 		s0 = states[:, :1, :] # (batch_size, 1, state_dim)
-		sT_gt = states[:, -1:, :] # (batch_size, 1, state_dim)
+		sT_gt = states[torch.arange(batch_size, device=device), data_lens_tensor-1, :].unsqueeze(dim=1) # (batch_size, 1, state_dim)
 
 		# Use skills and states to generate terminal state and action sequences
 		sT_mean, sT_sig, a_means, a_sigs, b_ = model.decoder(states, z_t, s0)
@@ -111,22 +119,24 @@ def run_iteration(i, model, data_loader, model_optimizer=None, train_mode=False)
 		else:
 			assert False, f'{model.decoder.ll_policy.a_dist} not supported'
 
-		# Loss for predicting terminal state
-		s_T_loss = -torch.mean(torch.sum(sT_dist.log_prob(sT_gt), dim=-1)) # mean over time steps and batch
+		# Loss for predicting terminal state # mean over time steps and batch
+		s_T_loss = -get_masked_loss(sT_dist.log_prob(sT_gt), data_lens_tensor, loss_mask, batch_size)
 
 		# Entropy corresponding to terminal state
 		# s_T_ent = torch.mean(torch.sum(s_T_dist.entropy(), dim=-1))/time_steps
 		s_T_ent = 0
 
-		# Los for predicting actions
-		a_loss = -torch.mean(torch.sum(a_dist.log_prob(actions), dim=-1)) # mean over time steps and batch
+		# Los for predicting actions # mean over time steps and batch 
+		# a_loss = -(1/batch_size)*torch.mean(torch.sum(a_dist.log_prob(actions), dim=-1))
+		a_loss = -get_masked_loss(a_dist.log_prob(actions), data_lens_tensor, loss_mask, batch_size)
 
-		# KL divergence between skill prior and posterior
-		z_kl_loss = torch.mean(torch.sum(KL.kl_divergence(z_post_dist, z_prior_dist), dim=-1)) # mean over time steps and batch
+		# KL divergence between skill prior and posterior # mean over time steps and batch
+		# z_kl_loss = torch.mean(torch.sum(KL.kl_divergence(z_post_dist, z_prior_dist), dim=-1)) # mean over time steps and batch
+		z_kl_loss = get_masked_loss(KL.kl_divergence(z_post_dist, z_prior_dist), data_lens_tensor, loss_mask, batch_size)
 
 		# Loss for prediction termination condition
 		# Termination encoder should learn to terminate on reaching sT_gt when running the planned skill		
-		b_loss = (b_criterion(b, b_gt) * b_loss_weight).mean()
+		b_loss = (1/batch_size)*torch.sum(torch.sum(b_criterion(b, b_gt) * b_loss_weight, dim=-1)/data_lens_tensor, dim=-1)
 
 		loss_tot = model.alpha * s_T_loss + a_loss + model.beta * z_kl_loss + model.gamma * b_loss
 
@@ -161,19 +171,12 @@ if __name__ == '__main__':
 	a_dim = env.action_space.shape[0]
 
 	# Load the dataset files
-	raw_data = np.load(os.path.join(hp.data_dir, f'{hp.env_name}.npz'))
-	inputs_train = torch.from_numpy(raw_data['inputs_train']).reshape(-1, 20, 37)
-	inputs_test  = torch.from_numpy(raw_data['inputs_test']).reshape(-1, 20, 37)
-
-	train_loader = DataLoader(
-		inputs_train,
-		batch_size=hp.batch_size,
-		num_workers=0)  # not really sure about num_workers...
-
-	test_loader = DataLoader(
-		inputs_test,
-		batch_size=hp.batch_size,
-		num_workers=0)
+	# raw_data = np.load(os.path.join(hp.data_dir, f'{hp.env_name}.npz'))
+	# inputs_train = torch.from_numpy(raw_data['inputs_train']).reshape(-1, 20, 37)
+	# inputs_test  = torch.from_numpy(raw_data['inputs_test']).reshape(-1, 20, 37)
+	data_path = os.path.join(hp.data_dir, f'{hp.env_name}.npz')
+	inputs_train = utils.UniformRandomSubTrajectory(data_path, train=True, min_len=hp.min_skill_len, max_len=hp.max_skill_len)
+	inputs_test = utils.UniformRandomSubTrajectory(data_path, train=False, min_len=hp.min_skill_len, max_len=hp.max_skill_len)
 
 	# Instantiate a skill model
 	if hp.term_state_dependent_prior:
@@ -194,6 +197,20 @@ if __name__ == '__main__':
 
 	# It's time to roll baby!
 	for i in range(hp.n_epochs):
+		# Resample subtrajectories
+		inputs_train.sample_random_len_sequences()
+		inputs_test.sample_random_len_sequences()
+
+		train_loader = DataLoader(inputs_train,
+									batch_size=hp.batch_size,
+									collate_fn=utils.pad_collate_custom,
+									num_workers=0)
+
+		test_loader = DataLoader(inputs_test,
+								batch_size=hp.batch_size,
+								collate_fn=utils.pad_collate_custom,
+								num_workers=0)
+
 		# Run training loop
 		loss, s_T_loss, a_loss, b_loss, z_kl_loss, s_T_ent = run_iteration(i, model, train_loader, model_optimizer=model_optimizer, train_mode=True)
 

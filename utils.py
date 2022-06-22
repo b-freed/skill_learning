@@ -20,7 +20,94 @@ from matplotlib import animation
 from PIL import Image
 # import cv2
 # from pygifsicle import optimize
+import math
+import random
 import imageio
+from torch.utils.data import Dataset
+from torch.nn.utils.rnn import pad_sequence
+
+
+def pad_collate_custom(xx):
+  x_lens = [len(x) for x in xx]
+  xx_pad = pad_sequence(xx, batch_first=True, padding_value=0)
+  return xx_pad, x_lens
+
+
+class UniformRandomSubTrajectory(Dataset):
+    """Uniform random subtrajectory dataset."""
+
+    def __init__(self, data_path, train=False, min_len=10, max_len=40, transform=None):
+        """
+        Args:
+            data_path (string): Path to the npz file.
+            train (bool): Extract train/test data
+            min_len (int): Minimum length of sampled subtrajectories
+            max_len (int): Maximum length of sampled subtrajectories
+            transform (callable, optional): Optional transform to be applied
+                on a sample.
+        """
+        self.min_len, self.max_len = min_len, max_len
+        self.transform = transform
+
+        data_str = 'inputs_train' if train else 'inputs_test'
+        _raw_data = np.load(data_path)
+        self.raw_data = torch.from_numpy(_raw_data[data_str]).reshape(-1, 1000, 37)
+
+        self.sample_random_len_sequences()
+
+
+    def sample_random_len_sequences(self, shuffle_data=True):
+        r"""Creates a list of unequal sub-trajectories.
+
+        Args:
+            self.data (torch.Tensor): batch_size x trajectory_length x data_dim
+            self.min_len (int): Minimum length of sampled subtrajectories
+            self.max_len (int): Maximum length of sampled subtrajectories
+
+        Constraints:
+            min(sub-trajectory length) = self.min_length
+            max(sub-trajectory length) = self.max_length
+        """
+        n_traj, traj_len, data_dim = self.raw_data.shape
+        max_n_subtraj = math.ceil(traj_len/self.min_len)
+
+        traj_division = torch.randint(low=self.min_len, high=self.max_len+1, size=(n_traj, max_n_subtraj))
+
+        _traj_lens = torch.cumsum(traj_division, dim=1)
+
+        mask = torch.argmax((_traj_lens <= traj_len) * torch.arange(max_n_subtraj), dim=-1)
+        split_idxs_list = [_traj_lens[i, :(end_idx+1)] for i, end_idx in enumerate(mask)]
+
+        # TODO: 
+        # Adjust lens of last two subtrajectories should last subjtrajectory not satisfy subjtraj contraints
+        # Some of the last subtrajectories might be smaller than min_length. For now, Just get rid of them.
+        # Boilerplate if rquired
+        # last_subtraj_len = _traj_lens[mask+1] - traj_len
+        # bad_idxs = torch.where(0 < last_subtraj_len < min_len)
+        # Correct the last two subtrajectories
+
+        split_data = []
+        for i, split_idxs in enumerate(split_idxs_list):
+            split_data.extend(self.raw_data[i].tensor_split(split_idxs))
+
+        # Get rid of subtrajectories smaller than min_len
+        clean_data = []
+        for subtraj in split_data:
+            if len(subtraj) >= self.min_len:
+                clean_data.append(subtraj)
+
+        self.data_list = clean_data
+
+
+    def __len__(self):
+        return len(self.data_list)
+
+
+    def __getitem__(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
+        return self.data_list[idx]
+
 
 def kl_divergence_bernoulli(post_logits, prior_probs, eps=1e-16): 
     """

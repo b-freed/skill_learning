@@ -470,7 +470,7 @@ class Encoder(nn.Module):
         self.sig_layer  = nn.Sequential(nn.Linear(2*h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,z_dim),nn.Softplus())
 
 
-    def forward(self,states,actions):
+    def forward(self, states, actions, unequal_subtraj_lens=False, data_lens=None):
 
         '''
         Takes a sequence of states and actions, and infers the distribution over latent skill variable, z
@@ -482,14 +482,23 @@ class Encoder(nn.Module):
             z_mean: batch_size x 1 x z_dim tensor indicating mean of z distribution
             z_sig:  batch_size x 1 x z_dim tensor indicating standard deviation of z distribution
         '''
+        device = states.device
 
-        
         s_emb = self.emb_layer(states)
-        # through rnn
-        s_emb_a = torch.cat([s_emb,actions],dim=-1)
-        feats,_ = self.rnn(s_emb_a)
-        hn = feats[:,-1:,:]
-        # hn = hn.transpose(0,1) # use final hidden state, as this should be an encoding of all states and actions previously.
+        _s_emb_a = torch.cat([s_emb, actions],dim=-1)
+
+        s_emb_a = pack_padded_sequence(_s_emb_a, data_lens, batch_first=True, enforce_sorted=False) if unequal_subtraj_lens else _s_emb_a
+
+        _feats, _ = self.rnn(s_emb_a)
+
+        if unequal_subtraj_lens:
+            feats, output_lens = pad_packed_sequence(_feats, batch_first=True)
+            last_idxs = torch.tensor(data_lens).to(device)
+            hn = feats[torch.arange(len(feats)).to(device), last_idxs-1, :].unsqueeze(dim=1)
+        else:
+            feats = _feats
+            hn = feats[:, -1:, :]
+
         # get z_mean and z_sig by passing rnn output through mean_layer and sig_layer
         z_mean = self.mean_layer(hn)
         z_sig = self.sig_layer(hn)
@@ -814,7 +823,7 @@ class TerminationPrior(nn.Module):
         self.s_emb_layer = nn.Sequential(nn.Linear(state_dim, h_dim), nn.LeakyReLU(negative_slope=0.02), nn.Linear(h_dim, h_dim), nn.LeakyReLU(negative_slope=0.02))
         self.a_emb_layer = nn.Sequential(nn.Linear(action_dim, h_dim), nn.LeakyReLU(negative_slope=0.02), nn.Linear(h_dim, h_dim), nn.LeakyReLU(negative_slope=0.02))
 
-        self.layers      = nn.Sequential(nn.Linear(2*h_dim, h_dim), nn.LeakyReLU(negative_slope=0.02), nn.Linear(h_dim, 2))
+        self.layers      = nn.Sequential(nn.Linear(2*h_dim, h_dim), nn.LeakyReLU(negative_slope=0.02), nn.Linear(h_dim, 1), nn.Sigmoid())
 
         
     def forward(self, states, actions):
