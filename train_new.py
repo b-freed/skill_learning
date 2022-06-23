@@ -61,7 +61,6 @@ def run_iteration(i, model, data_loader, model_optimizer=None, train_mode=False)
 	s_T_ents = []
 
 	device = model.device
-	horizon_length = model.max_skill_len
 
 	model.train() if train_mode else model.eval()
 	train_phase = get_train_phase(i)
@@ -71,10 +70,11 @@ def run_iteration(i, model, data_loader, model_optimizer=None, train_mode=False)
 
 	for batch_id, (data_, data_lens) in tqdm.tqdm(enumerate(data_loader), desc=f"Progress"):
 		batch_size = len(data_)
+		horizon_length = data_.shape[1]
+
 		data_lens_tensor = torch.tensor(data_lens, device=device)
 
-		loss_mask = torch.arange(horizon_length, device=device).repeat(batch_size, 1)
-		loss_mask = loss_mask < data_lens_tensor.unsqueeze(dim=-1)
+		loss_mask = torch.arange(horizon_length, device=device).repeat(batch_size, 1) < data_lens_tensor.unsqueeze(dim=-1)
 
 		b_gt = torch.zeros(batch_size, horizon_length).to(device).float()
 		b_gt[torch.arange(batch_size, device=device), data_lens_tensor-1] = 1
