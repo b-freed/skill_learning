@@ -29,18 +29,22 @@ from cem import cem, cem_variable_length
 from utils import make_gif,make_video
 from statsmodels.stats.proportion import proportion_confint
 
+#### for gpu
 device = torch.device('cuda:0')
+####
+# for cpu
+# device = torch.device('cpu')
+# torch.set_num_threads(2)
+####
 
-# env = 'antmaze-large-diverse-v0'
-env = 'antmaze-medium-diverse-v0'
-# env = 'maze2d-large-v1'
-env_name = env
-env = gym.make(env)
+env_name = 'antmaze-large-diverse-v0'
+# env_name = 'antmaze-medium-diverse-v0'
+env = gym.make(env_name)
 data = env.get_dataset()
 
 # vid = video_recorder.VideoRecorder(env,path="recording")
 
-skill_seq_len = 10 # 40 #
+skill_seq_len = 10 # 
 H = 10
 replan_freq = H * 5
 state_dim = data['observations'].shape[1]
@@ -69,7 +73,7 @@ cem_l2_pen = 0.0
 var_pen = 0.0
 render = False
 variable_length = False
-max_replans = 2000 // H # run max 200 timesteps
+max_replans = 2000 // H # run max 2000 timesteps
 plan_length_cost = 0.0
 encoder_type = 'state_action_sequence'
 term_state_dependent_prior = False
@@ -103,26 +107,35 @@ else:
 # filename = 'EM_model_antmaze-large-diverse-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_1.0_b_1.0_log_best.pth'
 # filename = 'EM_model_antmaze-large-diverse-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_2.0_b_1.0_log_best.pth'
 # filename = 'EM_model_05_08_22_antmaze-large-diverse-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_1.0_b_1.0_per_el_sig_True_a_dist_normal_log_best_sT.pth'
+
 # filename = 'EM_model_05_08_22_antmaze-large-diverse-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_1.0_b_1.0_per_el_sig_True_a_dist_normal_log_best.pth'
-filename = 'EM_model_06_01_22_antmaze-medium-diverse-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_1.0_b_1.0_per_el_sig_True_a_dist_normal_log_best_sT.pth'
+
+# filename = 'EM_model_05_08_22_antmaze-large-diverse-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_1.0_b_1.0_per_el_sig_True_a_dist_normal_log_best.pth'
+# filename = 'EM_model_06_01_22_antmaze-medium-diverse-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_1.0_b_1.0_per_el_sig_True_a_dist_normal_log_best_sT.pth'
 # filename = 'EM_model_06_03_22_antmaze-medium-diverse-v0state_dec_mlp_init_state_dep_True_H_10_l2reg_0.0_a_1.0_b_1.0_per_el_sig_True_a_dist_normal_log_best_sT.pth'
+# filename = 'EM_model_06_03_22_antmaze-medium-diverse-v0state_dec_mlp_init_state_dep_True_H_10_l2reg_0.0_a_1.0_b_1.0_per_el_sig_True_a_dist_normal_log_best.pth'
+
+
+# noncausal models
+filename = 'noncausal_model_08_15_22_antmaze-large-diverse-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_1.0_b_1.0_per_el_sig_True_a_dist_normal_log_best.pth' # Aug 16 11:55
+# filename = 'noncausal_model_08_15_22_antmaze-medium-diverse-v0state_dec_mlp_init_state_dep_True_H_40_l2reg_0.0_a_1.0_b_1.0_per_el_sig_True_a_dist_normal_log_best.pth' # Aug 16 07:41 
 
 PATH = 'checkpoints/'+filename
 
 
 if term_state_dependent_prior:
-	skill_model = SkillModelTerminalStateDependentPrior(state_dim,a_dim,z_dim,h_dim,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,fixed_sig=fixed_sig).cuda()
+	skill_model = SkillModelTerminalStateDependentPrior(state_dim,a_dim,z_dim,h_dim,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,fixed_sig=fixed_sig).to(device=device)
 elif state_dependent_prior:
-	skill_model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,max_sig=max_sig,fixed_sig=fixed_sig,ent_pen=ent_pen,encoder_type=encoder_type,init_state_dependent=init_state_dependent).cuda()
+	skill_model = SkillModelStateDependentPrior(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist,state_dec_stop_grad=state_dec_stop_grad,beta=beta,alpha=alpha,max_sig=max_sig,fixed_sig=fixed_sig,ent_pen=ent_pen,encoder_type=encoder_type,init_state_dependent=init_state_dependent).to(device=device)
 else:
-	skill_model = SkillModel(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist).cuda()
-checkpoint = torch.load(PATH)
+	skill_model = SkillModel(state_dim, a_dim, z_dim, h_dim, a_dist=a_dist).to(device=device)
+checkpoint = torch.load(PATH, map_location=device)
 skill_model.load_state_dict(checkpoint['model_state_dict'])
 
 experiment = Experiment(api_key = '9mxH2vYX20hn9laEr0KtHLjAa', project_name = 'skill-learning')
 
 
-s0_torch = torch.cat([torch.tensor(env.reset(),dtype=torch.float32).cuda().reshape(1,1,-1) for _ in range(batch_size)])
+s0_torch = torch.cat([torch.tensor(env.reset(),dtype=torch.float32).to(device=device).reshape(1,1,-1) for _ in range(batch_size)])
 
 skill_seq = torch.zeros((1,skill_seq_len,z_dim),device=device)
 print('skill_seq.shape: ', skill_seq.shape)
@@ -162,7 +175,7 @@ def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq,vari
 	l = skill_seq_len
 	while np.sum((state[:2] - goals.flatten().detach().cpu().numpy()[:2])**2) > 1.0:
 	# for i in range(2):
-		state_torch = torch.cat(batch_size*[torch.tensor(state,dtype=torch.float32).cuda().reshape((1,1,-1))])
+		state_torch = torch.cat(batch_size*[torch.tensor(state,dtype=torch.float32).to(device=device).reshape((1,1,-1))])
 		
 		if variable_length:
 			cost_fn = lambda skill_seq,lengths: skill_model.get_expected_cost_variable_length(state_torch, skill_seq, lengths, goal_seq, use_epsilons=use_epsilon)
@@ -201,7 +214,7 @@ def run_skills_iterative_replanning(env,model,goals,use_epsilon,replan_freq,vari
 
 			
 		if use_epsilon:
-			mu_z, sigma_z = model.prior(torch.tensor(state,dtype=torch.float32).cuda().reshape(1,1,-1))
+			mu_z, sigma_z = model.prior(torch.tensor(state,dtype=torch.float32).to(device=device).reshape(1,1,-1))
 			z = mu_z + sigma_z*skill
 		else:
 			z = skill
@@ -280,7 +293,7 @@ def run_skill_seq(skill_seq,env,s0,model,use_epsilon):
 	'''
 	# env.env.set_state(s0[:2],s0[2:])
 	state = s0
-	# s0_torch = torch.tensor(s0,dtype=torch.float32).cuda().reshape((1,1,-1))
+	# s0_torch = torch.tensor(s0,dtype=torch.float32).to(device=device).reshape((1,1,-1))
 
 	pred_states = []
 	pred_sigs = []
@@ -290,12 +303,12 @@ def run_skill_seq(skill_seq,env,s0,model,use_epsilon):
 		# get the skill
 		# z = skill_seq[:,i:i+1,:]
 		if use_epsilon:
-			mu_z, sigma_z = model.prior(torch.tensor(state,dtype=torch.float32).cuda().reshape(1,1,-1))
+			mu_z, sigma_z = model.prior(torch.tensor(state,dtype=torch.float32).to(device=device).reshape(1,1,-1))
 			z = mu_z + sigma_z*skill_seq[:,i:i+1,:]
 		else:
 			z = skill_seq[:,i:i+1,:]
 		skill_seq_states = []
-		state_torch = torch.tensor(state,dtype=torch.float32).cuda().reshape((1,1,-1))
+		state_torch = torch.tensor(state,dtype=torch.float32).to(device=device).reshape((1,1,-1))
 		s_mean, s_sig = model.decoder.abstract_dynamics(state_torch,z)
 		pred_state = s_mean.squeeze().detach().cpu().numpy()
 		pred_sig = s_sig.squeeze().detach().cpu().numpy()
@@ -363,7 +376,9 @@ experiment.add_tag('goal resets')
 execute_n_skills = 1
 
 min_dists_list = []
-for j in range(1000):
+for j in range(300):
+	if j % 10 == 0:
+		env = gym.make(env_name)
 	env.set_target() # this randomizes goal locations between trials, so that we're actualy averaging over the goal distribution
 	# otherwise, same goal is kept across resets
 	if not random_goal:
