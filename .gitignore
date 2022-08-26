@@ -11,6 +11,11 @@ checkpoint
 
 *.npy
 *.pth 
+*.yaml
+*.yml
+*.json
+
+*.ipynb
 
 # cache files
 __pycache__

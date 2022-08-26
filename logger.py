@@ -2,6 +2,7 @@ from comet_ml import Experiment
 import torch
 import numpy as np
 import os
+import yaml
 import time
 import numpy as np
 import seaborn as sns
@@ -110,13 +111,15 @@ class Logger:
         self.log_offline = self.hp.log_offline
 
         self.log_dir = hp.log_dir
+        os.makedirs(self.log_dir, exist_ok=True) # safely create log dir
 
-        self.experiment = Experiment(api_key='Wlh5wstMNYkxV0yWRxN7JXZRu', project_name='temp')
+        self.experiment = Experiment(api_key='Wlh5wstMNYkxV0yWRxN7JXZRu', project_name='temp', display_summary_level=0)
         self.experiment.set_name(hp.exp_name)
 
-        self.experiment.log_parameters(hp.__dict__)
-        # save hyperparams locally
-        os.makedirs(self.log_dir, exist_ok=True) # safely create log dir
+        # Log config files
+        self.experiment.log_parameter("params", str(hp.dict))
+        with open(os.path.join(self.log_dir, 'config.yaml'), 'w') as f:
+            yaml.dump(self.hp.dict, f)
         os.system(f'cp configs.py {self.log_dir}')
 
         self.min_test_loss = 10**10
@@ -161,8 +164,8 @@ class Logger:
         # self.train_ns_data = append_to_dict(self.train_ns_data, 'min', ns_min)
         # self.train_ns_data = append_to_dict(self.train_ns_data, 'max', ns_max)
 
-        torch.save(self.train_sl_data, os.path.join(self.log_dir, 'train_sl_data.pt'))
-        torch.save(self.train_ns_data, os.path.join(self.log_dir, 'train_ns_data.pt'))
+        # torch.save(self.train_sl_data, os.path.join(self.log_dir, 'train_sl_data.pt'))
+        # torch.save(self.train_ns_data, os.path.join(self.log_dir, 'train_ns_data.pt'))
 
     def update_test(self, iteration_num, test_loss, test_s_T_loss, test_a_loss, test_b_loss, test_z_kl_loss, test_s_T_ent):
 
@@ -198,8 +201,8 @@ class Logger:
         # self.test_ns_data = append_to_dict(self.test_ns_data, 'min', ns_min)
         # self.test_ns_data = append_to_dict(self.test_ns_data, 'max', ns_max)
 
-        torch.save(self.test_sl_data, os.path.join(self.log_dir, 'test_sl_data.pt'))
-        torch.save(self.test_ns_data, os.path.join(self.log_dir, 'test_ns_data.pt'))
+        # torch.save(self.test_sl_data, os.path.join(self.log_dir, 'test_sl_data.pt'))
+        # torch.save(self.test_ns_data, os.path.join(self.log_dir, 'test_ns_data.pt'))
 
     def save_training_state(self, iteration_num, model, model_optimizer, file_name):
 
@@ -209,7 +212,7 @@ class Logger:
             torch.save({
                 'model_state_dict': model.state_dict(), 
                 'model_optimizer_state_dict': model_optimizer.state_dict(),
-                'hp': self.hp.__dict__,
+                'hp': self.hp.dict,
                 'iteration': iteration_num,
                 'min_test_loss': self.min_test_loss,
                 }, file_path)

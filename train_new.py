@@ -12,7 +12,7 @@ from torch.utils.data import TensorDataset
 from torch.utils.data.dataloader import DataLoader
 import torch.distributions.normal as Normal
 from torch.distributions.transformed_distribution import TransformedDistribution
-from skill_model import SkillModel, SkillModelStateDependentPrior, SkillModelTerminalStateDependentPrior, SkillModelStateDependentPriorAutoTermination
+from skill_model import ContinuousSkillModel
 import gym
 from mujoco_py import GlfwContext
 GlfwContext(offscreen=True)
@@ -23,7 +23,7 @@ import utils
 import time
 import tqdm
 import os
-from configs import HyperParams
+from configs import Configs
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence
 import torch.distributions.kl as KL
 
@@ -158,7 +158,7 @@ def run_iteration(i, model, data_loader, model_optimizer=None, train_mode=False)
 
 
 if __name__ == '__main__':
-	hp = HyperParams()
+	hp = Configs()
 
 	# set environment variable for device
 	os.environ["_DEVICE"] = hp.device
@@ -179,19 +179,7 @@ if __name__ == '__main__':
 	inputs_test = utils.UniformRandomSubTrajectory(data_path, train=False, min_len=hp.min_skill_len, max_len=hp.max_skill_len)
 
 	# Instantiate a skill model
-	if hp.term_state_dependent_prior:
-		model = SkillModelTerminalStateDependentPrior(state_dim, a_dim, hp.z_dim, hp.h_dim, \
-					state_dec_stop_grad=hp.state_dec_stop_grad, beta=hp.beta, alpha=hp.alpha, \
-					fixed_sig=hp.fixed_sig).to(hp.device)
-	elif hp.state_dependent_prior:
-		model = SkillModelStateDependentPriorAutoTermination(state_dim, a_dim, hp.z_dim, hp.h_dim, \
-					a_dist=hp.a_dist, state_dec_stop_grad=hp.state_dec_stop_grad, beta=hp.beta, alpha=hp.alpha, \
-					temperature=hp.temperature, gamma=hp.gamma, max_sig=hp.max_sig, fixed_sig=hp.fixed_sig, \
-					ent_pen=hp.ent_pen, encoder_type=hp.encoder_type, state_decoder_type=hp.state_decoder_type, \
-					min_skill_len=hp.min_skill_len, grad_clip_threshold=hp.grad_clip_threshold, \
-					max_skill_len=hp.max_skill_len, max_skills_per_seq=hp.max_skills_per_seq, device=hp.device).to(hp.device)
-	else:
-		model = SkillModel(state_dim, a_dim, hp.z_dim, hp.h_dim, a_dist=hp.a_dist).to(hp.device)
+	model = ContinuousSkillModel(hp)
 		
 	model_optimizer = torch.optim.Adam(model.parameters(), lr=hp.lr, weight_decay=hp.wd)
 
