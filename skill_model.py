@@ -131,79 +131,6 @@ class ContinuousPrior(ContinuousEncoder):
         return z, z_lens
 
 
-class ContinuousSkillModel(SkillModel):
-    def __init__(self, configs):
-        super(ContinuousSkillModel, self).__init__(configs)
-
-        self.encoder = ContinuousEncoder(configs['encoder'])
-        self.decoder = Decoder(configs['decoder'])
-
-        self.prior = ContinuousPrior(configs['encoder'])
-
-        # self.encoder_prior =
-
-
-    def forward(self, states, actions):
-        """
-        Takes states and actions, returns the distributions necessary for computing the objective function
-        Args:
-            states:       batch_size x t x state_dim sequence tensor
-            actions:      batch_size x t x a_dim action sequence tensor
-        Returns:
-            s_T_mean:     batch_size x 1 x state_dim tensor of means of "decoder" distribution over terminal states
-            S_T_sig:      batch_size x 1 x state_dim tensor of standard devs of "decoder" distribution over terminal states
-            a_means:      batch_size x T x a_dim tensor of means of "decoder" distribution over actions
-            a_sigs:       batch_size x T x a_dim tensor of stand devs
-            z_post_means: batch_size x 1 x z_dim tensor of means of z posterior distribution
-            z_post_sigs:  batch_size x 1 x z_dim tensor of stand devs of z posterior distribution
-        """
-
-        # Encode states and actions to get posterior over z
-        # z_post_means, z_post_sigs, b_probabilities = self.encoder(states, actions)
-        z, z_lens = self.encoder(states, actions)
-
-        # Pass z_sampled and states through decoder
-        s_T_mean, s_T_sig, a_means, a_sigs = self.decoder(states, z)
-
-        return s_T_mean, s_T_sig, a_means, a_sigs, z, z_lens
-
-
-    def compute_losses(self, s_T_mean, s_T_sig, a_means, a_sigs,
-                        z_post_means, z_post_sigs, s_0, time_steps, s_T_gt, a_gt, mask):
-
-        # compute skill prior
-        z_prior_means, z_prior_sigs = self.prior(s_0)
-
-        # Construct required distributions
-        s_T_dist = Normal.Normal(s_T_mean, s_T_sig )
-        z_post_dist = Normal.Normal(z_post_means, z_post_sigs)
-        z_prior_dist = Normal.Normal(z_prior_means, z_prior_sigs)
-
-        if self.decoder.ll_policy.a_dist == 'normal':
-            a_dist = Normal.Normal(a_means, a_sigs)
-        elif self.decoder.ll_policy.a_dist == 'tanh_normal':
-            base_dist = Normal.Normal(a_means, a_sigs)
-            transform = torch.distributions.transforms.TanhTransform()
-            a_dist = TransformedDistribution(base_dist, [transform])
-        else:
-            assert False, f'{self.decoder.ll_policy.a_dist} not supported'
-
-        # Loss for predicting terminal state
-        s_T_loss = -torch.mean(torch.sum(s_T_dist.log_prob(s_T_gt), dim=-1)/time_steps) # divide by T because all other losses we take mean over T dimension, effectively dividing by T
-        # Los for predicting actions
-        a_loss_raw = a_dist.log_prob(a_gt)
-        a_loss_raw[mask, :] = 0.0
-        a_loss = -torch.mean(torch.sum(a_loss_raw, dim=-1))
-        # Entropy corresponding to terminal state
-        s_T_ent = torch.mean(torch.sum(s_T_dist.entropy(), dim=-1)/time_steps)
-        # Compute KL Divergence between prior and posterior
-        kl_loss = torch.mean(torch.sum(KL.kl_divergence(z_post_dist, z_prior_dist), dim=-1)/time_steps) # divide by T because all other losses we take mean over T dimension, effectively dividing by T
-
-        loss_tot = self.alpha*s_T_loss + a_loss + self.beta*kl_loss + self.ent_pen*s_T_ent
-
-        return  loss_tot, s_T_loss, a_loss, kl_loss, s_T_ent
-
-
 class LowLevelPolicy(nn.Module):
     """
     P(a_t|s_t,z) is our "low-level policy", so this is the feedback policy the agent runs while executing skill described by z.
@@ -419,9 +346,6 @@ class SkillModel(nn.Module):
 
         return  loss_tot, s_T_loss, a_loss, kl_loss, s_T_ent
 
-
-
-
     def get_expected_cost(self, s0, skill_seq, goal_states):
         """
         s0 is initial state  # batch_size x 1 x s_dim
@@ -549,3 +473,71 @@ class SkillModel(nn.Module):
         return mean + std*eps
 
 
+class ContinuousSkillModel(SkillModel):
+    def __init__(self, configs):
+        super(ContinuousSkillModel, self).__init__(configs)
+
+        self.encoder = ContinuousEncoder(configs['encoder'])
+        self.decoder = Decoder(configs['decoder'])
+
+        self.prior = ContinuousPrior(configs['encoder'])
+
+
+    def forward(self, states, actions):
+        """Takes states and actions, returns the distributions necessary for computing the objective function
+
+        Args:
+            states:       batch_size x t x state_dim sequence tensor
+            actions:      batch_size x t x a_dim action sequence tensor
+
+        Returns:
+            s_T_mean:     batch_size x 1 x state_dim tensor of means of "decoder" distribution over terminal states
+            S_T_sig:      batch_size x 1 x state_dim tensor of standard devs of "decoder" distribution over terminal states
+            a_means:      batch_size x T x a_dim tensor of means of "decoder" distribution over actions
+            a_sigs:       batch_size x T x a_dim tensor of stand devs
+            z_post_means: batch_size x 1 x z_dim tensor of means of z posterior distribution
+            z_post_sigs:  batch_size x 1 x z_dim tensor of stand devs of z posterior distribution
+        """
+        # Encode states and actions to get posterior over z
+        z, z_lens = self.encoder(states, actions)
+
+        # Pass z_sampled and states through decoder
+        s_T_mean, s_T_sig, a_means, a_sigs = self.decoder(states, z)
+
+        return s_T_mean, s_T_sig, a_means, a_sigs, z, z_lens
+
+
+    def compute_losses(self, s_T_mean, s_T_sig, a_means, a_sigs,
+                        z_post_means, z_post_sigs, s_0, time_steps, s_T_gt, a_gt, mask):
+
+        # compute skill prior
+        z_prior_means, z_prior_sigs = self.prior(s_0)
+
+        # Construct required distributions
+        s_T_dist = Normal.Normal(s_T_mean, s_T_sig )
+        z_post_dist = Normal.Normal(z_post_means, z_post_sigs)
+        z_prior_dist = Normal.Normal(z_prior_means, z_prior_sigs)
+
+        if self.decoder.ll_policy.a_dist == 'normal':
+            a_dist = Normal.Normal(a_means, a_sigs)
+        elif self.decoder.ll_policy.a_dist == 'tanh_normal':
+            base_dist = Normal.Normal(a_means, a_sigs)
+            transform = torch.distributions.transforms.TanhTransform()
+            a_dist = TransformedDistribution(base_dist, [transform])
+        else:
+            assert False, f'{self.decoder.ll_policy.a_dist} not supported'
+
+        # Loss for predicting terminal state
+        s_T_loss = -torch.mean(torch.sum(s_T_dist.log_prob(s_T_gt), dim=-1)/time_steps) # divide by T because all other losses we take mean over T dimension, effectively dividing by T
+        # Los for predicting actions
+        a_loss_raw = a_dist.log_prob(a_gt)
+        a_loss_raw[mask, :] = 0.0
+        a_loss = -torch.mean(torch.sum(a_loss_raw, dim=-1))
+        # Entropy corresponding to terminal state
+        s_T_ent = torch.mean(torch.sum(s_T_dist.entropy(), dim=-1)/time_steps)
+        # Compute KL Divergence between prior and posterior
+        kl_loss = torch.mean(torch.sum(KL.kl_divergence(z_post_dist, z_prior_dist), dim=-1)/time_steps) # divide by T because all other losses we take mean over T dimension, effectively dividing by T
+
+        loss_tot = self.alpha*s_T_loss + a_loss + self.beta*kl_loss + self.ent_pen*s_T_ent
+
+        return  loss_tot, s_T_loss, a_loss, kl_loss, s_T_ent
