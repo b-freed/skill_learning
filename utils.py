@@ -33,6 +33,49 @@ def pad_collate_custom(xx):
   return xx_pad, x_lens
 
 
+class DataTracker:
+    def __init__(self, verbose=False):
+        self.verbose = verbose
+
+
+    def update(self, **kwargs):
+        for key, value in kwargs.items():
+            if self.verbose: self._is_valid(key, value)
+            self._update(key, value)
+
+
+    def _is_valid(self, key, value):
+        if value != value:
+            print(f'Warning NaN encountered in {key}')
+        elif (value == float('inf')) or (value == float('-inf')):
+            print(f'Warning inf encountered in {key}')
+        elif value is None:
+            print(f'Warning None encountered in {key}')
+
+
+    def _update(self, key, raw_value):
+        if isinstance(raw_value, torch.Tensor):
+            value = float(raw_value.item())
+        else:
+            value = float(raw_value)
+
+        if not hasattr(self, key):
+            setattr(self, key, [value])
+        else:
+            getattr(self, key).append(value)
+
+
+    def to_dict(self, mean=False):
+        losses = {}
+        for key, value in self.__dict__.items():
+            if not key.endswith('_loss'): continue
+            if mean:
+                losses[key] = np.mean(value)
+            else:
+                losses[key] = value
+        return losses
+
+
 class UniformRandomSubTrajectory(Dataset):
     """Uniform random subtrajectory dataset."""
 

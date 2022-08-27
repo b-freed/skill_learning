@@ -111,8 +111,8 @@ class ContinuousEncoder(nn.Module):
 
 
 class ContinuousPrior(ContinuousEncoder):
-    def __init__(self, cfgs):
-        super(ContinuousPrior, self).__init__()
+    def __init__(self, *args, **kwargs):
+        super(ContinuousPrior, self).__init__(*args, **kwargs)
 
     def forward(self, s0):
         h = self.encode(s0)
@@ -136,23 +136,21 @@ class LowLevelPolicy(nn.Module):
     P(a_t|s_t,z) is our "low-level policy", so this is the feedback policy the agent runs while executing skill described by z.
     See Encoder and Decoder for more description
     """
-    def __init__(self,state_dim,a_dim,z_dim,h_dim,a_dist,max_sig=None,fixed_sig=None):
+    def __init__(self, state_dim=0, a_dim=0, z_dim=0, h_dim=0, max_sig=None, fixed_sig=None, **kwargs):
 
         super(LowLevelPolicy,self).__init__()
         
-        self.layers = nn.Sequential(nn.Linear(state_dim+z_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,h_dim),nn.ReLU())
-        #self.mean_layer = nn.Linear(h_dim,a_dim)
-        self.mean_layer = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,a_dim))
-        #self.sig_layer  = nn.Sequential(nn.Linear(h_dim,a_dim),nn.Softplus())
-        self.sig_layer  = nn.Sequential(nn.Linear(h_dim,h_dim),nn.ReLU(),nn.Linear(h_dim,a_dim))
-        self.a_dist = a_dist
+        self.layers = nn.Sequential(nn.Linear(state_dim+z_dim, h_dim), nn.ReLU(), nn.Linear(h_dim, h_dim), nn.ReLU())
+
+        self.mean_layer = nn.Sequential(nn.Linear(h_dim, h_dim), nn.ReLU(), nn.Linear(h_dim, a_dim))
+        self.sig_layer  = nn.Sequential(nn.Linear(h_dim, h_dim), nn.ReLU(), nn.Linear(h_dim, a_dim))
+
         self.a_dim = a_dim
         self.max_sig = max_sig
         self.fixed_sig = fixed_sig
 
 
-
-    def forward(self,state,z):
+    def forward(self, state, z):
         """
         Args:
             state: batch_size x T x state_dim tensor of states 
@@ -190,8 +188,7 @@ class LowLevelPolicy(nn.Module):
         
         a_mean,a_sig = self.forward(state,z)
         action = self.reparameterize(a_mean,a_sig)
-        if self.a_dist == 'tanh_normal':
-            action = nn.Tanh()(action)
+
         action = action.detach().cpu().numpy()
         
         return action.reshape([self.a_dim,])
@@ -209,7 +206,7 @@ class AbstractDynamics(nn.Module):
     (so similar to regular dynamics model, but in skill space and also temporally extended)
     See Encoder and Decoder for more description
     """
-    def __init__(self,state_dim,z_dim,h_dim):
+    def __init__(self, state_dim=0, z_dim=0, h_dim=0, **kwargs):
 
         super(AbstractDynamics,self).__init__()
         
@@ -265,18 +262,10 @@ class Decoder(nn.Module):
         self.h_dim = cfgs['h_dim']
         self.z_dim = cfgs['z_dim']
 
-        self.a_dist = cfgs['a_dist']
-        self.max_sig = cfgs['max_sig']
-        self.fixed_sig = cfgs['max_sig']
+        self.state_dec_stop_grad = cfgs['state_dec_stop_grad']
 
-        self.abstract_dynamics = AbstractDynamics(self.state_dim, self.z_dim, self.h_dim)
-
-        self.ll_policy = LowLevelPolicy(self.state_dim, self.a_dim, self.z_dim,self.h_dim, self.a_dist, max_sig = self.max_sig, fixed_sig=self.fixed_sig)
-
-        self.emb_layer  = nn.Linear(self.state_dim+self.z_dim,self.h_dim)
-        self.fc = nn.Sequential(nn.Linear(self.state_dim+self.z_dim,self.h_dim),nn.ReLU(),nn.Linear(self.h_dim,self.h_dim),nn.ReLU())
-
-        self.state_dec_stop_grad = self.state_dec_stop_grad
+        self.abstract_dynamics = AbstractDynamics(**cfgs)
+        self.ll_policy = LowLevelPolicy(**cfgs)
 
         
     def forward(self, s, z, s0):
@@ -346,6 +335,7 @@ class SkillModel(nn.Module):
 
         return  loss_tot, s_T_loss, a_loss, kl_loss, s_T_ent
 
+
     def get_expected_cost(self, s0, skill_seq, goal_states):
         """
         s0 is initial state  # batch_size x 1 x s_dim
@@ -362,7 +352,6 @@ class SkillModel(nn.Module):
         for i in range(skill_seq_len):
             # z_i = skill_seq[:,i:i+1,:] # might need to reshape
             mu_z, sigma_z = self.prior(s_i)
-
 
             z_i = mu_z + sigma_z*torch.cat(batch_size*[skill_seq[:,i:i+1,:]],dim=0)
             # converting z_i from 1x1xz_dim to batch_size x 1 x z_dim
@@ -383,6 +372,7 @@ class SkillModel(nn.Module):
 
 
         return cost, torch.cat(pred_states,dim=1)
+
 
     def get_expected_cost_for_cem(self, s0, skill_seq, goal_state, use_epsilons=True, plot=True, length_cost=0):
         """

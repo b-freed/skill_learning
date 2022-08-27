@@ -12,7 +12,7 @@ from torch.utils.data import TensorDataset
 from torch.utils.data.dataloader import DataLoader
 import torch.distributions.normal as Normal
 from torch.distributions.transformed_distribution import TransformedDistribution
-from skill_model import ContinuousSkillModel
+from skill_model import ContinuousSkillModel as SkillModel
 import gym
 from mujoco_py import GlfwContext
 GlfwContext(offscreen=True)
@@ -24,66 +24,19 @@ import time
 import tqdm
 import os
 from configs import Configs
-from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence
 import torch.distributions.kl as KL
 
 
-def get_train_phase(i):
-	"""
-	For initial n iteration, don't train termination model. Afterwards, train both the modules. 
-	"""
-	phase_zero_iterations = 10000
-	if i < phase_zero_iterations:
-		return 0
-	else: 
-		return 1
-
-
-def get_confusion_matrix(prediction, gt):
-	"""
-	Finds the confusion matrix for a given prediction and ground truth.
-	"""
-	confusion_matrix = torch.zeros((2, 2))
-	TP = torch.sum(prediction[gt == 1])
-	FP = torch.sum(prediction[gt == 0])
-	TN = torch.sum(torch.logical_not(prediction[gt == 0]))
-	FN = torch.sum(torch.logical_not(prediction[gt == 1]))
-	confusion_matrix = (1/gt.numel()) * torch.tensor([[TP, FP], [FN, TN]])
-	return confusion_matrix
-
-
-def run_iteration(i, model, data_loader, model_optimizer=None, train_mode=False):
-	losses = []
-	s_T_losses = []
-	a_losses = []
-	z_kl_losses = []
-	b_losses = []
-	s_T_ents = []
+def run_iteration(model, data_loader, cfgs, model_optimizer=None, train_mode=False):
+	loss_tracker = utils.DataTracker(verbose=cfgs['verbose'])
 
 	device = model.device
 
 	model.train() if train_mode else model.eval()
-	train_phase = get_train_phase(i)
 
-	b_criterion = torch.nn.BCELoss(reduction='none')
 	get_masked_loss = lambda raw_loss, data_lens_tensor, mask, bs: (1/bs)*torch.sum(torch.sum(torch.sum(raw_loss, dim=-1) * mask, dim=-1)/data_lens_tensor)
 
 	for batch_id, (data_, data_lens) in tqdm.tqdm(enumerate(data_loader), desc=f"Progress"):
-		batch_size = len(data_)
-		horizon_length = data_.shape[1]
-
-		data_lens_tensor = torch.tensor(data_lens, device=device)
-
-		loss_mask = torch.arange(horizon_length, device=device).repeat(batch_size, 1) < data_lens_tensor.unsqueeze(dim=-1)
-
-		b_gt = torch.zeros(batch_size, horizon_length).to(device).float()
-		b_gt[torch.arange(batch_size, device=device), data_lens_tensor-1] = 1
-		b_loss_weight = torch.zeros_like(b_gt)
-
-		# b_loss_weight[:, :] = 0.5 / (data_lens_tensor - 1)
-		b_loss_weight = 0.5 / (data_lens_tensor.unsqueeze(dim=-1).repeat(1, horizon_length) - 1)
-		b_loss_weight[torch.arange(batch_size, device=device), data_lens_tensor-1] = 0.5
-
 		data_ = data_.to(device) # (batch_size, 1000, state_dim + action_dim)
 		states, actions = data_[:, :, :state_dim], data_[:, :, state_dim:]
 
@@ -93,9 +46,9 @@ def run_iteration(i, model, data_loader, model_optimizer=None, train_mode=False)
 		# sample z_ts from the posterior
 		z_t = model.reparameterize(z_post_means, z_post_sigs)
 
-		# Extract s0 and sT ground truths from the data sequence
-		s0 = states[:, :1, :] # (batch_size, 1, state_dim)
-		sT_gt = states[torch.arange(batch_size, device=device), data_lens_tensor-1, :].unsqueeze(dim=1) # (batch_size, 1, state_dim)
+		# # Extract s0 and sT ground truths from the data sequence
+		# s0 = states[:, :1, :] # (batch_size, 1, state_dim)
+		# sT_gt = states[torch.arange(batch_size, device=device), data_lens_tensor-1, :].unsqueeze(dim=1) # (batch_size, 1, state_dim)
 
 		# Use skills and states to generate terminal state and action sequences
 		sT_mean, sT_sig, a_means, a_sigs, b_ = model.decoder(states, z_t, s0)
@@ -110,51 +63,43 @@ def run_iteration(i, model, data_loader, model_optimizer=None, train_mode=False)
 		z_post_dist = Normal.Normal(z_post_means, z_post_sigs)
 		z_prior_dist = Normal.Normal(z_prior_means, z_prior_sigs)
 
-		if model.decoder.ll_policy.a_dist == 'normal':
-			a_dist = Normal.Normal(a_means, a_sigs)
-		elif model.decoder.ll_policy.a_dist == 'tanh_normal':
-			base_dist = Normal.Normal(a_means, a_sigs)
-			transform = torch.distributions.transforms.TanhTransform()
-			a_dist = TransformedDistribution(base_dist, [transform])
-		else:
-			assert False, f'{model.decoder.ll_policy.a_dist} not supported'
 
-		# Loss for predicting terminal state # mean over time steps and batch
-		s_T_loss = -get_masked_loss(sT_dist.log_prob(sT_gt), data_lens_tensor, loss_mask, batch_size)
+		# Increase gt terminal state likelihood.
+		sT_loss = -sT_dist.log_probs(sT_gt)
+		# sT_loss = -get_masked_loss(sT_dist.log_prob(sT_gt), data_lens_tensor, loss_mask, batch_size)
 
-		# Entropy corresponding to terminal state
+		# (?) Entropy in 
 		# s_T_ent = torch.mean(torch.sum(s_T_dist.entropy(), dim=-1))/time_steps
 		s_T_ent = 0
 
-		# Los for predicting actions # mean over time steps and batch 
-		# a_loss = -(1/batch_size)*torch.mean(torch.sum(a_dist.log_prob(actions), dim=-1))
+		# Increase gt action likelihood.
 		a_loss = -get_masked_loss(a_dist.log_prob(actions), data_lens_tensor, loss_mask, batch_size)
 
-		# KL divergence between skill prior and posterior # mean over time steps and batch
-		# z_kl_loss = torch.mean(torch.sum(KL.kl_divergence(z_post_dist, z_prior_dist), dim=-1)) # mean over time steps and batch
-		z_kl_loss = get_masked_loss(KL.kl_divergence(z_post_dist, z_prior_dist), data_lens_tensor, loss_mask, batch_size)
+		# Tighten the KL bounds.
+		# kl_loss = get_masked_loss(KL.kl_divergence(z_post_dist, z_prior_dist), data_lens_tensor, loss_mask, batch_size)
+		kl_loss = -KL.kl_divergence(z_post_dist, z_prior_dist)
 
-		# Loss for prediction termination condition
-		# Termination encoder should learn to terminate on reaching sT_gt when running the planned skill		
-		b_loss = (1/batch_size)*torch.sum(torch.sum(b_criterion(b, b_gt) * b_loss_weight, dim=-1)/data_lens_tensor, dim=-1)
+		# Incentivize longer skill lengths.
+		sl_loss = 0
 
-		loss_tot = model.alpha * s_T_loss + a_loss + model.beta * z_kl_loss + model.gamma * b_loss
+		tot_loss = cfgs['a_loss_coeff'] * a_loss + cfgs['sT_loss_coeff'] * sT_loss + \
+					cfgs['kl_loss_coeff'] * kl_loss + cfgs['sl_loss_coeff'] * sl_loss
 
 		if train_mode:
 			model_optimizer.zero_grad()
-			loss_tot.backward()
+			tot_loss.backward()
 			model.clip_gradients()
 			model_optimizer.step()
 
-		losses.append(loss_tot.item())
-		s_T_losses.append(s_T_loss.item())
-		# s_T_ents.append(s_T_ent.item())
-		s_T_ents.append(0)
-		a_losses.append(a_loss.item())
-		z_kl_losses.append(z_kl_loss.item())
-		b_losses.append(b_loss.item())
+		loss_tracker.update(**{
+			'tot_loss': tot_loss,
+			'a_loss': a_loss,
+			'sT_loss': sT_loss,
+			'kl_loss': kl_loss,
+			'sl_loss': sl_loss,
+		})
 
-	return np.mean(losses), np.mean(s_T_losses), np.mean(a_losses), np.mean(b_losses), np.mean(z_kl_losses), np.mean(s_T_ents)
+	return loss_tracker.to_dict(mean=True)
 
 
 if __name__ == '__main__':
@@ -171,58 +116,38 @@ if __name__ == '__main__':
 	a_dim = env.action_space.shape[0]
 
 	# Load the dataset files
-	# raw_data = np.load(os.path.join(hp.data_dir, f'{hp.env_name}.npz'))
-	# inputs_train = torch.from_numpy(raw_data['inputs_train']).reshape(-1, 20, 37)
-	# inputs_test  = torch.from_numpy(raw_data['inputs_test']).reshape(-1, 20, 37)
-	data_path = os.path.join(hp.data_dir, f'{hp.env_name}.npz')
-	inputs_train = utils.UniformRandomSubTrajectory(data_path, train=True, min_len=hp.min_skill_len, max_len=hp.max_skill_len)
-	inputs_test = utils.UniformRandomSubTrajectory(data_path, train=False, min_len=hp.min_skill_len, max_len=hp.max_skill_len)
+	raw_data = np.load(os.path.join(hp.data_dir, f'{hp.env_name}.npz'))
+	inputs_train = torch.from_numpy(raw_data['inputs_train'])
+	inputs_test  = torch.from_numpy(raw_data['inputs_test'])
 
 	# Instantiate a skill model
-	model = ContinuousSkillModel(hp)
-		
+	model = SkillModel(hp.dict)
 	model_optimizer = torch.optim.Adam(model.parameters(), lr=hp.lr, weight_decay=hp.wd)
 
+	# Create dataloaders
+	train_loader = DataLoader(inputs_train, batch_size=hp.batch_size, num_workers=0)
+	test_loader = DataLoader(inputs_test, batch_size=hp.batch_size, num_workers=0)
+
 	# It's time to roll baby!
-	for i in range(hp.n_epochs):
-		# Resample subtrajectories
-		inputs_train.sample_random_len_sequences()
-		inputs_test.sample_random_len_sequences()
-
-		train_loader = DataLoader(inputs_train,
-									batch_size=hp.batch_size,
-									collate_fn=utils.pad_collate_custom,
-									num_workers=0)
-
-		test_loader = DataLoader(inputs_test,
-								batch_size=hp.batch_size,
-								collate_fn=utils.pad_collate_custom,
-								num_workers=0)
-
+	for epoch in range(hp.n_epochs):
 		# Run training loop
-		loss, s_T_loss, a_loss, b_loss, z_kl_loss, s_T_ent = run_iteration(i, model, train_loader, model_optimizer=model_optimizer, train_mode=True)
+		losses = run_iteration(model, train_loader, hp, model_optimizer=model_optimizer, train_mode=True)
 
 		# Update logger
-		logger.update_train(i, loss, s_T_loss, a_loss, b_loss, z_kl_loss, s_T_ent)
+		logger.update(epoch, losses)
 		
 		# Run evaluation loop
 		with torch.no_grad():
-			test_loss, test_s_T_loss, test_a_loss, test_b_loss, test_z_kl_loss, test_s_T_ent = run_iteration(i, model, test_loader, train_mode=False)
+			test_losses = run_iteration(model, test_loader, hp, train_mode=False)
 
 		# Update logger
-		logger.update_test(i, test_loss, test_s_T_loss, test_a_loss, test_b_loss, test_z_kl_loss, test_s_T_ent)
+		logger.update(epoch, test_losses)
 		
 		# Periodically save training
-		if i % 10 == 0:
-			logger.save_training_state(i, model, model_optimizer, 'latest.pth')
+		if epoch % 10 == 0:
+			logger.save_training_state(epoch, model, model_optimizer, 'latest.pth')
 
 		# Save on hitting new best
-		if test_loss < logger.min_test_loss:
-			logger.min_test_loss = test_loss
-			logger.save_training_state(i, model, model_optimizer, 'best.pth')
-
-		# Anneal temperature for relaxed distributions
-		if hp.temperature_anneal:
-			model.temperature = (hp.max_temperature - hp.min_temperature) * 0.999 ** (i / hp.temperature_anneal) + hp.min_temperature
-		else:
-			model.temperature = hp.max_temperature
+		if test_losses['tot_loss'] < logger.min_test_loss:
+			logger.min_test_loss = test_losses['tot_loss']
+			logger.save_training_state(epoch, model, model_optimizer, 'best.pth')

@@ -7,6 +7,7 @@ import time
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+from utils import DataTracker
 
 sns.set_theme(style="white")
 
@@ -107,6 +108,7 @@ def save_plots(skill_lens, skill_lens_test, n_skills, n_skills_test, base_path):
 class Logger:
     def __init__(self, hp):
         self.hp = hp
+        self.verbose = hp.verbose
         self.log_online = self.hp.log_online
         self.log_offline = self.hp.log_offline
 
@@ -123,98 +125,34 @@ class Logger:
         os.system(f'cp configs.py {self.log_dir}')
 
         self.min_test_loss = 10**10
+        self.losses = DataTracker(verbose=False)
 
-        self.test_sl_data = {}
-        self.train_sl_data = {}
-        self.test_ns_data = {}
-        self.train_ns_data = {}
 
-    def update_train(self, iteration_num, loss, s_T_loss, a_loss, b_loss, z_kl_loss, s_T_ent):
+    def update(self, iteration_num, losses, mode='train'):
+        if self.verbose: print(f' Iter: {iteration_num} | {self.hp.exp_name} - {self.hp.notes}')
 
-        print(f' Iter: {iteration_num} | {self.hp.exp_name} - {self.hp.additional_msg}')
-        print("--------TRAIN---------")
-        print('loss: ', loss)
-        print('s_T_loss: ', s_T_loss)
-        print('a_loss: ', a_loss)
-        print('b_loss: ', b_loss)
-        print('z_kl_loss: ', z_kl_loss)
-        print('s_T_ent: ', s_T_ent)
-        # print('sl_loss: ', sl_loss)
-        # print('sl_mean: ', sl_mean)
-        # print('ns_mean: ', ns_mean)
-        print('')
+        for _loss_name, loss_value in losses.items():
+            loss_name = f'{_loss_name}_{mode}'
 
-        self.experiment.log_metric("loss", loss, step=iteration_num)
-        self.experiment.log_metric("s_T_loss", s_T_loss, step=iteration_num)
-        self.experiment.log_metric("a_loss", a_loss, step=iteration_num)
-        self.experiment.log_metric("b_loss", b_loss, step=iteration_num)
-        self.experiment.log_metric("z_kl_loss", z_kl_loss, step=iteration_num)
-        self.experiment.log_metric("s_T_ent", s_T_ent, step=iteration_num)
-        # self.experiment.log_metric("sl_loss", sl_loss, step=iteration_num)
-        # self.experiment.log_metric("sl_mean", sl_mean, step=iteration_num)
-        # self.experiment.log_metric("ns_mean", ns_mean, step=iteration_num)
+            if self.log_online:
+                self.experiment.log_metric(loss_name, loss_value, step=iteration_num)
+            if self.log_offline:
+                self.losses.update(loss_name, loss_value)
 
-        # self.train_sl_data = append_to_dict(self.train_sl_data, 'mean', sl_mean)
-        # self.train_sl_data = append_to_dict(self.train_sl_data, 'std', sl_std)
-        # self.train_sl_data = append_to_dict(self.train_sl_data, 'min', sl_min)
-        # self.train_sl_data = append_to_dict(self.train_sl_data, 'max', sl_max)
-    
-        # self.train_ns_data = append_to_dict(self.train_ns_data, 'mean', ns_mean)
-        # self.train_ns_data = append_to_dict(self.train_ns_data, 'std', ns_std)
-        # self.train_ns_data = append_to_dict(self.train_ns_data, 'min', ns_min)
-        # self.train_ns_data = append_to_dict(self.train_ns_data, 'max', ns_max)
+            if self.verbose: print(f'{loss_name}: {loss_value}')
 
-        # torch.save(self.train_sl_data, os.path.join(self.log_dir, 'train_sl_data.pt'))
-        # torch.save(self.train_ns_data, os.path.join(self.log_dir, 'train_ns_data.pt'))
-
-    def update_test(self, iteration_num, test_loss, test_s_T_loss, test_a_loss, test_b_loss, test_z_kl_loss, test_s_T_ent):
-
-        print("--------TEST---------")
-        print('loss: ', test_loss)
-        print('s_T_loss: ', test_s_T_loss)
-        print('a_loss: ', test_a_loss)
-        print('b_loss: ', test_b_loss)
-        print('z_kl_loss: ', test_z_kl_loss)
-        print('s_T_ent: ', test_s_T_ent)
-        # print('sl_loss: ', sl_loss)
-        # print('sl_mean: ', sl_mean)
-        # print('ns_mean: ', ns_mean)
-        print('')
-
-        self.experiment.log_metric("test_loss", test_loss, step=iteration_num)
-        self.experiment.log_metric("test_s_T_loss", test_s_T_loss, step=iteration_num)
-        self.experiment.log_metric("test_a_loss", test_a_loss, step=iteration_num)
-        self.experiment.log_metric("test_b_loss", test_b_loss, step=iteration_num)
-        self.experiment.log_metric("test_z_kl_loss", test_z_kl_loss, step=iteration_num)
-        self.experiment.log_metric("test_s_T_ent", test_s_T_ent, step=iteration_num)
-        # self.experiment.log_metric("test_sl_loss", sl_loss, step=iteration_num)
-        # self.experiment.log_metric("test_sl_mean", sl_mean, step=iteration_num)
-        # self.experiment.log_metric("test_ns_mean", ns_mean, step=iteration_num)
-
-        # self.test_sl_data = append_to_dict(self.test_sl_data, 'mean', sl_mean)
-        # self.test_sl_data = append_to_dict(self.test_sl_data, 'std', sl_std)
-        # self.test_sl_data = append_to_dict(self.test_sl_data, 'min', sl_min)
-        # self.test_sl_data = append_to_dict(self.test_sl_data, 'max', sl_max)
-    
-        # self.test_ns_data = append_to_dict(self.test_ns_data, 'mean', ns_mean)
-        # self.test_ns_data = append_to_dict(self.test_ns_data, 'std', ns_std)
-        # self.test_ns_data = append_to_dict(self.test_ns_data, 'min', ns_min)
-        # self.test_ns_data = append_to_dict(self.test_ns_data, 'max', ns_max)
-
-        # torch.save(self.test_sl_data, os.path.join(self.log_dir, 'test_sl_data.pt'))
-        # torch.save(self.test_ns_data, os.path.join(self.log_dir, 'test_ns_data.pt'))
 
     def save_training_state(self, iteration_num, model, model_optimizer, file_name):
-
         file_path = os.path.join(self.log_dir, file_name)
 
         if self.log_offline:
             torch.save({
-                'model_state_dict': model.state_dict(), 
+                'model_state_dict': model.state_dict() if not isinstance(model, dict) else model, 
                 'model_optimizer_state_dict': model_optimizer.state_dict(),
                 'hp': self.hp.dict,
                 'iteration': iteration_num,
                 'min_test_loss': self.min_test_loss,
+                'losses': self.losses.to_dict(mean=False),
                 }, file_path)
 
 
@@ -227,4 +165,4 @@ class Logger:
 
 
     def end(self):
-        if self.exp is not None: self.exp.end()
+        if self.experiment is not None: self.experiment.end()
