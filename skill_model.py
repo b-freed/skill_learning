@@ -17,10 +17,10 @@ class ContinuousEncoder(nn.Module):
         self.encode = nn.Sequential(nn.Linear(self.state_dim, self.h_dim), nn.ReLU(), nn.Linear(self.h_dim, self.h_dim), nn.ReLU())
 
         self.skill_length_means = nn.Sequential(nn.Linear(self.h_dim, self.h_dim), nn.ReLU(), nn.Linear(self.h_dim, 1))
-        self.skill_length_stds = nn.Sequential(nn.Linear(self.h_dim, self.h_dim), nn.ReLU(), nn.Linear(self.h_dim, 1))
+        self.skill_length_stds = nn.Sequential(nn.Linear(self.h_dim, self.h_dim), nn.ReLU(), nn.Linear(self.h_dim, 1), nn.Softplus())
 
         self.skill_means = nn.Sequential(nn.Linear(self.h_dim, self.h_dim), nn.ReLU(), nn.Linear(self.h_dim, self.z_dim))
-        self.skill_stds = nn.Sequential(nn.Linear(self.h_dim, self.h_dim), nn.ReLU(), nn.Linear(self.h_dim, self.z_dim))
+        self.skill_stds = nn.Sequential(nn.Linear(self.h_dim, self.h_dim), nn.ReLU(), nn.Linear(self.h_dim, self.z_dim), nn.Softplus())
 
     def forward(self, states):
         h = self.encode(states)
@@ -28,18 +28,18 @@ class ContinuousEncoder(nn.Module):
         z_len_means, z_len_stds = self.skill_length_means(h), self.skill_length_stds(h)
         z_means, z_stds = self.skill_means(h), self.skill_stds(h)
 
-        z_len_dist = self.get_skill_len_dist(z_len_means, z_len_stds)
-        z_dist = Normal.Normal(z_means, z_stds)
+        # z_len_dist = self.get_skill_len_dist(z_len_means, z_len_stds)
+        # z_dist = Normal.Normal(z_means, z_stds)
 
-        z_lens = z_len_dist.rsample()
-        z_t = z_dist.rsample()
+        # z_lens = z_len_dist.rsample()
+        # z_t = z_dist.rsample()
 
-        z = self.get_executable_skills(z_t, z_lens) # Get skill to be actually executed at each timestep.
+        # z = self.get_executable_skills(z_t, z_lens) # Get skill to be actually executed at each timestep.
 
-        return z, z_lens
+        return z_means, z_stds, z_len_means, z_len_stds
 
 
-    def get_skill_len_dist(z_len_means, z_len_stds):
+    def get_skill_len_dist(self, z_len_means, z_len_stds):
         base_dist = Normal.Normal(z_len_means, z_len_stds)
         transform = torch.distributions.transforms.TanhTransform()
         transformed_dist = TransformedDistribution(base_dist, [transform])
@@ -69,14 +69,14 @@ class ContinuousEncoder(nn.Module):
             z_lens (torch.Tensor): T x 1 tensor of skill lens
         """
         z_cum_lens = torch.cumsum(z_lens, dim=-1)
-        compressed_len, execution_mask = 0, []
+        compressed_len, execution_mask = 1, []
         forward_lens = []
         for cum_len in z_cum_lens:
-            update = cum_len > compressed_len # Gradients won’t pass through (the time predictor) here. :(
+            update = cum_len >= compressed_len # Gradients won’t pass through (the time predictor) here. :(
             execution_mask.append(update)
             if update:
-                compressed_len += 1
                 forward_lens.append(cum_len - compressed_len)
+                compressed_len += 1
             else:
                 forward_lens.append(torch.zeros_like(cum_len))
         return torch.stack(execution_mask, dim=0), forward_lens # (T x 1), (T x 1)
@@ -90,10 +90,12 @@ class ContinuousEncoder(nn.Module):
             forward_lens (torch.Tensor): T x 1 tensor of forward skill lens at mask events.
         """
         z_slice = []
+        z_update = z[0]
         for idx, (mask_element, forward_len_now) in enumerate(zip(mask, forward_lens)):
             if mask_element:
                 if idx == len(forward_lens) - 1: # Ignore interpolation at last timestep.
                     z_slice.append(z[idx])
+                    continue
                 z_update = (1 - forward_len_now) * z[idx] + forward_len_now * z[idx + 1]
             z_slice.append(z_update)
         return torch.stack(z_slice, dim=0)
@@ -282,11 +284,11 @@ class Decoder(nn.Module):
         """
         a_mean,a_sig = self.ll_policy(s,z)
 
-        z_decoder = z.detach() if self.state_dec_stop_grad else z
+        # z_decoder = z.detach() if self.state_dec_stop_grad else z
         
-        sT_mean, sT_sig = self.abstract_dynamics(s0, z_decoder)       
+        # sT_mean, sT_sig = self.abstract_dynamics(s0, z_decoder)       
 
-        return sT_mean, sT_sig, a_mean, a_sig
+        return 0, 0, a_mean, a_sig
 
 
 class SkillModel(nn.Module):

@@ -76,7 +76,7 @@ class Configs(CfgBase):
         h_dim = 200
 
     # Optimizer configs
-    batch_size = 4096
+    batch_size = 128
     lr = 5e-4
     wd = 0.0
     n_epochs = 50000
@@ -88,6 +88,7 @@ class Configs(CfgBase):
     a_loss_coeff = 1.0
     kl_loss_coeff = 0.1
     sT_loss_coeff = 1.0
+    sT_ent_coeff = 0.0
     sl_loss_coeff = 1e-2
     grad_clip_threshold = 2.0
 
@@ -96,6 +97,7 @@ class Configs(CfgBase):
     base_log_dir = 'logs'
     log_online = False
     log_offline = True
+    use_tensorboard = True
     exp_identifier = f'' # TODO: enter each time.
     notes = f'' # TODO: enter each time.
     device_id = 0

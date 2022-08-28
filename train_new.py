@@ -1,7 +1,6 @@
 import os
 from comet_ml import Experiment
 
-from sklearn.metrics import accuracy_score 
 os.environ['D4RL_SUPPRESS_IMPORT_ERROR'] = '1'
 from logger import Logger
 import numpy as np
@@ -30,60 +29,61 @@ import torch.distributions.kl as KL
 def run_iteration(model, data_loader, cfgs, model_optimizer=None, train_mode=False):
 	loss_tracker = utils.DataTracker(verbose=cfgs['verbose'])
 
-	device = model.device
+	device = cfgs.device
 
 	model.train() if train_mode else model.eval()
 
-	get_masked_loss = lambda raw_loss, data_lens_tensor, mask, bs: (1/bs)*torch.sum(torch.sum(torch.sum(raw_loss, dim=-1) * mask, dim=-1)/data_lens_tensor)
+	for data_raw in tqdm.tqdm(data_loader, desc=f"Progress"):
+		data_raw = data_raw.to(device) # (batch_size, 1000, state_dim + action_dim)
+		states, actions = data_raw[:, :, :state_dim], data_raw[:, :, state_dim:]
 
-	for batch_id, (data_, data_lens) in tqdm.tqdm(enumerate(data_loader), desc=f"Progress"):
-		data_ = data_.to(device) # (batch_size, 1000, state_dim + action_dim)
-		states, actions = data_[:, :, :state_dim], data_[:, :, state_dim:]
+		# Extract s0 and sT ground truths from the data sequence
+		s0 = states[:, :1, :] # (batch_size, 1, state_dim)
+		# sT_gt = 0 # TODO states[torch.arange(batch_size, device=device), data_lens_tensor-1, :].unsqueeze(dim=1) # (batch_size, 1, state_dim)
 
 		# Infer skills for the data
-		z_post_means, z_post_sigs = model.encoder(states, actions, unequal_subtraj_lens=True, data_lens=data_lens)
+		# Encode states and actions to get posterior over z
+		z_means, z_stds, z_len_means, z_len_stds = model.encoder(states)
 
-		# sample z_ts from the posterior
-		z_t = model.reparameterize(z_post_means, z_post_sigs)
+		z_post_dist = Normal.Normal(z_means, z_stds)
+		z_len_post_dist = model.encoder.get_skill_len_dist(z_len_means, z_len_stds)
 
-		# # Extract s0 and sT ground truths from the data sequence
-		# s0 = states[:, :1, :] # (batch_size, 1, state_dim)
-		# sT_gt = states[torch.arange(batch_size, device=device), data_lens_tensor-1, :].unsqueeze(dim=1) # (batch_size, 1, state_dim)
+		z_lens = z_len_post_dist.rsample()
+		z_t = z_post_dist.rsample()
 
-		# Use skills and states to generate terminal state and action sequences
-		sT_mean, sT_sig, a_means, a_sigs, b_ = model.decoder(states, z_t, s0)
+		z = model.encoder.get_executable_skills(z_t, z_lens) # Get skill to be actually executed at each timestep.
 
-		b = b_.squeeze(2) if b_.ndim == 3 else b_
+		# Pass z_sampled and states through decoder
+		sT_mean, sT_sig, a_means, a_sigs = model.decoder(states, z, s0)
+
+		a_dist = Normal.Normal(a_means, a_sigs)
 
 		# Compute skill and termination prior
-		z_prior_means, z_prior_sigs = model.prior(s0)
+		z_prior_means, z_prior_sigs, z_lens_prior_means, z_lens_prior_sigs = model.prior(s0)
 
 		# Construct required distributions
-		sT_dist = Normal.Normal(sT_mean, sT_sig)
-		z_post_dist = Normal.Normal(z_post_means, z_post_sigs)
+		# sT_dist = Normal.Normal(sT_mean, sT_sig)
 		z_prior_dist = Normal.Normal(z_prior_means, z_prior_sigs)
-
+		z_len_prior_dist = Normal.Normal(z_lens_prior_means, z_lens_prior_sigs)
 
 		# Increase gt terminal state likelihood.
-		sT_loss = -sT_dist.log_probs(sT_gt)
-		# sT_loss = -get_masked_loss(sT_dist.log_prob(sT_gt), data_lens_tensor, loss_mask, batch_size)
+		# sT_loss = -sT_dist.log_probs(sT_gt)
 
-		# (?) Entropy in 
-		# s_T_ent = torch.mean(torch.sum(s_T_dist.entropy(), dim=-1))/time_steps
-		s_T_ent = 0
+		# (?) Entropy in sT prediction
+		# sT_ent = torch.mean(sT_dist.entropy)
 
 		# Increase gt action likelihood.
-		a_loss = -get_masked_loss(a_dist.log_prob(actions), data_lens_tensor, loss_mask, batch_size)
+		a_loss = a_dist.log_probs(actions)
 
 		# Tighten the KL bounds.
 		# kl_loss = get_masked_loss(KL.kl_divergence(z_post_dist, z_prior_dist), data_lens_tensor, loss_mask, batch_size)
-		kl_loss = -KL.kl_divergence(z_post_dist, z_prior_dist)
+		kl_loss = -(KL.kl_divergence(z_post_dist, z_prior_dist) + KL.kl_divergence(z_len_post_dist, z_len_prior_dist))
 
 		# Incentivize longer skill lengths.
-		sl_loss = 0
+		sl_loss = -torch.mean(z_lens)
 
-		tot_loss = cfgs['a_loss_coeff'] * a_loss + cfgs['sT_loss_coeff'] * sT_loss + \
-					cfgs['kl_loss_coeff'] * kl_loss + cfgs['sl_loss_coeff'] * sl_loss
+		tot_loss = cfgs['a_loss_coeff'] * a_loss + cfgs['kl_loss_coeff'] * kl_loss + cfgs['sl_loss_coeff'] * sl_loss # + \
+				 # cfgs['sT_loss_coeff'] * sT_loss + cfgs['sT_ent_coeff'] * sT_ent + \
 
 		if train_mode:
 			model_optimizer.zero_grad()
@@ -94,9 +94,10 @@ def run_iteration(model, data_loader, cfgs, model_optimizer=None, train_mode=Fal
 		loss_tracker.update(**{
 			'tot_loss': tot_loss,
 			'a_loss': a_loss,
-			'sT_loss': sT_loss,
 			'kl_loss': kl_loss,
 			'sl_loss': sl_loss,
+			# 'sT_loss': sT_loss,
+			# 'sT_ent': sT_ent,
 		})
 
 	return loss_tracker.to_dict(mean=True)
@@ -121,7 +122,7 @@ if __name__ == '__main__':
 	inputs_test  = torch.from_numpy(raw_data['inputs_test'])
 
 	# Instantiate a skill model
-	model = SkillModel(hp.dict)
+	model = SkillModel(hp.dict).to(hp.device)
 	model_optimizer = torch.optim.Adam(model.parameters(), lr=hp.lr, weight_decay=hp.wd)
 
 	# Create dataloaders
@@ -135,14 +136,14 @@ if __name__ == '__main__':
 
 		# Update logger
 		logger.update(epoch, losses)
-		
+
 		# Run evaluation loop
 		with torch.no_grad():
 			test_losses = run_iteration(model, test_loader, hp, train_mode=False)
 
 		# Update logger
 		logger.update(epoch, test_losses)
-		
+
 		# Periodically save training
 		if epoch % 10 == 0:
 			logger.save_training_state(epoch, model, model_optimizer, 'latest.pth')

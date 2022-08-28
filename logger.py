@@ -127,6 +127,8 @@ class Logger:
         self.min_test_loss = 10**10
         self.losses = DataTracker(verbose=False)
 
+        if self.hp.use_tensorboard:
+            self.tb_writer = torch.utils.tensorboard.writer.SummaryWriter(self.log_dir)
 
     def update(self, iteration_num, losses, mode='train'):
         if self.verbose: print(f' Iter: {iteration_num} | {self.hp.exp_name} - {self.hp.notes}')
@@ -138,8 +140,22 @@ class Logger:
                 self.experiment.log_metric(loss_name, loss_value, step=iteration_num)
             if self.log_offline:
                 self.losses.update(loss_name, loss_value)
+                self.tb_writer.add_scalar(loss_name, loss_value, iteration_num)
 
             if self.verbose: print(f'{loss_name}: {loss_value}')
+
+
+    def add_length_histogram(self, skill_len, iteration_num):
+        """Adds the histogram (distribution) for the skill length to the tensorboard."""
+        save_path = os.path.join(self.log_dir, f'skill_length_{iteration_num}.png')
+        plt.figure()
+        plt.hist(skill_len, bins=np.arange(0, max(skill_len) + 1, 1))
+        plt.xlabel('Skill length')
+        plt.ylabel('Frequency')
+        plt.title(f'Skill length distribution @ iter: {iteration_num}')
+        self.tb_writer.add_figure('Skill length dist', plt.gcf(), iteration_num)
+        plt.savefig(save_path, dpi=300)
+        plt.close()
 
 
     def save_training_state(self, iteration_num, model, model_optimizer, file_name):
