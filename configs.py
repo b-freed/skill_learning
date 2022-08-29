@@ -76,7 +76,7 @@ class Configs(CfgBase):
         h_dim = 200
 
     # Optimizer configs
-    batch_size = 128
+    batch_size = 256
     lr = 5e-4
     wd = 0.0
     n_epochs = 50000
@@ -89,7 +89,7 @@ class Configs(CfgBase):
     kl_loss_coeff = 0.1
     sT_loss_coeff = 1.0
     sT_ent_coeff = 0.0
-    sl_loss_coeff = 1e-2
+    sl_loss_coeff = 0.0
     grad_clip_threshold = 2.0
 
     # Misc - manually assigned

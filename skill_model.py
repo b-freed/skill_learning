@@ -54,34 +54,29 @@ class ContinuousEncoder(nn.Module):
         Returns:
             torch.Tensor: batch_size x T x z_dim tensor of skills to be executed at each timestep
         """
-        execution_skills = []
-        skill_lens = []
-        # cumulative_lengths = torch.cumsum(z_lens, dim=-2)
-        for z_slice, z_lens_slice in zip(z, z_lens):
-            mask, forward_lens = self.find_mask(z_lens_slice)
-            execution_skill_slice, skill_lens_slice = self.choose_skill(z_slice, mask, forward_lens)
-            execution_skills.append(execution_skill_slice)
-            skill_lens.extend(skill_lens_slice)
-        return torch.stack(execution_skills, dim=0), skill_lens # batch_size x T x z_dim
+        mask, forward_lens = self.find_mask(z_lens)
+        execution_skills, skill_lens = self.choose_skill(z, mask, forward_lens)
+        return execution_skills, skill_lens
 
 
     def find_mask(self, z_lens):
         """Find events where accumulations cross integer boundaries. Skills will be updated at these timesteps.
         Args:
-            z_lens (torch.Tensor): T x 1 tensor of skill lens
+            z_lens (torch.Tensor): batch_size x T x 1 tensor of skill lens
         """
-        z_cum_lens = torch.cumsum(z_lens, dim=-1)
-        compressed_len, execution_mask = 1, []
+        batch_size, T, _ = z_lens.shape
+        z_cum_lens = torch.cumsum(z_lens, dim=-2)
+        compressed_len, execution_mask = torch.ones(batch_size, dtype=z_lens.dtype, device=z_lens.device), []
         forward_lens = []
-        for cum_len in z_cum_lens:
-            update = cum_len >= compressed_len # Gradients won’t pass through (the time predictor) here. :(
+        for t_idx in range(z_cum_lens.shape[1]):
+            cum_len = z_cum_lens[:, t_idx, 0]
+            update = (cum_len >= compressed_len) # Gradients won’t pass through (the time predictor) here. :(
             execution_mask.append(update)
-            if update:
-                forward_lens.append(cum_len - compressed_len)
-                compressed_len += 1
-            else:
-                forward_lens.append(torch.zeros_like(cum_len))
-        return torch.stack(execution_mask, dim=0), forward_lens # (T x 1), (T x 1)
+            forward_len = torch.zeros(batch_size, dtype=z_lens.dtype, device=z_lens.device)
+            forward_len[update] = cum_len[update] - compressed_len[update]
+            compressed_len[update] += 1
+            forward_lens.append(forward_len)
+        return execution_mask, forward_lens
 
 
     def choose_skill(self, z, mask, forward_lens):
@@ -91,33 +86,28 @@ class ContinuousEncoder(nn.Module):
             mask (torch.Tensor): T x 1 tensor of boolean masks.
             forward_lens (torch.Tensor): T x 1 tensor of forward skill lens at mask events.
         """
-        z_slice = []
-        z_update = z[0]
-        skill_lens, _sl = [], 1
-        for idx, (mask_element, forward_len_now) in enumerate(zip(mask, forward_lens)):
-            if mask_element:
-                skill_lens.append(_sl)
-                _sl = 1
-                if idx == len(forward_lens) - 1: # Ignore interpolation at last timestep.
-                    z_slice.append(z[idx])
-                    continue
-                z_update = (1 - forward_len_now) * z[idx] + forward_len_now * z[idx + 1]
-            else:            
-                _sl += 1
-            z_slice.append(z_update)
-        skill_lens.append(_sl)
-        return torch.stack(z_slice, dim=0), skill_lens
+        batch_size, T, z_dim = z.shape
+        z_choosen = []
+        z_update = z[:, 0, :]
+        skill_lens, _sl = [], torch.ones(batch_size, dtype=z.dtype, device=z.device)
+        for t_idx, (mask_slice, forward_lens_slice) in enumerate(zip(mask, forward_lens)):
+            # Update sl list with terminated skill lengths and reset the terminated skill counters.
+            skill_lens.extend(_sl[mask_slice].tolist())
+            _sl[mask_slice] = 1
 
+            # Update the skills that were terminated.
+            if t_idx == T-1:
+                z_update[mask_slice] = z[mask_slice, t_idx, :]
+            else:
+                z_update[mask_slice] = (1 - forward_lens_slice[mask_slice].unsqueeze(dim=-1)) * z[mask_slice, t_idx, :] + \
+                    forward_lens_slice[mask_slice].unsqueeze(dim=-1) * z[mask_slice, t_idx + 1, :]
 
-    # def _repeat(s, n):
-    #     """Repeats a tensor s n times while preserving the gradient.
-    #     Args:
-    #         s (torch.Tensor): s_dim tensor to repeat
-    #         n (int): number of times to repeat
-    #     """
-    #     _s = s.unsqueeze(0)
-    #     _s = _s.repeat(n, 1)
-    #     return _s
+            # Increment the skills that weren't terminated.
+            _sl[torch.logical_not(mask_slice)] += 1
+
+            z_choosen.append(z_update.clone())
+        skill_lens.extend(_sl[torch.logical_not(mask_slice)].tolist())
+        return torch.stack(z_choosen, dim=1), skill_lens
 
 
 class ContinuousPrior(ContinuousEncoder):
