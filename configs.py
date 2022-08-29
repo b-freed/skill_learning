@@ -95,7 +95,7 @@ class Configs(CfgBase):
     # Misc - manually assigned
     data_dir = 'datasets'
     base_log_dir = 'logs'
-    log_online = False
+    log_online = True
     log_offline = True
     use_tensorboard = True
     exp_identifier = f'' # TODO: enter each time.

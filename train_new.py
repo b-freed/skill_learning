@@ -27,6 +27,7 @@ import torch.distributions.kl as KL
 
 
 def run_iteration(model, data_loader, cfgs, model_optimizer=None, train_mode=False):
+	skill_lens = []
 	loss_tracker = utils.DataTracker(verbose=cfgs['verbose'])
 
 	device = cfgs.device
@@ -51,7 +52,7 @@ def run_iteration(model, data_loader, cfgs, model_optimizer=None, train_mode=Fal
 		z_lens = z_len_post_dist.rsample()
 		z_t = z_post_dist.rsample()
 
-		z = model.encoder.get_executable_skills(z_t, z_lens) # Get skill to be actually executed at each timestep.
+		z, skill_lens_batch = model.encoder.get_executable_skills(z_t, z_lens) # Get skill to be actually executed at each timestep.
 
 		# Pass z_sampled and states through decoder
 		sT_mean, sT_sig, a_means, a_sigs = model.decoder(states, z, s0)
@@ -73,11 +74,11 @@ def run_iteration(model, data_loader, cfgs, model_optimizer=None, train_mode=Fal
 		# sT_ent = torch.mean(sT_dist.entropy)
 
 		# Increase gt action likelihood.
-		a_loss = a_dist.log_probs(actions)
+		a_loss = a_dist.log_prob(actions).mean()
 
 		# Tighten the KL bounds.
 		# kl_loss = get_masked_loss(KL.kl_divergence(z_post_dist, z_prior_dist), data_lens_tensor, loss_mask, batch_size)
-		kl_loss = -(KL.kl_divergence(z_post_dist, z_prior_dist) + KL.kl_divergence(z_len_post_dist, z_len_prior_dist))
+		kl_loss = -KL.kl_divergence(z_post_dist, z_prior_dist).mean()# + KL.kl_divergence(z_len_post_dist, z_len_prior_dist))
 
 		# Incentivize longer skill lengths.
 		sl_loss = -torch.mean(z_lens)
@@ -100,7 +101,9 @@ def run_iteration(model, data_loader, cfgs, model_optimizer=None, train_mode=Fal
 			# 'sT_ent': sT_ent,
 		})
 
-	return loss_tracker.to_dict(mean=True)
+		skill_lens.extend(skill_lens_batch)
+
+	return loss_tracker.to_dict(mean=True), skill_lens
 
 
 if __name__ == '__main__':
@@ -132,17 +135,19 @@ if __name__ == '__main__':
 	# It's time to roll baby!
 	for epoch in range(hp.n_epochs):
 		# Run training loop
-		losses = run_iteration(model, train_loader, hp, model_optimizer=model_optimizer, train_mode=True)
+		losses, skill_lens = run_iteration(model, train_loader, hp, model_optimizer=model_optimizer, train_mode=True)
 
 		# Update logger
 		logger.update(epoch, losses)
+		logger.add_length_histogram(epoch, skill_lens)
 
 		# Run evaluation loop
 		with torch.no_grad():
-			test_losses = run_iteration(model, test_loader, hp, train_mode=False)
+			test_losses, skill_lens = run_iteration(model, test_loader, hp, train_mode=False)
 
 		# Update logger
-		logger.update(epoch, test_losses)
+		logger.update(epoch, test_losses, mode='test')
+		logger.add_length_histogram(epoch, skill_lens, mode='test')
 
 		# Periodically save training
 		if epoch % 10 == 0:

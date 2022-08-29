@@ -8,6 +8,7 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 from utils import DataTracker
+from tensorboardX import SummaryWriter
 
 sns.set_theme(style="white")
 
@@ -111,6 +112,7 @@ class Logger:
         self.verbose = hp.verbose
         self.log_online = self.hp.log_online
         self.log_offline = self.hp.log_offline
+        self.use_tensorboard = self.hp.use_tensorboard
 
         self.log_dir = hp.log_dir
         os.makedirs(self.log_dir, exist_ok=True) # safely create log dir
@@ -127,11 +129,11 @@ class Logger:
         self.min_test_loss = 10**10
         self.losses = DataTracker(verbose=False)
 
-        if self.hp.use_tensorboard:
-            self.tb_writer = torch.utils.tensorboard.writer.SummaryWriter(self.log_dir)
+        if self.use_tensorboard:
+            self.tb_writer = SummaryWriter(self.log_dir)
 
     def update(self, iteration_num, losses, mode='train'):
-        if self.verbose: print(f' Iter: {iteration_num} | {self.hp.exp_name} - {self.hp.notes}')
+        if self.verbose: print(f'Iter: {iteration_num} | {self.hp.exp_name} - {self.hp.notes}')
 
         for _loss_name, loss_value in losses.items():
             loss_name = f'{_loss_name}_{mode}'
@@ -139,23 +141,17 @@ class Logger:
             if self.log_online:
                 self.experiment.log_metric(loss_name, loss_value, step=iteration_num)
             if self.log_offline:
-                self.losses.update(loss_name, loss_value)
-                self.tb_writer.add_scalar(loss_name, loss_value, iteration_num)
+                self.losses.update(**{loss_name: loss_value})
+                if self.use_tensorboard: self.tb_writer.add_scalar(loss_name, loss_value, iteration_num)
 
             if self.verbose: print(f'{loss_name}: {loss_value}')
 
 
-    def add_length_histogram(self, skill_len, iteration_num):
+    def add_length_histogram(self, iteration_num, skill_len, mode='train'):
         """Adds the histogram (distribution) for the skill length to the tensorboard."""
-        save_path = os.path.join(self.log_dir, f'skill_length_{iteration_num}.png')
-        plt.figure()
-        plt.hist(skill_len, bins=np.arange(0, max(skill_len) + 1, 1))
-        plt.xlabel('Skill length')
-        plt.ylabel('Frequency')
-        plt.title(f'Skill length distribution @ iter: {iteration_num}')
-        self.tb_writer.add_figure('Skill length dist', plt.gcf(), iteration_num)
-        plt.savefig(save_path, dpi=300)
-        plt.close()
+        if self.use_tensorboard and self.log_offline: 
+            self.tb_writer.add_histogram(f'Skill length - {mode.capitalize()}', skill_len, iteration_num)
+        if self.log_online: self.experiment.log_histogram_3d(skill_len)
 
 
     def save_training_state(self, iteration_num, model, model_optimizer, file_name):

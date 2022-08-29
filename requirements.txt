@@ -20,6 +20,10 @@ pytest-instafail==0.3.0
 sphinx
 sphinx_rtd_theme
 numpydoc
+seaborn
+sklearn
+PyYAML
+tensorboardX
 
 git+https://github.com/openai/mujoco-py@f1312cceeeebbba17e78d5d77fbffa091eed9a3a#egg=mujoco-py
 gym==0.21.0
