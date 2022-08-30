@@ -5,12 +5,8 @@ os.environ['D4RL_SUPPRESS_IMPORT_ERROR'] = '1'
 from logger import Logger
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import TensorDataset
-from torch.utils.data.dataloader import DataLoader
 import torch.distributions.normal as Normal
-from torch.distributions.transformed_distribution import TransformedDistribution
+from torch.utils.data.dataloader import DataLoader
 from skill_model import ContinuousSkillModel as SkillModel
 import gym
 from mujoco_py import GlfwContext
@@ -19,7 +15,6 @@ import d4rl
 import ipdb
 import h5py
 import utils
-import time
 import tqdm
 import os
 from configs import Configs
@@ -36,6 +31,7 @@ def run_iteration(model, data_loader, cfgs, model_optimizer=None, train_mode=Fal
 
 	for data_raw in tqdm.tqdm(data_loader, desc=f"Progress"):
 		data_raw = data_raw.to(device) # (batch_size, 1000, state_dim + action_dim)
+		batch_size, horizon, _ = data_raw.shape
 		states, actions = data_raw[:, :, :state_dim], data_raw[:, :, state_dim:]
 
 		# Extract s0 and sT ground truths from the data sequence
@@ -58,14 +54,13 @@ def run_iteration(model, data_loader, cfgs, model_optimizer=None, train_mode=Fal
 		sT_mean, sT_sig, a_means, a_sigs = model.decoder(states, z, s0)
 
 		a_dist = Normal.Normal(a_means, a_sigs)
+		# sT_dist = Normal.Normal(sT_mean, sT_sig)
 
-		# Compute skill and termination prior
+		# Find skill and termination priors
 		z_prior_means, z_prior_sigs, z_lens_prior_means, z_lens_prior_sigs = model.prior(s0)
 
-		# Construct required distributions
-		# sT_dist = Normal.Normal(sT_mean, sT_sig)
 		z_prior_dist = Normal.Normal(z_prior_means, z_prior_sigs)
-		z_len_prior_dist = Normal.Normal(z_lens_prior_means, z_lens_prior_sigs)
+		z_len_prior_dist = model.encoder.get_skill_len_dist(z_lens_prior_means, z_lens_prior_sigs)
 
 		# Increase gt terminal state likelihood.
 		# sT_loss = -sT_dist.log_probs(sT_gt)
@@ -74,14 +69,15 @@ def run_iteration(model, data_loader, cfgs, model_optimizer=None, train_mode=Fal
 		# sT_ent = torch.mean(sT_dist.entropy)
 
 		# Increase gt action likelihood.
-		a_loss = a_dist.log_prob(actions).mean()
+		a_loss = (1/(batch_size * horizon)) * torch.sum(torch.sum(a_dist.log_prob(actions), dim=-1))
 
 		# Tighten the KL bounds.
-		# kl_loss = get_masked_loss(KL.kl_divergence(z_post_dist, z_prior_dist), data_lens_tensor, loss_mask, batch_size)
-		kl_loss = -KL.kl_divergence(z_post_dist, z_prior_dist).mean()# + KL.kl_divergence(z_len_post_dist, z_len_prior_dist))
+		skill_kl_loss = -torch.sum(KL.kl_divergence(z_post_dist, z_prior_dist), dim=-1)
+		skill_len_kl_loss = -torch.sum(KL.kl_divergence(z_len_post_dist, z_len_prior_dist), dim=-1)
+		kl_loss = (1/(batch_size * horizon)) * torch.sum(skill_kl_loss + skill_len_kl_loss)
 
 		# Incentivize longer skill lengths.
-		sl_loss = -torch.mean(z_lens)
+		sl_loss = -(1/(batch_size * horizon)) * torch.sum(torch.sum(z_lens, dim=-1))
 
 		tot_loss = cfgs['a_loss_coeff'] * a_loss + cfgs['kl_loss_coeff'] * kl_loss + cfgs['sl_loss_coeff'] * sl_loss # + \
 				 # cfgs['sT_loss_coeff'] * sT_loss + cfgs['sT_ent_coeff'] * sT_ent + \
