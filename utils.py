@@ -109,3 +109,28 @@ def chunks(obs,next_obs,actions,H,stride):
 			
 	
 	return torch.stack(obs_chunks),torch.stack(action_chunks)
+
+
+	class GeneratedD4RLDataset:
+		def __init__(
+				self,
+				signal_length=128,
+				data_path='data/raw/maze2d-medium-v1.npy',
+		):
+			self.signal_length = signal_length
+			self.episodes = np.load(data_path, allow_pickle=True)
+			self.n_episodes = len(self.episodes)
+			self.obs_dim = self.episodes[0]['observations'].shape[-1]
+			self.action_dim = self.episodes[0]['actions'].shape[-1]
+
+		def __getitem__(self, index):
+			ep = self.episodes[index]
+			start_index = np.random.randint(0, ep['observations'].shape[0] - self.signal_length)
+			return ep['observations'][start_index:start_index+self.signal_length], ep['actions'][start_index:start_index+self.signal_length]
+
+		def __len__(self):
+			return self.n_episodes
+
+		def get_episode(self, index):
+			ep = self.episodes[index]
+			return ep

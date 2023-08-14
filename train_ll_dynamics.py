@@ -8,9 +8,9 @@ from torch.utils.data.dataloader import DataLoader
 import torch.distributions.normal as Normal
 from skill_model import LowLevelDynamicsFF
 import gym
-from mujoco_py import GlfwContext
-import clean_dataset
-GlfwContext(offscreen=True)
+# from mujoco_py import GlfwContext
+import clean_kitchen_dataset
+# GlfwContext(offscreen=True)
 import d4rl
 import ipdb
 import h5py
@@ -58,10 +58,10 @@ def test(model):
 # instantiating the environmnet, getting the dataset.
 # the data is in a big dictionary, containing long sequences of obs, rew, actions, goals
 # env_name = 'antmaze-medium-diverse-v0'  
-#env_name = 'maze2d-large-v1'
+env_name = 'maze2d-large-v1'
 #env_name = 'antmaze-medium-diverse-v0'
 #env_name = 'kitchen-complete-v0'
-env_name = 'kitchen-partial-v0'
+# env_name = 'kitchen-partial-v0'
 env = gym.make(env_name)
 
 dataset_file = None
@@ -89,7 +89,11 @@ states = torch.tensor(dataset['observations'],dtype=torch.float32,device=device)
 next_states = torch.tensor(dataset['next_observations'],dtype=torch.float32,device=device)
 actions = torch.tensor(dataset['actions'],dtype=torch.float32,device=device)
 
-states, next_states, actions = clean_antmaze_dataset.clean_data(states, next_states, actions)
+if 'antmaze' in env_name:
+	states, next_states, actions = clean_antmaze_dataset.clean_data(states, next_states, actions)
+elif 'kitchen' in env_name:
+	states, next_states, actions = clean_antmaze_dataset.clean_data(states, next_states, actions)
+
 print(states.shape)
 N = states.shape[0]
 
@@ -101,7 +105,7 @@ N_test = N - N_train
 
 
 
-experiment = Experiment(api_key = 'wb7Q8i6WX2nuxXfHJdBSs9PUV', project_name = 'skill-learning')
+experiment = Experiment(api_key = '9mxH2vYX20hn9laEr0KtHLjAa', project_name = 'opal')
 # experiment.add_tag('noisy2')
 
 
@@ -170,6 +174,6 @@ for i in range(n_epochs):
 
 		
 			
-		checkpoint_path = 'checkpoints/franka_ensemble/'+ filename + '_hdim_512_Decay_best_5.pth'
+		checkpoint_path = 'checkpoints/'+ filename + '_hdim_512_Decay_best.pth'
 		torch.save({'model_state_dict': model.state_dict(),
 				'model_optimizer_state_dict': model_optimizer.state_dict()}, checkpoint_path)
