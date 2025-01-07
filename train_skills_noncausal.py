@@ -113,23 +113,26 @@ lr = 5e-5
 wd = 0.0
 beta = 1.0
 alpha = 1.0
-H = 40
+H = 5
 print('H: ',H)
 stride = 1
 n_epochs = 50000
 test_split = .2
-a_dist = 'normal'#, 'tanh_normal' or 'normal' or 'autoregressive'
+a_dist = 'autoregressive' #, 'tanh_normal' or 'normal' or 'autoregressive'
 state_dependent_prior = True
 encoder_type = 'state_action_sequence' #'state_sequence'
 state_decoder_type = 'mlp' #'autoregressive'
 init_state_dependent = True
 load_from_checkpoint = False
-per_element_sigma = True
+per_element_sigma = False
 
 # env_name = 'maze2d-medium-v1'
-env_name = 'antmaze-medium-diverse-v0'
+# env_name = 'antmaze-medium-diverse-v0'
 # env_name = 'antmaze-large-diverse-v0'
-# env_name = 'kitchen-partial-v0'
+env_name = 'kitchen-partial-v0'
+# env_name = 'kitchen-mixed-v0'
+# env_name = 'kitchen-complete-v0'
+
 
 dataset_file = None #'datasets/'+env_name+'.npz'
 #dataset_file = "datasets/maze2d-umaze-v1.hdf5"

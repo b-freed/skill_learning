@@ -3,7 +3,7 @@ import d4rl
 import numpy as np
 
 
-env_name = 'antmaze-large-diverse-v0'
+env_name = 'kitchen-mixed-v0'#'antmaze-large-diverse-v0'
 env = gym.make(env_name)
 dataset = d4rl.qlearning_dataset(env)
 
